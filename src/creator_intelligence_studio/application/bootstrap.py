@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Sequence
+from logging import Logger
+from typing import Sequence
 
 from creator_intelligence_studio import APP_NAME, VERSION
+from creator_intelligence_studio.application.services.catalog_service import (
+    CatalogService,
+    build_catalog_service,
+)
 from creator_intelligence_studio.infrastructure.configuration.settings import (
     AppSettings,
     SettingsError,
@@ -23,29 +26,25 @@ from creator_intelligence_studio.infrastructure.diagnostics.models import (
 from creator_intelligence_studio.infrastructure.logging.logging_setup import (
     setup_logging,
 )
+from creator_intelligence_studio.presentation.cli.cli import dispatch, parse_args
 from creator_intelligence_studio.shared.paths import ProjectPaths, discover_project_root
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BootstrapContext:
     """Contexto preparado por el bootstrap."""
 
     settings: AppSettings
     paths: ProjectPaths
     diagnostic: EnvironmentDiagnostic
+    logger: Logger
 
 
-def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="creator_intelligence_studio",
-        description="Arranque minimo de Creator Intelligence Studio.",
-    )
-    parser.add_argument(
-        "--diagnostic-json",
-        action="store_true",
-        help="Imprime el diagnostico en formato JSON valido.",
-    )
-    return parser.parse_args(argv)
+@dataclass(frozen=True, slots=True)
+class ServiceContext(BootstrapContext):
+    """Contexto con servicio de catálogo listo."""
+
+    service: CatalogService
 
 
 def _load_context() -> BootstrapContext:
@@ -59,7 +58,28 @@ def _load_context() -> BootstrapContext:
         settings=settings,
         paths=paths,
     )
-    return BootstrapContext(settings=settings, paths=paths, diagnostic=diagnostic)
+    return BootstrapContext(
+        settings=settings,
+        paths=paths,
+        diagnostic=diagnostic,
+        logger=logger,
+    )
+
+
+def _load_service_context() -> ServiceContext:
+    context = _load_context()
+    service = build_catalog_service(
+        settings=context.settings,
+        paths=context.paths,
+        logger=context.logger,
+    )
+    return ServiceContext(
+        settings=context.settings,
+        paths=context.paths,
+        diagnostic=context.diagnostic,
+        logger=context.logger,
+        service=service,
+    )
 
 
 def _print_summary(context: BootstrapContext, stream) -> None:
@@ -68,10 +88,7 @@ def _print_summary(context: BootstrapContext, stream) -> None:
     print(f"Entorno: {context.settings.environment}", file=stream)
     print(f"Ruta del proyecto: {context.paths.project_root}", file=stream)
     print(f"Python: {diagnostic.python_version} ({diagnostic.python_executable})", file=stream)
-    print(
-        f"Backend preferido: {diagnostic.preferred_compute_backend}",
-        file=stream,
-    )
+    print(f"Backend preferido: {diagnostic.preferred_compute_backend}", file=stream)
     print(
         "Modo basico disponible: "
         + ("si" if diagnostic.state.ready_for_basic_mode else "no"),
@@ -106,25 +123,31 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
 
     stdout = sys.stdout if stdout is None else stdout
     stderr = sys.stderr if stderr is None else stderr
-    args = _parse_args(argv)
+    args = parse_args(argv)
 
     try:
-        context = _load_context()
+        if args.diagnostic_json or args.entity is None:
+            context = _load_context()
+            if args.diagnostic_json:
+                print(context.diagnostic.to_json(), file=stdout)
+            else:
+                _print_summary(context, stdout)
+            return 0 if context.diagnostic.state.ready_for_basic_mode else 1
+
+        context = _load_service_context()
+        return dispatch(
+            args,
+            service=context.service,
+            diagnostic=context.diagnostic,
+            stdout=stdout,
+            stderr=stderr,
+        )
     except SettingsError as exc:
         print(f"Error de configuracion: {exc}", file=stderr)
         return 2
     except Exception as exc:  # pragma: no cover - defensa general
         print(f"Error inesperado durante el arranque: {exc}", file=stderr)
         return 1
-
-    diagnostic = context.diagnostic
-
-    if args.diagnostic_json:
-        print(diagnostic.to_json(), file=stdout)
-    else:
-        _print_summary(context, stdout)
-
-    return 0 if diagnostic.state.ready_for_basic_mode else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

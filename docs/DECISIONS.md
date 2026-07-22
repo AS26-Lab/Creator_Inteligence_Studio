@@ -15,6 +15,10 @@
 | 2026-07-22 | Seguridad | Las APIs oficiales y la seguridad de las cuentas tienen prioridad. | No se diseñarán evasiones de CAPTCHA ni fingerprinting. | Automatizaciones encubiertas o evasivas. |
 | 2026-07-22 | Resiliencia | La aplicación debe abrir aunque CUDA no esté disponible. | Habrá diagnóstico y funciones básicas sin GPU, con deshabilitación o degradación de tareas pesadas. | Bloquear por completo la apertura sin GPU. |
 | 2026-07-22 | Creator Voice | Cuando Creator Voice esté activo, un texto generativo no se considerará final sin revisión o personalización. | El flujo debe incluir revisión humana o adaptación explícita. | Marcar como final cualquier salida de proveedor externo. |
+| 2026-07-22 | Persistencia inicial | SQLite será el almacenamiento estructurado inicial del MVP. | Los datos de creadores, proyectos y videos quedan en una base local simple y portable para desarrollo. | Adoptar una base externa o una solución más compleja antes de tiempo. |
+| 2026-07-22 | Registro de videos | El registro inicial conserva la ruta absoluta normalizada del archivo y no copia ni procesa el video. | El sistema puede verificar disponibilidad posterior sin mover el archivo original. | Copiar el archivo, generar proxies o abstraer la ruta de forma prematura. |
+| 2026-07-22 | Registro de metadatos | No se calcula hash completo durante el registro inicial. | Se mantiene el flujo liviano y se evita leer archivos grandes innecesariamente. | Hacer fingerprint completo en esta misión. |
+| 2026-07-22 | Portabilidad futura | Las rutas portables y la biblioteca administrada quedan para una fase futura. | La primera versión usa rutas absolutas normalizadas para desarrollo controlado. | Forzar una abstracción portable prematura. |
 
 ## Pendientes
 
@@ -23,4 +27,3 @@
 - framework final de UI;
 - esquema final de entrenamiento local;
 - formato exacto del model registry.
-

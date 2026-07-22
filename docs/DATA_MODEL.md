@@ -198,9 +198,55 @@ Los artefactos mínimos contemplados son:
 - índice local para búsqueda;
 - manifiestos por proyecto y modelo.
 
+## Esquema inicial implementado
+
+La base SQLite inicial del MVP guarda cuatro tablas estructurales:
+
+- `schema_migrations`
+- `creators`
+- `projects`
+- `video_assets`
+
+### `creators`
+
+- `id` UUID string.
+- `display_name`.
+- `slug` único.
+- `description` opcional.
+- `created_at` UTC.
+- `updated_at` UTC.
+- `status` con valores `active` o `archived`.
+
+### `projects`
+
+- `id` UUID string.
+- `creator_id` FK a `creators.id`.
+- `name`.
+- `description` opcional.
+- `project_type` con valores `long_form`, `short_form`, `mixed`, `research`.
+- `status` con valores `active`, `completed`, `archived`.
+- `created_at` UTC.
+- `updated_at` UTC.
+
+### `video_assets`
+
+- `id` UUID string.
+- `project_id` FK a `projects.id`.
+- `title`.
+- `source_path` absoluta normalizada.
+- `original_filename`.
+- `extension`.
+- `file_size_bytes`.
+- `file_modified_at` UTC opcional.
+- `source_type` con valores `local_file`, `platform_import`, `manual_reference`.
+- `processing_status` con valores `registered`, `queued`, `processing`, `completed`, `failed`, `cancelled`.
+- `registered_at` UTC.
+- `updated_at` UTC.
+- `notes` opcional.
+- `file_available` booleano calculado o actualizado.
+
 ## Pendientes
 
 - formato físico exacto de persistencia;
 - motor concreto de almacenamiento;
 - estrategia final de migraciones.
-

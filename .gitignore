@@ -38,6 +38,9 @@ logs/*
 # Local data and generated artifacts
 data/*
 !data/.gitkeep
+cache/
+temp/
+tmp/
 models/*
 !models/.gitkeep
 artifacts/*
@@ -84,4 +87,3 @@ secrets/
 *.cache
 *.tmp
 *.temp
-

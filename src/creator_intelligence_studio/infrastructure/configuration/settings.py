@@ -31,6 +31,8 @@ class AppSettings:
     preferred_compute_backend: str
     allow_cpu_basic_mode: bool
     external_ai_enabled: bool
+    database_filename: str = "creator_intelligence_studio.db"
+    database_timeout_seconds: float = 5.0
 
     @classmethod
     def from_file(cls, config_path: Path) -> "AppSettings":
@@ -65,6 +67,20 @@ class AppSettings:
                 raise SettingsError(f"El campo '{key}' debe ser booleano.")
             return value
 
+        def optional_str(key: str, default: str) -> str:
+            value = payload.get(key, default)
+            if not isinstance(value, str) or not value.strip():
+                return default
+            return value.strip()
+
+        def optional_number(key: str, default: float) -> float:
+            value = payload.get(key, default)
+            if isinstance(value, bool):
+                raise SettingsError(f"El campo '{key}' debe ser numérico.")
+            if isinstance(value, (int, float)):
+                return float(value)
+            raise SettingsError(f"El campo '{key}' debe ser numérico.")
+
         settings = cls(
             application_name=require_str("application_name"),
             environment=require_str("environment"),
@@ -76,6 +92,8 @@ class AppSettings:
             preferred_compute_backend=require_str("preferred_compute_backend").lower(),
             allow_cpu_basic_mode=require_bool("allow_cpu_basic_mode"),
             external_ai_enabled=require_bool("external_ai_enabled"),
+            database_filename=optional_str("database_filename", "creator_intelligence_studio.db"),
+            database_timeout_seconds=optional_number("database_timeout_seconds", 5.0),
         )
         settings.validate()
         return settings
@@ -99,6 +117,8 @@ class AppSettings:
                 f"'{self.preferred_compute_backend}'. "
                 f"Valores permitidos: {sorted(ALLOWED_BACKENDS)}"
             )
+        if self.database_timeout_seconds <= 0:
+            raise SettingsError("database_timeout_seconds debe ser mayor que cero.")
 
     def resolved_directories(self, project_root: Path) -> dict[str, Path]:
         """Resuelve directorios relativos al proyecto."""
@@ -117,4 +137,3 @@ def load_settings(config_path: Path) -> AppSettings:
     """Carga la configuracion del proyecto."""
 
     return AppSettings.from_file(config_path)
-

@@ -8,6 +8,7 @@
   "artifacts_directory": "artifacts",
   "preferred_compute_backend": "cuda",
   "allow_cpu_basic_mode": true,
-  "external_ai_enabled": false
+  "external_ai_enabled": false,
+  "database_filename": "creator_intelligence_studio.db",
+  "database_timeout_seconds": 5.0
 }
-

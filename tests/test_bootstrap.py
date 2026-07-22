@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from creator_intelligence_studio.application import bootstrap
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
@@ -17,69 +17,64 @@ from creator_intelligence_studio.infrastructure.diagnostics.models import (
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
 
+def make_settings() -> AppSettings:
+    return AppSettings(
+        application_name="Creator Intelligence Studio",
+        environment="development",
+        log_level="INFO",
+        data_directory="data",
+        logs_directory="logs",
+        models_directory="models",
+        artifacts_directory="artifacts",
+        preferred_compute_backend="cuda",
+        allow_cpu_basic_mode=True,
+        external_ai_enabled=False,
+        database_filename="creator_intelligence_studio.db",
+        database_timeout_seconds=5.0,
+    )
+
+
+def make_diagnostic(root: Path) -> EnvironmentDiagnostic:
+    return EnvironmentDiagnostic(
+        application_name="Creator Intelligence Studio",
+        application_version="0.1.0",
+        project_root=root,
+        os_name="Windows",
+        os_version="10.0.19045",
+        os_architecture="64bit",
+        python_version="3.11.9",
+        python_executable="python.exe",
+        cpu_reported="CPU",
+        logical_processors=12,
+        nvidia_smi_available=False,
+        preferred_compute_backend="cuda",
+        state=DiagnosticState(
+            ready_for_basic_mode=True,
+            cuda_driver_detected=False,
+            cuda_runtime_not_verified=True,
+            warnings=("CUDA no verificada",),
+        ),
+        warnings=("CUDA no verificada",),
+        errors=(),
+    )
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_basic_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            (root / "config").mkdir()
-            (root / "config" / "default.json").write_text(
-                json.dumps(
-                    {
-                        "application_name": "Creator Intelligence Studio",
-                        "environment": "development",
-                        "log_level": "INFO",
-                        "data_directory": "data",
-                        "logs_directory": "logs",
-                        "models_directory": "models",
-                        "artifacts_directory": "artifacts",
-                        "preferred_compute_backend": "cuda",
-                        "allow_cpu_basic_mode": True,
-                        "external_ai_enabled": False,
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            settings = AppSettings.from_file(root / "config" / "default.json")
+            settings = make_settings()
             paths = ProjectPaths.from_settings(root, settings)
-            diagnostic = EnvironmentDiagnostic(
-                application_name="Creator Intelligence Studio",
-                application_version="0.1.0",
-                project_root=root,
-                os_name="Windows",
-                os_version="10",
-                os_architecture="64bit",
-                python_version="3.11.9",
-                python_executable="python.exe",
-                cpu_reported="CPU",
-                logical_processors=12,
-                nvidia_smi_available=False,
-                preferred_compute_backend="cuda",
-                state=DiagnosticState(
-                    ready_for_basic_mode=True,
-                    cuda_driver_detected=False,
-                    cuda_runtime_not_verified=True,
-                    warnings=("CUDA no verificada",),
-                ),
-                warnings=("CUDA no verificada",),
-                errors=(),
-            )
+            diagnostic = make_diagnostic(root)
 
             with patch(
-                "creator_intelligence_studio.application.bootstrap.discover_project_root",
-                return_value=root,
-            ), patch(
-                "creator_intelligence_studio.application.bootstrap.load_settings",
-                return_value=settings,
-            ), patch(
-                "creator_intelligence_studio.application.bootstrap.ProjectPaths.from_settings",
-                return_value=paths,
-            ), patch(
-                "creator_intelligence_studio.application.bootstrap.setup_logging",
-                return_value=MagicMock(info=lambda *args, **kwargs: None),
-            ), patch(
-                "creator_intelligence_studio.application.bootstrap.collect_environment_diagnostic",
-                return_value=diagnostic,
+                "creator_intelligence_studio.application.bootstrap._load_context",
+                return_value=bootstrap.BootstrapContext(
+                    settings=settings,
+                    paths=paths,
+                    diagnostic=diagnostic,
+                    logger=logging.getLogger("test"),
+                ),
             ):
                 stdout = io.StringIO()
                 stderr = io.StringIO()
@@ -89,64 +84,54 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("Creator Intelligence Studio", stdout.getvalue())
 
     def test_diagnostic_json_mode_outputs_json(self) -> None:
-        diagnostic = EnvironmentDiagnostic(
-            application_name="Creator Intelligence Studio",
-            application_version="0.1.0",
-            project_root=Path("C:/project"),
-            os_name="Windows",
-            os_version="10",
-            os_architecture="64bit",
-            python_version="3.11.9",
-            python_executable="python.exe",
-            cpu_reported="CPU",
-            logical_processors=12,
-            nvidia_smi_available=False,
-            preferred_compute_backend="cuda",
-            state=DiagnosticState(
-                ready_for_basic_mode=True,
-                cuda_driver_detected=False,
-                cuda_runtime_not_verified=True,
-                warnings=(),
-            ),
-            warnings=(),
-            errors=(),
-        )
-        with patch(
-            "creator_intelligence_studio.application.bootstrap._load_context",
-            return_value=bootstrap.BootstrapContext(
-                settings=AppSettings(
-                    application_name="Creator Intelligence Studio",
-                    environment="development",
-                    log_level="INFO",
-                    data_directory="data",
-                    logs_directory="logs",
-                    models_directory="models",
-                    artifacts_directory="artifacts",
-                    preferred_compute_backend="cuda",
-                    allow_cpu_basic_mode=True,
-                    external_ai_enabled=False,
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            diagnostic = make_diagnostic(root)
+
+            with patch(
+                "creator_intelligence_studio.application.bootstrap._load_context",
+                return_value=bootstrap.BootstrapContext(
+                    settings=settings,
+                    paths=paths,
+                    diagnostic=diagnostic,
+                    logger=logging.getLogger("test"),
                 ),
-                paths=ProjectPaths.from_settings(
-                    Path("C:/project"),
-                    AppSettings(
-                        application_name="Creator Intelligence Studio",
-                        environment="development",
-                        log_level="INFO",
-                        data_directory="data",
-                        logs_directory="logs",
-                        models_directory="models",
-                        artifacts_directory="artifacts",
-                        preferred_compute_backend="cuda",
-                        allow_cpu_basic_mode=True,
-                        external_ai_enabled=False,
-                    ),
-                ),
-                diagnostic=diagnostic,
-            ),
-        ):
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            code = bootstrap.run(argv=["--diagnostic-json"], stdout=stdout, stderr=stderr)
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                code = bootstrap.run(argv=["--diagnostic-json"], stdout=stdout, stderr=stderr)
 
         self.assertEqual(code, 0)
         json.loads(stdout.getvalue())
+
+    def test_bootstrap_creator_command_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            paths.ensure_runtime_directories()
+            diagnostic = make_diagnostic(root)
+            service_context = bootstrap.ServiceContext(
+                settings=settings,
+                paths=paths,
+                diagnostic=diagnostic,
+                logger=logging.getLogger("test"),
+                service=MagicMock(),
+            )
+
+            with patch(
+                "creator_intelligence_studio.application.bootstrap._load_service_context",
+                return_value=service_context,
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                code = bootstrap.run(
+                    argv=["creator", "create", "--name", "Prueba"],
+                    stdout=stdout,
+                    stderr=stderr,
+                )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Creador creado correctamente", stdout.getvalue())

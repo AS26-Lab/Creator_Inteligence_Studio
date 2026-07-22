@@ -42,6 +42,7 @@ class ProjectPaths:
     project_root: Path
     config_directory: Path
     data_directory: Path
+    database_path: Path
     logs_directory: Path
     models_directory: Path
     artifacts_directory: Path
@@ -55,6 +56,7 @@ class ProjectPaths:
             project_root=project_root,
             config_directory=project_root / "config",
             data_directory=resolved["data_directory"],
+            database_path=resolved["data_directory"] / settings.database_filename,
             logs_directory=resolved["logs_directory"],
             models_directory=resolved["models_directory"],
             artifacts_directory=resolved["artifacts_directory"],
