@@ -108,3 +108,5 @@ Si `ffprobe` no esta disponible, la inspeccion tecnica devuelve `tool_unavailabl
 ## Estado del MVP
 
 Todavia no existe analisis audiovisual con IA. Esta fase solo prepara la base tecnica para inspecciones y artefactos derivados.
+
+La siguiente fase de analisis visual reutiliza la inspeccion tecnica y los artefactos derivados en `cache/videos/<video-id>/visual/` sin modificar el video original.

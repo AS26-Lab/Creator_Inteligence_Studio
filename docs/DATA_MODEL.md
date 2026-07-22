@@ -258,4 +258,42 @@ Campos principales:
 `acoustic_timeline_windows` conserva `window_index` con orden estable y FK hacia `acoustic_analyses`.
 `acoustic_events` conserva `event_index` con orden estable y FK hacia `acoustic_analyses`.
 
+## Migration v6: Visual analysis
+
+La migracion v6 agrega:
+
+- `visual_analyses`
+- `visual_timeline_windows`
+- `visual_scenes`
+- `visual_events`
+
+Campos principales:
+
+- `video_asset_id`
+- `source_inspection_id`
+- `status`
+- `analyzer_version`
+- `configuration_fingerprint`
+- `source_file_size_bytes`
+- `source_file_modified_at`
+- `duration_seconds`
+- `sampled_frame_count`
+- `detected_cut_count`
+- `detected_scene_count`
+- `keyframe_count`
+- `static_segment_count`
+- `black_frame_event_count`
+- `freeze_event_count`
+- `average_brightness`
+- `brightness_variation`
+- `average_contrast`
+- `average_motion`
+- `peak_motion`
+
+`visual_timeline_windows` conserva `window_index` con orden estable y FK hacia `visual_analyses`.
+`visual_scenes` conserva `scene_index` con orden estable, FK hacia `visual_analyses` y una ruta relativa al keyframe representativo.
+`visual_events` conserva `event_index` con orden estable y FK hacia `visual_analyses`.
+
+La vigencia del analisis visual depende del archivo fuente, la inspeccion tecnica de origen, el fingerprint de configuracion, la version del analizador y la disponibilidad de keyframes generados en cache controlada.
+
 La vigencia se define por fingerprints de entrada, configuracion, version del analizador y cambios en el audio preparado.

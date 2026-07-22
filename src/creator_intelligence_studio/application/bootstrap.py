@@ -24,6 +24,10 @@ from creator_intelligence_studio.application.services.acoustic_analysis_service 
     AcousticAnalysisService,
     build_acoustic_analysis_service,
 )
+from creator_intelligence_studio.application.services.visual_analysis_service import (
+    VisualAnalysisService,
+    build_visual_analysis_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -49,6 +53,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_prepared_audi
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_acoustic_analysis_repository import (
     SQLiteAcousticAnalysisRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_visual_analysis_repository import (
+    SQLiteVisualAnalysisRepository,
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
@@ -82,6 +89,7 @@ class ServiceContext(BootstrapContext):
     audio_service: AudioPreparationService
     transcription_service: TranscriptionService
     acoustic_service: AcousticAnalysisService
+    visual_service: VisualAnalysisService
 
 
 def _load_context() -> BootstrapContext:
@@ -114,36 +122,48 @@ def _load_service_context() -> ServiceContext:
         logger=context.logger,
         database=database,
     )
+    inspection_repository = SQLiteVideoInspectionRepository(database)
+    video_repository = SQLiteVideoRepository(database)
+    prepared_audio_repository = SQLitePreparedAudioRepository(database)
+    transcription_repository = SQLiteTranscriptionRepository(database)
     media_service = build_media_inspection_service(
         settings=context.settings,
         paths=context.paths,
-        video_repository=SQLiteVideoRepository(database),
-        inspection_repository=SQLiteVideoInspectionRepository(database),
+        video_repository=video_repository,
+        inspection_repository=inspection_repository,
         logger=context.logger,
     )
     audio_service = build_audio_preparation_service(
         settings=context.settings,
         paths=context.paths,
-        video_repository=SQLiteVideoRepository(database),
+        video_repository=video_repository,
         inspection_service=media_service,
-        audio_repository=SQLitePreparedAudioRepository(database),
+        audio_repository=prepared_audio_repository,
         logger=context.logger,
     )
     transcription_service = build_transcription_service(
         settings=context.settings,
         paths=context.paths,
-        video_repository=SQLiteVideoRepository(database),
-        prepared_audio_repository=SQLitePreparedAudioRepository(database),
-        transcription_repository=SQLiteTranscriptionRepository(database),
+        video_repository=video_repository,
+        prepared_audio_repository=prepared_audio_repository,
+        transcription_repository=transcription_repository,
         logger=context.logger,
     )
     acoustic_service = build_acoustic_analysis_service(
         settings=context.settings,
         paths=context.paths,
-        video_repository=SQLiteVideoRepository(database),
-        prepared_audio_repository=SQLitePreparedAudioRepository(database),
-        transcription_repository=SQLiteTranscriptionRepository(database),
+        video_repository=video_repository,
+        prepared_audio_repository=prepared_audio_repository,
+        transcription_repository=transcription_repository,
         acoustic_repository=SQLiteAcousticAnalysisRepository(database),
+        logger=context.logger,
+    )
+    visual_service = build_visual_analysis_service(
+        settings=context.settings,
+        paths=context.paths,
+        video_repository=video_repository,
+        inspection_repository=inspection_repository,
+        visual_repository=SQLiteVisualAnalysisRepository(database),
         logger=context.logger,
     )
     return ServiceContext(
@@ -156,6 +176,7 @@ def _load_service_context() -> ServiceContext:
         audio_service=audio_service,
         transcription_service=transcription_service,
         acoustic_service=acoustic_service,
+        visual_service=visual_service,
     )
 
 
@@ -224,6 +245,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             audio_service=context.audio_service,
             transcription_service=context.transcription_service,
             acoustic_service=context.acoustic_service,
+            visual_service=context.visual_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

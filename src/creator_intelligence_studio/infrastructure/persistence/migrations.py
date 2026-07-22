@@ -456,12 +456,182 @@ def migration_5(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_6(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS visual_analyses (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            source_inspection_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_analyzed',
+                    'queued',
+                    'preparing_video',
+                    'sampling_frames',
+                    'detecting_cuts',
+                    'grouping_scenes',
+                    'generating_keyframes',
+                    'calculating_metrics',
+                    'saving_results',
+                    'completed',
+                    'failed',
+                    'cancelled',
+                    'file_missing',
+                    'inspection_missing',
+                    'stale',
+                    'tool_unavailable'
+                )
+            ),
+            analyzer_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            source_file_size_bytes INTEGER,
+            source_file_modified_at TEXT,
+            duration_seconds REAL,
+            sampled_frame_count INTEGER NOT NULL,
+            detected_cut_count INTEGER NOT NULL,
+            detected_scene_count INTEGER NOT NULL,
+            keyframe_count INTEGER NOT NULL,
+            static_segment_count INTEGER NOT NULL,
+            black_frame_event_count INTEGER NOT NULL,
+            freeze_event_count INTEGER NOT NULL,
+            average_brightness REAL,
+            brightness_variation REAL,
+            average_contrast REAL,
+            average_motion REAL,
+            peak_motion REAL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_inspection_id) REFERENCES video_inspections(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS visual_timeline_windows (
+            id TEXT PRIMARY KEY,
+            visual_analysis_id TEXT NOT NULL,
+            window_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            sampled_frame_count INTEGER NOT NULL,
+            brightness REAL NOT NULL,
+            contrast REAL NOT NULL,
+            saturation REAL NOT NULL,
+            motion_score REAL NOT NULL,
+            color_change_score REAL NOT NULL,
+            is_static INTEGER NOT NULL,
+            is_black INTEGER NOT NULL,
+            is_possible_freeze INTEGER NOT NULL,
+            activity_label TEXT NOT NULL CHECK (
+                activity_label IN (
+                    'static',
+                    'low_motion',
+                    'moderate_motion',
+                    'high_motion',
+                    'dark',
+                    'normal_exposure',
+                    'bright',
+                    'possible_black_frame',
+                    'possible_freeze',
+                    'transition_candidate',
+                    'unknown'
+                )
+            ),
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (visual_analysis_id) REFERENCES visual_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS visual_scenes (
+            id TEXT PRIMARY KEY,
+            visual_analysis_id TEXT NOT NULL,
+            scene_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            duration_seconds REAL NOT NULL,
+            representative_keyframe_path TEXT,
+            cut_in_score REAL NOT NULL,
+            average_motion REAL NOT NULL,
+            average_brightness REAL NOT NULL,
+            average_contrast REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (visual_analysis_id) REFERENCES visual_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS visual_events (
+            id TEXT PRIMARY KEY,
+            visual_analysis_id TEXT NOT NULL,
+            event_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            event_type TEXT NOT NULL CHECK (
+                event_type IN (
+                    'hard_cut',
+                    'gradual_transition',
+                    'flash_candidate',
+                    'black_frame_candidate',
+                    'freeze_candidate',
+                    'abrupt_motion_change',
+                    'abrupt_brightness_change'
+                )
+            ),
+            confidence REAL NOT NULL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (visual_analysis_id) REFERENCES visual_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_analyses_video_asset_id ON visual_analyses(video_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_analyses_source_inspection_id ON visual_analyses(source_inspection_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_analyses_status ON visual_analyses(status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_timeline_windows_analysis_id ON visual_timeline_windows(visual_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_timeline_windows_window_index ON visual_timeline_windows(visual_analysis_id, window_index)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_scenes_analysis_id ON visual_scenes(visual_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_scenes_scene_index ON visual_scenes(visual_analysis_id, scene_index)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_events_analysis_id ON visual_events(visual_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visual_events_event_index ON visual_events(visual_analysis_id, event_index)"
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
     Migration(version=3, name="prepared_audio_assets"),
     Migration(version=4, name="transcriptions"),
     Migration(version=5, name="acoustic_analysis"),
+    Migration(version=6, name="visual_analysis"),
 )
 
 
@@ -509,6 +679,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_4(connection)
                 elif migration.version == 5:
                     migration_5(connection)
+                elif migration.version == 6:
+                    migration_6(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

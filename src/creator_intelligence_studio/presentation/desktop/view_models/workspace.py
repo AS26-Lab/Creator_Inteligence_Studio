@@ -28,8 +28,14 @@ from creator_intelligence_studio.application.services.acoustic_analysis_service 
     AcousticAnalysisReport,
     AcousticAnalysisService,
 )
+from creator_intelligence_studio.application.services.visual_analysis_service import (
+    VisualAnalysisExportResult,
+    VisualAnalysisReport,
+    VisualAnalysisService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
+from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
 from creator_intelligence_studio.domain.transcription.value_objects import (
     TranscriptionExportFormat,
     TranscriptionModelInfo,
@@ -196,6 +202,7 @@ class WorkspaceViewModel:
         audio_service: AudioPreparationService,
         transcription_service: TranscriptionService,
         acoustic_service: AcousticAnalysisService,
+        visual_service: VisualAnalysisService,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -205,6 +212,7 @@ class WorkspaceViewModel:
         self.audio_service = audio_service
         self.transcription_service = transcription_service
         self.acoustic_service = acoustic_service
+        self.visual_service = visual_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -429,6 +437,38 @@ class WorkspaceViewModel:
     def export_acoustic_analysis(self, video_id: str, format: str) -> AcousticAnalysisExportResult:
         result = self.acoustic_service.export_acoustic_analysis(video_id, format)
         self.activity_log.insert(0, f"Analisis acustico exportado: {format}")
+        return result
+
+    def analyze_visuals(self, video_id: str, force: bool = False, *, progress_callback=None) -> VisualAnalysisReport:
+        report = self.visual_service.analyze_visuals(video_id, force=force, progress_callback=progress_callback)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Analisis visual: {report.status.value}")
+        return report
+
+    def get_visual_analysis(self, video_id: str) -> VisualAnalysisReport:
+        return self.visual_service.get_visual_analysis(video_id)
+
+    def get_visual_timeline(self, video_id: str) -> list[VisualTimelineWindow]:
+        return self.visual_service.get_visual_timeline(video_id)
+
+    def list_visual_scenes(self, video_id: str) -> list[VisualScene]:
+        return self.visual_service.list_visual_scenes(video_id)
+
+    def list_visual_events(self, video_id: str) -> list[VisualEvent]:
+        return self.visual_service.list_visual_events(video_id)
+
+    def is_visual_analysis_stale(self, video_id: str) -> bool:
+        return self.visual_service.is_visual_analysis_stale(video_id)
+
+    def delete_visual_analysis(self, video_id: str) -> bool:
+        deleted = self.visual_service.delete_visual_analysis(video_id)
+        if deleted:
+            self.activity_log.insert(0, "Analisis visual eliminado")
+        return deleted
+
+    def export_visual_analysis(self, video_id: str, format: str) -> VisualAnalysisExportResult:
+        result = self.visual_service.export_visual_analysis(video_id, format)
+        self.activity_log.insert(0, f"Analisis visual exportado: {format}")
         return result
 
     def export_transcription(self, video_id: str, format: TranscriptionExportFormat) -> TranscriptionExportResult:
@@ -842,6 +882,29 @@ class WorkspaceViewModel:
                     InspectorItemViewModel("Rango dinamico", f"{acoustic.dynamic_range:.6f}"),
                     InspectorItemViewModel("Cambios bruscos", str(acoustic.abrupt_change_count)),
                     InspectorItemViewModel("Eventos candidatos", str(acoustic.event_candidate_count)),
+                ]
+            )
+        visual_report = self.get_visual_analysis(video.id)
+        visual = visual_report.analysis
+        items.extend(
+            [
+                InspectorItemViewModel("Analisis visual", visual_report.status.value),
+                InspectorItemViewModel("Analisis visual stale", "Si" if visual_report.is_stale else "No"),
+            ]
+        )
+        if visual is not None:
+            items.extend(
+                [
+                    InspectorItemViewModel("Cortes visuales", str(visual.detected_cut_count)),
+                    InspectorItemViewModel("Escenas visuales", str(visual.detected_scene_count)),
+                    InspectorItemViewModel("Keyframes", str(visual.keyframe_count)),
+                    InspectorItemViewModel("Movimiento medio", f"{visual.average_motion:.4f}"),
+                    InspectorItemViewModel("Movimiento pico", f"{visual.peak_motion:.4f}"),
+                    InspectorItemViewModel("Brillo medio", f"{visual.average_brightness:.4f}"),
+                    InspectorItemViewModel("Contraste medio", f"{visual.average_contrast:.4f}"),
+                    InspectorItemViewModel("Segmentos estaticos", str(visual.static_segment_count)),
+                    InspectorItemViewModel("Frames negros", str(visual.black_frame_event_count)),
+                    InspectorItemViewModel("Congelamientos", str(visual.freeze_event_count)),
                 ]
             )
         return items

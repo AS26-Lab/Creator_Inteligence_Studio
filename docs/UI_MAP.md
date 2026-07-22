@@ -8,6 +8,7 @@ flowchart LR
     Home --> Projects[Proyectos]
     Home --> Media[Videos]
     Home --> Transcription[Transcripcion]
+    Home --> Visual[Analisis visual]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -53,6 +54,7 @@ flowchart LR
 - estado `stale` cuando el archivo cambia tras la inspeccion o la preparacion;
 - resumen de transcripcion en el inspector contextual.
 - acceso a analisis acustico del video seleccionado.
+- acceso a analisis visual del video seleccionado.
 
 ### Transcripcion
 
@@ -80,6 +82,18 @@ flowchart LR
 - exportar JSON y CSV;
 - eliminar analisis;
 - reanalizar cuando el audio preparado o la transcripcion cambian.
+
+### Analisis visual
+
+- estado del analisis visual;
+- cortes y escenas tecnicas;
+- keyframes representativos;
+- movimiento medio y pico;
+- brillo y contraste relativos;
+- segmentos estaticos, posibles frames negros y posibles congelamientos;
+- linea temporal visual con eventos candidatos;
+- exportacion JSON, CSV de timeline y CSV de escenas;
+- stale y regeneracion.
 
 ### Sistema
 

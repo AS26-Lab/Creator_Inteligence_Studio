@@ -25,6 +25,15 @@ from creator_intelligence_studio.application.commands.acoustic_commands import (
     ShowAcousticCommand,
     TimelineAcousticCommand,
 )
+from creator_intelligence_studio.application.commands.visual_commands import (
+    AnalyzeVisualCommand,
+    DeleteVisualCommand,
+    EventsVisualCommand,
+    ExportVisualCommand,
+    ScenesVisualCommand,
+    ShowVisualCommand,
+    TimelineVisualCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -66,6 +75,11 @@ from creator_intelligence_studio.application.services.acoustic_analysis_service 
     AcousticAnalysisReport,
     AcousticAnalysisService,
 )
+from creator_intelligence_studio.application.services.visual_analysis_service import (
+    VisualAnalysisExportResult,
+    VisualAnalysisReport,
+    VisualAnalysisService,
+)
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
     MediaToolsReport,
@@ -74,6 +88,8 @@ from creator_intelligence_studio.application.services.media_inspection_service i
 from creator_intelligence_studio.domain.errors import DomainError
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.acoustic_analysis.value_objects import AcousticAnalysisStatus
+from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
+from creator_intelligence_studio.domain.visual_analysis.value_objects import VisualAnalysisStatus
 from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionExportFormat, TranscriptionOptions
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
@@ -248,6 +264,40 @@ def build_parser() -> argparse.ArgumentParser:
     acoustic_delete = acoustic_sub.add_parser("delete", help="Eliminar el analisis acustico")
     acoustic_delete.add_argument("--video-id", required=True)
     acoustic_delete.add_argument("--json", action="store_true")
+
+    visual_parser = subparsers.add_parser("visual", help="Analisis visual local")
+    visual_sub = visual_parser.add_subparsers(dest="action", required=True)
+
+    visual_analyze = visual_sub.add_parser("analyze", help="Analizar video")
+    visual_analyze.add_argument("--video-id", required=True)
+    visual_analyze.add_argument("--force", action="store_true")
+    visual_analyze.add_argument("--json", action="store_true")
+
+    visual_show = visual_sub.add_parser("show", help="Mostrar el analisis visual")
+    visual_show.add_argument("--video-id", required=True)
+    visual_show.add_argument("--json", action="store_true")
+
+    visual_timeline = visual_sub.add_parser("timeline", help="Mostrar la linea temporal visual")
+    visual_timeline.add_argument("--video-id", required=True)
+    visual_timeline.add_argument("--json", action="store_true")
+
+    visual_scenes = visual_sub.add_parser("scenes", help="Mostrar las escenas visuales")
+    visual_scenes.add_argument("--video-id", required=True)
+    visual_scenes.add_argument("--json", action="store_true")
+
+    visual_events = visual_sub.add_parser("events", help="Mostrar eventos visuales")
+    visual_events.add_argument("--video-id", required=True)
+    visual_events.add_argument("--json", action="store_true")
+
+    visual_export = visual_sub.add_parser("export", help="Exportar el analisis visual")
+    visual_export.add_argument("--video-id", required=True)
+    visual_export.add_argument("--format", required=True, choices=["json", "timeline-csv", "scenes-csv", "txt"])
+    visual_export.add_argument("--output")
+    visual_export.add_argument("--json", action="store_true")
+
+    visual_delete = visual_sub.add_parser("delete", help="Eliminar el analisis visual")
+    visual_delete.add_argument("--video-id", required=True)
+    visual_delete.add_argument("--json", action="store_true")
 
     return parser
 
@@ -513,6 +563,46 @@ def _print_acoustic_report(report: AcousticAnalysisReport, stream) -> None:
         print(f"Rango dinamico: {analysis.dynamic_range:.6f}", file=stream)
         print(f"Cambios bruscos: {analysis.abrupt_change_count}", file=stream)
         print(f"Eventos candidatos: {analysis.event_candidate_count}", file=stream)
+    for warning in report.warnings:
+        print(f"Advertencia: {warning}", file=stream)
+    for error in report.errors:
+        print(f"Error: {error}", file=stream)
+
+
+def _print_visual_scene(scene: VisualScene, stream) -> None:
+    print(
+        f"[{scene.scene_index}] {scene.start_seconds:.3f} -> {scene.end_seconds:.3f} "
+        f"(duracion={scene.duration_seconds:.3f} s)",
+        file=stream,
+    )
+    print(f"Keyframe: {scene.representative_keyframe_path or 'no disponible'}", file=stream)
+
+
+def _print_visual_event(event: VisualEvent, stream) -> None:
+    print(
+        f"[{event.event_index}] {event.event_type.value} {event.start_seconds:.3f} -> {event.end_seconds:.3f} "
+        f"(conf={event.confidence:.3f})",
+        file=stream,
+    )
+
+
+def _print_visual_report(report: VisualAnalysisReport, stream) -> None:
+    _print_video(report.video, stream)
+    print(f"Estado de analisis visual: {report.status.value}", file=stream)
+    print(f"Stale: {'si' if report.is_stale else 'no'}", file=stream)
+    if report.analysis is not None:
+        analysis = report.analysis
+        print(f"Analizador: {analysis.analyzer_version}", file=stream)
+        print(f"Cortes: {analysis.detected_cut_count}", file=stream)
+        print(f"Escenas: {analysis.detected_scene_count}", file=stream)
+        print(f"Keyframes: {analysis.keyframe_count}", file=stream)
+        print(f"Movimiento medio: {analysis.average_motion:.4f}", file=stream)
+        print(f"Movimiento pico: {analysis.peak_motion:.4f}", file=stream)
+        print(f"Brillo medio: {analysis.average_brightness:.4f}", file=stream)
+        print(f"Contraste medio: {analysis.average_contrast:.4f}", file=stream)
+        print(f"Segmentos estaticos: {analysis.static_segment_count}", file=stream)
+        print(f"Frames negros: {analysis.black_frame_event_count}", file=stream)
+        print(f"Congelamientos: {analysis.freeze_event_count}", file=stream)
     for warning in report.warnings:
         print(f"Advertencia: {warning}", file=stream)
     for error in report.errors:
@@ -860,6 +950,77 @@ def _handle_acoustic(args, service: AcousticAnalysisService, stdout, stderr) -> 
     raise ValueError("Accion de analisis acustico no reconocida.")
 
 
+def _handle_visual(args, service: VisualAnalysisService, stdout, stderr) -> int:
+    if args.action == "analyze":
+        command = AnalyzeVisualCommand(args.video_id, force=args.force)
+        report = service.analyze_visuals(command.video_id, force=command.force)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Analisis visual completado", file=stdout)
+            _print_visual_report(report, stdout)
+        return 0 if report.status == VisualAnalysisStatus.COMPLETED else 1
+    if args.action == "show":
+        command = ShowVisualCommand(args.video_id)
+        report = service.get_visual_analysis(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_visual_report(report, stdout)
+        return 0 if report.analysis is not None else 1
+    if args.action == "timeline":
+        command = TimelineVisualCommand(args.video_id)
+        windows = service.get_visual_timeline(command.video_id)
+        if args.json:
+            print(json.dumps([window.to_dict() for window in windows], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for window in windows:
+                print(
+                    f"[{window.window_index}] {window.start_seconds:.3f} -> {window.end_seconds:.3f} | "
+                    f"{window.activity_label.value} | motion={window.motion_score:.4f}",
+                    file=stdout,
+                )
+        return 0 if windows else 1
+    if args.action == "scenes":
+        command = ScenesVisualCommand(args.video_id)
+        scenes = service.list_visual_scenes(command.video_id)
+        if args.json:
+            print(json.dumps([scene.to_dict() for scene in scenes], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for scene in scenes:
+                _print_visual_scene(scene, stdout)
+                print("", file=stdout)
+        return 0 if scenes else 1
+    if args.action == "events":
+        command = EventsVisualCommand(args.video_id)
+        events = service.list_visual_events(command.video_id)
+        if args.json:
+            print(json.dumps([event.to_dict() for event in events], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for event in events:
+                _print_visual_event(event, stdout)
+                print("", file=stdout)
+        return 0 if events else 1
+    if args.action == "export":
+        command = ExportVisualCommand(args.video_id, args.format)
+        destination = Path(args.output) if args.output else None
+        result = service.export_visual_analysis(command.video_id, command.format, destination=destination)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print(f"Exportado: {result.path}", file=stdout)
+        return 0
+    if args.action == "delete":
+        command = DeleteVisualCommand(args.video_id)
+        deleted = service.delete_visual_analysis(command.video_id)
+        if args.json:
+            print(json.dumps({"video_id": command.video_id, "deleted": deleted}, ensure_ascii=False), file=stdout)
+        else:
+            print("Analisis visual eliminado" if deleted else "No existia analisis visual", file=stdout)
+        return 0
+    raise ValueError("Accion de analisis visual no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -868,6 +1029,7 @@ def dispatch(
     audio_service: AudioPreparationService,
     transcription_service: TranscriptionService,
     acoustic_service: AcousticAnalysisService,
+    visual_service: VisualAnalysisService,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -895,6 +1057,8 @@ def dispatch(
             return _handle_transcription(args, transcription_service, stdout, stderr)
         if args.entity == "acoustic":
             return _handle_acoustic(args, acoustic_service, stdout, stderr)
+        if args.entity == "visual":
+            return _handle_visual(args, visual_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

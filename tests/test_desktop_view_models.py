@@ -169,6 +169,30 @@ def make_acoustic_service():
     )
 
 
+def make_visual_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_analyzed"),
+        is_stale=False,
+        analysis=None,
+        windows=(),
+        scenes=(),
+        events=(),
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    return SimpleNamespace(
+        analyze_visuals=lambda *args, **kwargs: report,
+        get_visual_analysis=lambda *args, **kwargs: report,
+        get_visual_timeline=lambda *args, **kwargs: (),
+        list_visual_scenes=lambda *args, **kwargs: (),
+        list_visual_events=lambda *args, **kwargs: (),
+        is_visual_analysis_stale=lambda *args, **kwargs: False,
+        delete_visual_analysis=lambda *args, **kwargs: False,
+        export_visual_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/visual/video/visual_analysis.json", to_dict=lambda: {}),
+    )
+
+
 class DesktopViewModelTests(unittest.TestCase):
     def test_workspace_view_model_selection_and_transforms(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -184,6 +208,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -233,6 +258,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -257,6 +283,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -341,3 +368,93 @@ class DesktopViewModelTests(unittest.TestCase):
         self.assertEqual(labels["Streams"], "2")
         self.assertIn("Transcripcion", labels)
         self.assertEqual(labels["Vigencia"], "Vigente")
+
+    def test_video_inspector_items_include_visual_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            paths.ensure_runtime_directories()
+            service = build_catalog_service(settings, paths, logger=logging.getLogger("test"))
+            diagnostic = make_diagnostic(root)
+
+            visual_report = SimpleNamespace(
+                status=SimpleNamespace(value="completed"),
+                is_stale=False,
+                analysis=SimpleNamespace(
+                    detected_cut_count=3,
+                    detected_scene_count=2,
+                    keyframe_count=2,
+                    average_motion=0.1234,
+                    peak_motion=0.5678,
+                    average_brightness=0.4321,
+                    average_contrast=0.2222,
+                    static_segment_count=1,
+                    black_frame_event_count=1,
+                    freeze_event_count=0,
+                ),
+                windows=(),
+                scenes=(),
+                events=(),
+                warnings=(),
+                errors=(),
+            )
+
+            class _VisualService:
+                def analyze_visuals(self, *args, **kwargs):
+                    return visual_report
+
+                def get_visual_analysis(self, *args, **kwargs):
+                    return visual_report
+
+                def get_visual_timeline(self, *args, **kwargs):
+                    return ()
+
+                def list_visual_scenes(self, *args, **kwargs):
+                    return ()
+
+                def list_visual_events(self, *args, **kwargs):
+                    return ()
+
+                def is_visual_analysis_stale(self, *args, **kwargs):
+                    return False
+
+                def delete_visual_analysis(self, *args, **kwargs):
+                    return False
+
+                def export_visual_analysis(self, *args, **kwargs):
+                    return SimpleNamespace(path="cache/visual/video/visual_analysis.json")
+
+            workspace = WorkspaceViewModel(
+                service=service,
+                media_service=make_media_service(),
+                audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
+                visual_service=_VisualService(),
+                diagnostic=diagnostic,
+                settings=settings,
+                paths=paths,
+            )
+            creator = workspace.create_creator(display_name="Heybermu")
+            project = workspace.create_project(
+                creator_reference=creator.id,
+                name="Proyecto principal",
+                project_type="long_form",
+            )
+            sample = root / "sample.mp4"
+            sample.write_bytes(b"video-bytes")
+            video = workspace.register_video(
+                project_id=project.id,
+                file_path=str(sample),
+                title="Titulo provisional",
+            )
+
+            items = workspace.video_inspector_items(video, None, None)
+
+        labels = {item.label: item.value for item in items}
+        self.assertEqual(labels["Analisis visual"], "completed")
+        self.assertEqual(labels["Analisis visual stale"], "No")
+        self.assertEqual(labels["Cortes visuales"], "3")
+        self.assertEqual(labels["Escenas visuales"], "2")
+        self.assertEqual(labels["Keyframes"], "2")

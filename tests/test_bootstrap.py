@@ -129,6 +129,31 @@ def make_acoustic_service():
     )
 
 
+def make_visual_service():
+    report = MagicMock(
+        status=MagicMock(value="not_analyzed"),
+        is_stale=False,
+        analysis=None,
+        windows=(),
+        scenes=(),
+        events=(),
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    report.to_dict = MagicMock(return_value={"status": "not_analyzed", "is_stale": False, "analysis": None, "windows": [], "scenes": [], "events": []})
+    return MagicMock(
+        analyze_visuals=MagicMock(return_value=report),
+        get_visual_analysis=MagicMock(return_value=report),
+        get_visual_timeline=MagicMock(return_value=()),
+        list_visual_scenes=MagicMock(return_value=()),
+        list_visual_events=MagicMock(return_value=()),
+        is_visual_analysis_stale=MagicMock(return_value=False),
+        delete_visual_analysis=MagicMock(return_value=False),
+        export_visual_analysis=MagicMock(return_value=MagicMock(path="cache/visual/video/visual_analysis.json", to_dict=lambda: {})),
+    )
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_basic_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -193,6 +218,7 @@ class BootstrapTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
             )
 
             with patch(
@@ -226,6 +252,7 @@ class BootstrapTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
             )
 
             with patch(
@@ -258,6 +285,7 @@ class BootstrapTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
             )
 
             with patch(
@@ -271,3 +299,34 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(code, 1)
         payload = json.loads(stdout.getvalue())
         self.assertIn("backend", payload)
+
+    def test_visual_cli_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            diagnostic = make_diagnostic(root)
+            service_context = bootstrap.ServiceContext(
+                settings=settings,
+                paths=paths,
+                diagnostic=diagnostic,
+                logger=logging.getLogger("test"),
+                service=MagicMock(),
+                media_service=MagicMock(),
+                audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
+            )
+
+            with patch(
+                "creator_intelligence_studio.application.bootstrap._load_service_context",
+                return_value=service_context,
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                code = bootstrap.run(argv=["visual", "show", "--video-id", "video-1", "--json"], stdout=stdout, stderr=stderr)
+
+        self.assertEqual(code, 1)
+        payload = json.loads(stdout.getvalue())
+        self.assertIn("status", payload)

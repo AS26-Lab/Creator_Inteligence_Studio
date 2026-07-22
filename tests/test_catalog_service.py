@@ -178,6 +178,30 @@ def make_acoustic_service():
     )
 
 
+def make_visual_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_analyzed"),
+        is_stale=False,
+        analysis=None,
+        windows=(),
+        scenes=(),
+        events=(),
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    return SimpleNamespace(
+        analyze_visuals=lambda *args, **kwargs: report,
+        get_visual_analysis=lambda *args, **kwargs: report,
+        get_visual_timeline=lambda *args, **kwargs: (),
+        list_visual_scenes=lambda *args, **kwargs: (),
+        list_visual_events=lambda *args, **kwargs: (),
+        is_visual_analysis_stale=lambda *args, **kwargs: False,
+        delete_visual_analysis=lambda *args, **kwargs: False,
+        export_visual_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/visual/video/visual_analysis.json", to_dict=lambda: {}),
+    )
+
+
 class CatalogServiceTests(unittest.TestCase):
     def test_migration_initial(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -190,12 +214,13 @@ class CatalogServiceTests(unittest.TestCase):
                 versions = connection.execute(
                     "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
                 ).fetchall()
-            self.assertEqual(len(versions), 5)
+            self.assertEqual(len(versions), 6)
             self.assertEqual(versions[0]["version"], 1)
             self.assertEqual(versions[1]["version"], 2)
             self.assertEqual(versions[2]["version"], 3)
             self.assertEqual(versions[3]["version"], 4)
             self.assertEqual(versions[4]["version"], 5)
+            self.assertEqual(versions[5]["version"], 6)
             self.assertEqual(versions[0]["name"], "initial_schema")
 
     def test_migrations_idempotent(self) -> None:
@@ -210,7 +235,7 @@ class CatalogServiceTests(unittest.TestCase):
                 count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-            self.assertEqual(count, 5)
+            self.assertEqual(count, 6)
 
     def test_foreign_keys_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -515,6 +540,7 @@ class CatalogServiceTests(unittest.TestCase):
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
                 acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
             )
             bootstrap_context = BootstrapContext(
                 settings=settings,

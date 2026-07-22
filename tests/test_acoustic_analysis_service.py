@@ -301,6 +301,16 @@ def make_cli_context(acoustic_service) -> ServiceContext:
         to_json=lambda: "{}",
     )
     dummy = SimpleNamespace()
+    visual_service = SimpleNamespace(
+        analyze_visuals=lambda *args, **kwargs: SimpleNamespace(status=SimpleNamespace(value="not_analyzed"), is_stale=False, analysis=None, windows=(), scenes=(), events=(), warnings=(), errors=(), progress_message=None),
+        get_visual_analysis=lambda *args, **kwargs: SimpleNamespace(status=SimpleNamespace(value="not_analyzed"), is_stale=False, analysis=None, windows=(), scenes=(), events=(), warnings=(), errors=(), progress_message=None),
+        get_visual_timeline=lambda *args, **kwargs: (),
+        list_visual_scenes=lambda *args, **kwargs: (),
+        list_visual_events=lambda *args, **kwargs: (),
+        is_visual_analysis_stale=lambda *args, **kwargs: False,
+        delete_visual_analysis=lambda *args, **kwargs: False,
+        export_visual_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/visual/video/visual_analysis.json", to_dict=lambda: {}),
+    )
     return ServiceContext(
         settings=make_settings(),
         paths=ProjectPaths.from_settings(Path("."), make_settings()),
@@ -311,6 +321,7 @@ def make_cli_context(acoustic_service) -> ServiceContext:
         audio_service=dummy,
         transcription_service=dummy,
         acoustic_service=acoustic_service,
+        visual_service=visual_service,
     )
 
 
@@ -330,9 +341,9 @@ class AcousticAnalysisTests(unittest.TestCase):
                 ).fetchall()
                 run_migrations(connection)
                 idempotent_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
-            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5])
+            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6])
             self.assertGreaterEqual(len(tables), 3)
-            self.assertEqual(idempotent_count, 5)
+            self.assertEqual(idempotent_count, 6)
 
     def test_frame_metrics_and_vad_handle_silence_noise_clipping_low_volume(self) -> None:
         sample_rate = 16000
@@ -524,6 +535,16 @@ class AcousticAnalysisTests(unittest.TestCase):
                 audio_service=SimpleNamespace(),
                 transcription_service=SimpleNamespace(),
                 acoustic_service=acoustic_service,
+                visual_service=SimpleNamespace(
+                    analyze_visuals=lambda *args, **kwargs: SimpleNamespace(status=SimpleNamespace(value="not_analyzed"), is_stale=False, analysis=None, windows=(), scenes=(), events=(), warnings=(), errors=(), progress_message=None),
+                    get_visual_analysis=lambda *args, **kwargs: SimpleNamespace(status=SimpleNamespace(value="not_analyzed"), is_stale=False, analysis=None, windows=(), scenes=(), events=(), warnings=(), errors=(), progress_message=None),
+                    get_visual_timeline=lambda *args, **kwargs: (),
+                    list_visual_scenes=lambda *args, **kwargs: (),
+                    list_visual_events=lambda *args, **kwargs: (),
+                    is_visual_analysis_stale=lambda *args, **kwargs: False,
+                    delete_visual_analysis=lambda *args, **kwargs: False,
+                    export_visual_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/visual/video/visual_analysis.json", to_dict=lambda: {}),
+                ),
             )
             with patch("creator_intelligence_studio.application.bootstrap._load_service_context", return_value=context):
                 code = bootstrap_run(argv=["acoustic", "show", "--video-id", video.id, "--json"], stdout=stdout, stderr=stderr)

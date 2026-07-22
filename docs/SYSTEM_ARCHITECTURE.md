@@ -55,6 +55,7 @@ flowchart TD
 - `Analysis Pipeline`
 - `Insight Engine`
 - `Acoustic Analysis`
+- `Visual Analysis`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -196,6 +197,14 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - `infrastructure/acoustic_analysis`: lectura WAV, analisis de frames, detector heuristico de voz/silencio, metricas y eventos.
 - La capa no interpreta emociones como hechos.
 - La salida guarda ventanas temporales, eventos candidatos y metricas globales reutilizables.
+
+## Visual analysis layer
+
+- `domain/visual_analysis`: entidades, errores, repositorios, value objects y reglas tecnicas.
+- `application/services/visual_analysis_service.py`: orquestacion, estado, persistencia, exportaciones, keyframes y stale.
+- `infrastructure/visual_analysis`: muestreo de frames, metricas, deteccion de cortes, escenas, eventos y extraccion de keyframes con `ffmpeg`.
+- La capa evita interpretacion semantica y usa etiquetas tecnicas como `static`, `low_motion`, `possible_black_frame` o `transition_candidate`.
+- Los keyframes se almacenan en `cache/videos/<video-id>/visual/` y se ignoran por Git.
 
 ## Transcription Layer
 

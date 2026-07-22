@@ -17,7 +17,7 @@ El proyecto ya dispone de:
 
 Todavia no existen:
 
-- analisis audiovisual con IA;
+- analisis audiovisual semantico con IA generativa;
 - PyTorch;
 - CUDA Toolkit;
 - modelos descargados;
@@ -72,6 +72,7 @@ La aplicacion ya permite:
 - inspeccionar tecnicamente un video registrado;
 - preparar un audio normalizado reutilizable a partir de un video inspeccionado;
 - analizar acusticamente el audio preparado con metrica tecnica local;
+- analizar tecnicamente la estructura visual del video con cortes, escenas, keyframes, movimiento, brillo, contraste y eventos candidatos;
 - guardar un resumen tecnico real de `ffprobe`;
 - generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
@@ -207,6 +208,23 @@ python -m creator_intelligence_studio acoustic delete --video-id <video_id>
 ```
 
 Los resultados acusticos se guardan en SQLite y las exportaciones controladas se escriben en `cache/acoustics/` salvo que el usuario indique otra ruta.
+
+## Comandos de analisis visual
+
+```bat
+python -m creator_intelligence_studio visual analyze --video-id <video_id>
+python -m creator_intelligence_studio visual analyze --video-id <video_id> --force
+python -m creator_intelligence_studio visual show --video-id <video_id>
+python -m creator_intelligence_studio visual timeline --video-id <video_id>
+python -m creator_intelligence_studio visual scenes --video-id <video_id>
+python -m creator_intelligence_studio visual events --video-id <video_id>
+python -m creator_intelligence_studio visual export --video-id <video_id> --format json
+python -m creator_intelligence_studio visual export --video-id <video_id> --format timeline-csv
+python -m creator_intelligence_studio visual export --video-id <video_id> --format scenes-csv
+python -m creator_intelligence_studio visual delete --video-id <video_id>
+```
+
+Los resultados visuales se guardan en SQLite y los keyframes tecnicos se escriben en `cache/videos/<video-id>/visual/` sin tocar el video original.
 
 ## Ejecutar pruebas
 
