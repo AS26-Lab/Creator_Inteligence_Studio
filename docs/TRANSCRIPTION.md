@@ -4,6 +4,7 @@
 
 Creator Intelligence Studio ya integra una transcripcion local con `faster-whisper` + `CTranslate2`.
 La ruta principal usa CUDA con `int8_float16` y la ruta de respaldo usa CPU con `int8`.
+Los segmentos de transcripcion tambien pueden alimentar analisis acustico local cuando esta fase existe.
 
 ## Dependencias
 
@@ -153,3 +154,4 @@ Las exportaciones se escriben en una ruta controlada por la aplicacion o en una 
 - No hay embeddings.
 - No hay word timestamps por defecto.
 - No hay backend externo.
+- No se intentan inferir emociones como hechos dentro de la transcripcion ni del analisis acustico.

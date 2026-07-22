@@ -54,6 +54,7 @@ flowchart TD
 - `Job Orchestrator`
 - `Analysis Pipeline`
 - `Insight Engine`
+- `Acoustic Analysis`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -67,9 +68,10 @@ flowchart TD
 4. Se guarda un resumen tecnico normalizado y el JSON completo limitado de `ffprobe`.
 5. Si `ffmpeg` esta disponible, se genera una miniatura tecnica inicial en cache local.
 6. Si `ffmpeg` esta disponible y existe una inspeccion vigente, se puede preparar un audio normalizado reutilizable en cache local.
-7. El cache se reutiliza si tamano y fecha de modificacion siguen vigentes.
-8. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion o preparacion.
-9. La UI solo consume resultados publicados por la capa de aplicacion.
+7. Si existe transcripcion local, puede alimentar fases posteriores como analisis acustico.
+8. El cache se reutiliza si tamano, fecha de modificacion y fingerprints siguen vigentes.
+9. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion o analisis acustico.
+10. La UI solo consume resultados publicados por la capa de aplicacion.
 
 ## Jobs
 
@@ -77,6 +79,7 @@ flowchart TD
 - extraccion de audio;
 - transcripcion;
 - segmentacion;
+- analisis acustico;
 - analisis visual;
 - analisis de voz;
 - generacion de insights;
@@ -118,6 +121,7 @@ flowchart TD
 - `cache/videos/<video-id>/inspection/`
 - `cache/videos/<video-id>/thumbnails/`
 - `cache/videos/<video-id>/audio/`
+- `cache/acoustics/<video-id>/`
 
 El video original no se copia ni se modifica.
 
@@ -184,6 +188,14 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - la capa de dominio define la seleccion de stream de audio y la configuracion de normalizacion;
 - la salida normalizada inicial es WAV PCM signed 16-bit little-endian, mono, 16 kHz;
 - el video original nunca se modifica.
+
+## Acoustic analysis layer
+
+- `domain/acoustic_analysis`: entidades, errores, repositorios, value objects y reglas deterministas.
+- `application/services/acoustic_analysis_service.py`: orquestacion, estado, persistencia, exportaciones y stale.
+- `infrastructure/acoustic_analysis`: lectura WAV, analisis de frames, detector heuristico de voz/silencio, metricas y eventos.
+- La capa no interpreta emociones como hechos.
+- La salida guarda ventanas temporales, eventos candidatos y metricas globales reutilizables.
 
 ## Transcription Layer
 

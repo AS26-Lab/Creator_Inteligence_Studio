@@ -147,6 +147,28 @@ def make_transcription_service():
     )
 
 
+def make_acoustic_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_analyzed"),
+        is_stale=False,
+        analysis=None,
+        windows=(),
+        events=(),
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    return SimpleNamespace(
+        analyze_acoustics=lambda *args, **kwargs: report,
+        get_acoustic_analysis=lambda *args, **kwargs: report,
+        get_acoustic_timeline=lambda *args, **kwargs: (),
+        list_acoustic_events=lambda *args, **kwargs: (),
+        is_acoustic_analysis_stale=lambda *args, **kwargs: False,
+        delete_acoustic_analysis=lambda *args, **kwargs: False,
+        export_acoustic_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/acoustic/video/acoustic_analysis.json", to_dict=lambda: {}),
+    )
+
+
 class DesktopViewModelTests(unittest.TestCase):
     def test_workspace_view_model_selection_and_transforms(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -161,6 +183,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 media_service=make_media_service(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -209,6 +232,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 media_service=make_media_service(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -232,6 +256,7 @@ class DesktopViewModelTests(unittest.TestCase):
                 media_service=make_media_service(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,

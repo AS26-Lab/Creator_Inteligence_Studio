@@ -71,6 +71,7 @@ La aplicacion ya permite:
 - verificar si un archivo sigue disponible;
 - inspeccionar tecnicamente un video registrado;
 - preparar un audio normalizado reutilizable a partir de un video inspeccionado;
+- analizar acusticamente el audio preparado con metrica tecnica local;
 - guardar un resumen tecnico real de `ffprobe`;
 - generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
@@ -191,6 +192,21 @@ python -m creator_intelligence_studio transcription delete --video-id <video_id>
 
 El caché de modelos vive en `models/transcription/faster-whisper/`.
 Las exportaciones controladas se escriben en `cache/transcriptions/` salvo que el usuario indique otra ruta.
+
+## Comandos de analisis acustico
+
+```bat
+python -m creator_intelligence_studio acoustic analyze --video-id <video_id>
+python -m creator_intelligence_studio acoustic analyze --video-id <video_id> --force
+python -m creator_intelligence_studio acoustic show --video-id <video_id>
+python -m creator_intelligence_studio acoustic timeline --video-id <video_id>
+python -m creator_intelligence_studio acoustic events --video-id <video_id>
+python -m creator_intelligence_studio acoustic export --video-id <video_id> --format json
+python -m creator_intelligence_studio acoustic export --video-id <video_id> --format csv
+python -m creator_intelligence_studio acoustic delete --video-id <video_id>
+```
+
+Los resultados acusticos se guardan en SQLite y las exportaciones controladas se escriben en `cache/acoustics/` salvo que el usuario indique otra ruta.
 
 ## Ejecutar pruebas
 

@@ -107,6 +107,28 @@ def make_transcription_service():
     )
 
 
+def make_acoustic_service():
+    report = MagicMock(
+        status=MagicMock(value="not_analyzed"),
+        is_stale=False,
+        analysis=None,
+        windows=(),
+        events=(),
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    return MagicMock(
+        analyze_acoustics=MagicMock(return_value=report),
+        get_acoustic_analysis=MagicMock(return_value=report),
+        get_acoustic_timeline=MagicMock(return_value=()),
+        list_acoustic_events=MagicMock(return_value=()),
+        is_acoustic_analysis_stale=MagicMock(return_value=False),
+        delete_acoustic_analysis=MagicMock(return_value=False),
+        export_acoustic_analysis=MagicMock(return_value=MagicMock(path="cache/acoustic/video/acoustic_analysis.json", to_dict=lambda: {})),
+    )
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_basic_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -170,6 +192,7 @@ class BootstrapTests(unittest.TestCase):
                 media_service=MagicMock(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
             )
 
             with patch(
@@ -202,6 +225,7 @@ class BootstrapTests(unittest.TestCase):
                 media_service=MagicMock(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
             )
 
             with patch(
@@ -233,6 +257,7 @@ class BootstrapTests(unittest.TestCase):
                 media_service=MagicMock(),
                 audio_service=make_audio_service(),
                 transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
             )
 
             with patch(

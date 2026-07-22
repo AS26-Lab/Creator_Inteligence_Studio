@@ -116,3 +116,8 @@ La pantalla Videos muestra el estado del audio preparado, el stream seleccionado
 
 La transcripcion local consume directamente el WAV normalizado preparado en esta fase.
 Mantener esta salida estable es requisito para el backend CUDA de `faster-whisper`.
+
+## Relation to Acoustic Analysis
+
+El analisis acustico local consume el mismo WAV normalizado y la transcripcion cuando existe.
+Las dos fases comparten la misma politica de vigencia: si cambia el audio preparado, la configuracion o el fingerprint de entrada, el resultado puede quedar `stale`.

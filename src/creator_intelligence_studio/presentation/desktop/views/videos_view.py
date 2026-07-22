@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import QThread, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
@@ -88,10 +89,17 @@ class AudioTaskThread(QThread):
 class VideosView(QWidget):
     """Lista, filtros y registro de videos."""
 
-    def __init__(self, workspace: WorkspaceViewModel, inspector: InspectorPanel, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        workspace: WorkspaceViewModel,
+        inspector: InspectorPanel,
+        open_acoustic_callback: Callable[[], None] | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.workspace = workspace
         self.inspector = inspector
+        self.open_acoustic_callback = open_acoustic_callback
         self._inspection_thread: InspectionThread | None = None
         self._audio_thread: AudioTaskThread | None = None
         self.search_edit = QLineEdit()
@@ -126,6 +134,7 @@ class VideosView(QWidget):
         self.reprepare_audio_button = QPushButton("Regenerar audio")
         self.verify_audio_button = QPushButton("Verificar audio")
         self.clear_audio_cache_button = QPushButton("Limpiar caché de audio")
+        self.acoustic_button = QPushButton("Análisis acústico")
         self.transcription_button = QPushButton("Transcripción (Próximamente)")
         self.transcription_button.setEnabled(False)
 
@@ -144,6 +153,7 @@ class VideosView(QWidget):
             (self.reprepare_audio_button, "Regenerar el audio preparado"),
             (self.verify_audio_button, "Comprobar la vigencia del audio preparado"),
             (self.clear_audio_cache_button, "Eliminar solo artefactos de audio generados"),
+            (self.acoustic_button, "Abrir el panel de analisis acustico"),
             (self.transcription_button, "Transcripción no disponible todavia"),
         ):
             widget.setToolTip(tip)
@@ -157,6 +167,7 @@ class VideosView(QWidget):
             self.reprepare_audio_button,
             self.verify_audio_button,
             self.clear_audio_cache_button,
+            self.acoustic_button,
         ):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -170,6 +181,7 @@ class VideosView(QWidget):
         buttons.addWidget(self.reprepare_audio_button)
         buttons.addWidget(self.verify_audio_button)
         buttons.addWidget(self.clear_audio_cache_button)
+        buttons.addWidget(self.acoustic_button)
         buttons.addWidget(self.transcription_button)
         buttons.addStretch(1)
 
@@ -203,6 +215,7 @@ class VideosView(QWidget):
         self.reprepare_audio_button.clicked.connect(self._reprepare_audio)
         self.verify_audio_button.clicked.connect(self._verify_audio)
         self.clear_audio_cache_button.clicked.connect(self._clear_audio_cache)
+        self.acoustic_button.clicked.connect(self._open_acoustic)
 
     def _selected_filters(self) -> VideoFiltersViewModel:
         return VideoFiltersViewModel(
@@ -311,6 +324,7 @@ class VideosView(QWidget):
         self.reprepare_audio_button.setEnabled(not running and self.workspace.selected_video_id is not None)
         self.verify_audio_button.setEnabled(not running)
         self.clear_audio_cache_button.setEnabled(not running)
+        self.acoustic_button.setEnabled(not running)
         self.inspect_button.setEnabled(not running)
         self.reinspect_button.setEnabled(not running and self.workspace.selected_video_id is not None)
         self.register_button.setEnabled(not running)
@@ -330,6 +344,7 @@ class VideosView(QWidget):
             self.reprepare_audio_button.setEnabled(False)
             self.verify_audio_button.setEnabled(False)
             self.clear_audio_cache_button.setEnabled(False)
+            self.acoustic_button.setEnabled(False)
             self.inspector.set_empty("Inspector", "Selecciona un video para ver sus detalles.")
             return
         self.workspace.select_video(video.id)
@@ -348,6 +363,7 @@ class VideosView(QWidget):
                 ("Regenerar audio", self._reprepare_audio),
                 ("Verificar audio", self._verify_audio),
                 ("Limpiar caché de audio", self._clear_audio_cache),
+                ("Análisis acústico", self._open_acoustic),
             ]
         )
         self.inspect_button.setEnabled(True)
@@ -364,6 +380,7 @@ class VideosView(QWidget):
         self.reprepare_audio_button.setEnabled(not self._audio_running() and audio_available)
         self.verify_audio_button.setEnabled(not self._audio_running() and audio_report is not None)
         self.clear_audio_cache_button.setEnabled(not self._audio_running() and audio_report is not None)
+        self.acoustic_button.setEnabled(not self._audio_running())
 
     def _set_inspection_running(self, running: bool) -> None:
         self.inspect_button.setEnabled(not running)
@@ -375,6 +392,7 @@ class VideosView(QWidget):
         self.reprepare_audio_button.setEnabled(False)
         self.verify_audio_button.setEnabled(False)
         self.clear_audio_cache_button.setEnabled(False)
+        self.acoustic_button.setEnabled(False)
         self.transcription_button.setEnabled(False)
         self.inspect_button.setText("Inspeccionando..." if running else "Inspeccionar video")
         self.reinspect_button.setText("Reinspeccionando..." if running else "Reinspeccionar")
@@ -468,6 +486,10 @@ class VideosView(QWidget):
 
     def _clear_audio_cache(self) -> None:
         self._run_audio_task("clear-cache", force=False)
+
+    def _open_acoustic(self) -> None:
+        if self.open_acoustic_callback is not None:
+            self.open_acoustic_callback()
 
     def _register_video(self) -> None:
         project = self.workspace.selected_project()

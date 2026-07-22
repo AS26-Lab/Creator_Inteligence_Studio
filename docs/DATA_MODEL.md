@@ -217,3 +217,45 @@ Campos principales:
 - `configuration_fingerprint`
 
 `transcription_segments` conserva `segment_index` con orden estable y FK hacia `transcriptions`.
+
+## Migration v5: Acoustic analysis
+
+La migracion v5 agrega:
+
+- `acoustic_analyses`
+- `acoustic_timeline_windows`
+- `acoustic_events`
+
+Campos principales:
+
+- `video_asset_id`
+- `prepared_audio_asset_id`
+- `transcription_id`
+- `status`
+- `analyzer_version`
+- `configuration_fingerprint`
+- `source_audio_fingerprint`
+- `duration_seconds`
+- `speech_duration_seconds`
+- `silence_duration_seconds`
+- `speech_ratio`
+- `silence_ratio`
+- `words_per_minute`
+- `voiced_words_per_minute`
+- `average_energy`
+- `peak_energy`
+- `dynamic_range`
+- `pause_count`
+- `average_pause_seconds`
+- `longest_pause_seconds`
+- `short_pause_count`
+- `medium_pause_count`
+- `long_pause_count`
+- `low_activity_segment_count`
+- `abrupt_change_count`
+- `event_candidate_count`
+
+`acoustic_timeline_windows` conserva `window_index` con orden estable y FK hacia `acoustic_analyses`.
+`acoustic_events` conserva `event_index` con orden estable y FK hacia `acoustic_analyses`.
+
+La vigencia se define por fingerprints de entrada, configuracion, version del analizador y cambios en el audio preparado.

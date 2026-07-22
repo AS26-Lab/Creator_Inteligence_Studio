@@ -27,6 +27,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         media_service=context.media_service,
         audio_service=context.audio_service,
         transcription_service=context.transcription_service,
+        acoustic_service=context.acoustic_service,
         diagnostic=context.diagnostic,
         settings=context.settings,
         paths=context.paths,

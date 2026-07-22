@@ -24,6 +24,7 @@
 | 2026-07-22 | Cache tecnico | Las inspecciones, miniaturas y audio preparado viviran en `cache/videos/<video-id>/...` y seguiran ignoradas por Git. | Los artefactos derivados se reutilizan y no contaminan el repositorio. | Escribir miniaturas, inspecciones o audio junto al video original. |
 | 2026-07-22 | Preparacion de audio | `ffmpeg` tambien se usara para preparar una pista de audio normalizada reutilizable en WAV PCM16 mono 16 kHz. | El flujo audiovisual puede reutilizar audio tecnico sin tocar el video original y sin transcripcion aun. | Extraer audio con herramientas no encapsuladas o introducir IA en esta fase. |
 | 2026-07-22 | Transcripcion local | `faster-whisper` + `CTranslate2` sera el backend local principal de transcripcion. | Se obtiene CUDA con fallback CPU, timestamps por segmento y cache local de modelos. | Resolver la transcripcion con API externa o con un backend no optimizado para Windows/CUDA. |
+| 2026-07-22 | Analisis acustico | La primera fase de inteligencia acustica sera determinista, local y tecnica, sin inferir emociones como hechos. | Se priorizan reglas reproducibles, ventanas temporales, pausas, energia y eventos candidatos explicitos. | Clasificadores emocionales o modelos generativos en esta etapa. |
 
 ## Transcription Decision
 
@@ -45,3 +46,4 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - motor concreto de almacenamiento local para binarios futuros;
 - esquema final de entrenamiento local;
 - formato exacto del model registry.
+- refinamiento futuro de eventos acusticos cuando exista una segunda fase especializada.

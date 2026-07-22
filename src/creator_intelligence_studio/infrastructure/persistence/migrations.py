@@ -247,7 +247,7 @@ def migration_4(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS transcriptions (
             id TEXT PRIMARY KEY,
             video_asset_id TEXT NOT NULL UNIQUE,
-            prepared_audio_asset_id TEXT NOT NULL,
+            prepared_audio_asset_id TEXT,
             status TEXT NOT NULL CHECK (
                 status IN (
                     'not_transcribed',
@@ -332,11 +332,136 @@ def migration_4(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_5(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS acoustic_analyses (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            prepared_audio_asset_id TEXT NOT NULL,
+            transcription_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_analyzed',
+                    'queued',
+                    'reading_audio',
+                    'analyzing_frames',
+                    'combining_transcription',
+                    'detecting_pauses_events',
+                    'saving_results',
+                    'completed',
+                    'failed',
+                    'cancelled',
+                    'file_missing',
+                    'audio_not_prepared',
+                    'audio_stale',
+                    'stale'
+                )
+            ),
+            analyzer_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_audio_fingerprint TEXT NOT NULL,
+            duration_seconds REAL NOT NULL,
+            speech_duration_seconds REAL NOT NULL,
+            silence_duration_seconds REAL NOT NULL,
+            speech_ratio REAL NOT NULL,
+            silence_ratio REAL NOT NULL,
+            words_per_minute REAL,
+            voiced_words_per_minute REAL,
+            average_energy REAL NOT NULL,
+            peak_energy REAL NOT NULL,
+            dynamic_range REAL NOT NULL,
+            pause_count INTEGER NOT NULL,
+            average_pause_seconds REAL,
+            longest_pause_seconds REAL,
+            short_pause_count INTEGER NOT NULL,
+            medium_pause_count INTEGER NOT NULL,
+            long_pause_count INTEGER NOT NULL,
+            low_activity_segment_count INTEGER NOT NULL,
+            abrupt_change_count INTEGER NOT NULL,
+            event_candidate_count INTEGER NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (prepared_audio_asset_id) REFERENCES prepared_audio_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS acoustic_timeline_windows (
+            id TEXT PRIMARY KEY,
+            acoustic_analysis_id TEXT NOT NULL,
+            window_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            speech_probability REAL NOT NULL,
+            is_speech INTEGER NOT NULL,
+            rms_energy REAL NOT NULL,
+            peak_amplitude REAL NOT NULL,
+            normalized_energy REAL NOT NULL,
+            zero_crossing_rate REAL NOT NULL,
+            speech_rate_estimate REAL,
+            word_count INTEGER NOT NULL,
+            pause_duration_seconds REAL NOT NULL,
+            activity_label TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (acoustic_analysis_id) REFERENCES acoustic_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS acoustic_events (
+            id TEXT PRIMARY KEY,
+            acoustic_analysis_id TEXT NOT NULL,
+            event_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            event_type TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (acoustic_analysis_id) REFERENCES acoustic_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_analyses_video_asset_id ON acoustic_analyses(video_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_analyses_prepared_audio_asset_id ON acoustic_analyses(prepared_audio_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_analyses_status ON acoustic_analyses(status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_timeline_windows_analysis_id ON acoustic_timeline_windows(acoustic_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_timeline_windows_window_index ON acoustic_timeline_windows(acoustic_analysis_id, window_index)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_events_analysis_id ON acoustic_events(acoustic_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_acoustic_events_event_index ON acoustic_events(acoustic_analysis_id, event_index)"
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
     Migration(version=3, name="prepared_audio_assets"),
     Migration(version=4, name="transcriptions"),
+    Migration(version=5, name="acoustic_analysis"),
 )
 
 
@@ -382,6 +507,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_3(connection)
                 elif migration.version == 4:
                     migration_4(connection)
+                elif migration.version == 5:
+                    migration_5(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

@@ -23,7 +23,13 @@ from creator_intelligence_studio.application.services.transcription_service impo
     TranscriptionReport,
     TranscriptionService,
 )
+from creator_intelligence_studio.application.services.acoustic_analysis_service import (
+    AcousticAnalysisExportResult,
+    AcousticAnalysisReport,
+    AcousticAnalysisService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
+from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.transcription.value_objects import (
     TranscriptionExportFormat,
     TranscriptionModelInfo,
@@ -189,6 +195,7 @@ class WorkspaceViewModel:
         media_service: MediaInspectionService,
         audio_service: AudioPreparationService,
         transcription_service: TranscriptionService,
+        acoustic_service: AcousticAnalysisService,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -197,6 +204,7 @@ class WorkspaceViewModel:
         self.media_service = media_service
         self.audio_service = audio_service
         self.transcription_service = transcription_service
+        self.acoustic_service = acoustic_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -393,6 +401,35 @@ class WorkspaceViewModel:
         if deleted:
             self.activity_log.insert(0, "Transcripcion eliminada")
         return deleted
+
+    def analyze_acoustics(self, video_id: str, force: bool = False, *, progress_callback=None) -> AcousticAnalysisReport:
+        report = self.acoustic_service.analyze_acoustics(video_id, force=force, progress_callback=progress_callback)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Analisis acustico: {report.status.value}")
+        return report
+
+    def get_acoustic_analysis(self, video_id: str) -> AcousticAnalysisReport:
+        return self.acoustic_service.get_acoustic_analysis(video_id)
+
+    def get_acoustic_timeline(self, video_id: str) -> list[AcousticTimelineWindow]:
+        return self.acoustic_service.get_acoustic_timeline(video_id)
+
+    def list_acoustic_events(self, video_id: str) -> list[AcousticEvent]:
+        return self.acoustic_service.list_acoustic_events(video_id)
+
+    def is_acoustic_analysis_stale(self, video_id: str) -> bool:
+        return self.acoustic_service.is_acoustic_analysis_stale(video_id)
+
+    def delete_acoustic_analysis(self, video_id: str) -> bool:
+        deleted = self.acoustic_service.delete_acoustic_analysis(video_id)
+        if deleted:
+            self.activity_log.insert(0, "Analisis acustico eliminado")
+        return deleted
+
+    def export_acoustic_analysis(self, video_id: str, format: str) -> AcousticAnalysisExportResult:
+        result = self.acoustic_service.export_acoustic_analysis(video_id, format)
+        self.activity_log.insert(0, f"Analisis acustico exportado: {format}")
+        return result
 
     def export_transcription(self, video_id: str, format: TranscriptionExportFormat) -> TranscriptionExportResult:
         result = self.transcription_service.export_transcription(video_id, format)
@@ -776,6 +813,35 @@ class WorkspaceViewModel:
                         "Real-time factor",
                         f"{transcription.real_time_factor:.3f}",
                     ),
+                ]
+            )
+        acoustic_report = self.get_acoustic_analysis(video.id)
+        acoustic = acoustic_report.analysis
+        items.extend(
+            [
+                InspectorItemViewModel("Analisis acustico", acoustic_report.status.value),
+                InspectorItemViewModel("Analisis acustico stale", "Si" if acoustic_report.is_stale else "No"),
+            ]
+        )
+        if acoustic is not None:
+            items.extend(
+                [
+                    InspectorItemViewModel("Duracion de voz", f"{acoustic.speech_duration_seconds:.3f} s"),
+                    InspectorItemViewModel("Duracion de silencio", f"{acoustic.silence_duration_seconds:.3f} s"),
+                    InspectorItemViewModel("Speech ratio", f"{acoustic.speech_ratio:.3f}"),
+                    InspectorItemViewModel(
+                        "Palabras por minuto",
+                        f"{acoustic.words_per_minute:.3f}" if acoustic.words_per_minute is not None else "No verificado",
+                    ),
+                    InspectorItemViewModel("Pausas", str(acoustic.pause_count)),
+                    InspectorItemViewModel(
+                        "Pausa mas larga",
+                        f"{acoustic.longest_pause_seconds:.3f} s" if acoustic.longest_pause_seconds is not None else "No verificada",
+                    ),
+                    InspectorItemViewModel("Energia media", f"{acoustic.average_energy:.6f}"),
+                    InspectorItemViewModel("Rango dinamico", f"{acoustic.dynamic_range:.6f}"),
+                    InspectorItemViewModel("Cambios bruscos", str(acoustic.abrupt_change_count)),
+                    InspectorItemViewModel("Eventos candidatos", str(acoustic.event_candidate_count)),
                 ]
             )
         return items

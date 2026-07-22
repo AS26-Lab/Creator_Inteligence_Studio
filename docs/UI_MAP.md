@@ -52,6 +52,7 @@ flowchart LR
 - inspector de audio preparado con estado, stream seleccionado, formato, sample rate, canales, bit depth y vigencia;
 - estado `stale` cuando el archivo cambia tras la inspeccion o la preparacion;
 - resumen de transcripcion en el inspector contextual.
+- acceso a analisis acustico del video seleccionado.
 
 ### Transcripcion
 
@@ -66,6 +67,19 @@ flowchart LR
 - tabla de segmentos;
 - indicador de progreso aproximado;
 - estado de stale.
+
+### Analisis acustico
+
+- estado del analisis;
+- duracion de voz y silencio;
+- speech ratio;
+- palabras por minuto;
+- pausas y pausa mas larga;
+- energia media y rango dinamico;
+- linea temporal tecnica con voz/silencio, energia y eventos candidatos;
+- exportar JSON y CSV;
+- eliminar analisis;
+- reanalizar cuando el audio preparado o la transcripcion cambian.
 
 ### Sistema
 
