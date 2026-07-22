@@ -100,6 +100,26 @@ def make_media_service():
     return _FakeMediaService()
 
 
+def make_audio_service():
+    class _FakeAudioService:
+        def prepare_audio(self, video_id: str, force: bool = False):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def get_prepared_audio(self, video_id: str):
+            return None
+
+        def is_prepared_audio_stale(self, video_id: str) -> bool:
+            return False
+
+        def verify_prepared_audio(self, video_id: str):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def delete_prepared_audio_cache(self, video_id: str):
+            return SimpleNamespace(deleted_record=False, deleted_files=())
+
+    return _FakeAudioService()
+
+
 class CatalogServiceTests(unittest.TestCase):
     def test_migration_initial(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -112,9 +132,10 @@ class CatalogServiceTests(unittest.TestCase):
                 versions = connection.execute(
                     "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
                 ).fetchall()
-            self.assertEqual(len(versions), 2)
+            self.assertEqual(len(versions), 3)
             self.assertEqual(versions[0]["version"], 1)
             self.assertEqual(versions[1]["version"], 2)
+            self.assertEqual(versions[2]["version"], 3)
             self.assertEqual(versions[0]["name"], "initial_schema")
 
     def test_migrations_idempotent(self) -> None:
@@ -129,7 +150,7 @@ class CatalogServiceTests(unittest.TestCase):
                 count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-            self.assertEqual(count, 2)
+            self.assertEqual(count, 3)
 
     def test_foreign_keys_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -431,6 +452,7 @@ class CatalogServiceTests(unittest.TestCase):
                 logger=logging.getLogger("test"),
                 service=service,
                 media_service=make_media_service(),
+                audio_service=make_audio_service(),
             )
             bootstrap_context = BootstrapContext(
                 settings=settings,

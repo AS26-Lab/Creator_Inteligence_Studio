@@ -20,8 +20,9 @@
 | 2026-07-22 | Registro de metadatos | No se calcula hash completo durante el registro inicial. | Se mantiene el flujo liviano y se evita leer archivos grandes innecesariamente. | Hacer fingerprint completo en esta mision. |
 | 2026-07-22 | Portabilidad futura | Las rutas portables y la biblioteca administrada quedan para una fase futura. | La primera version usa rutas absolutas normalizadas para desarrollo controlado. | Forzar una abstraccion portable prematura. |
 | 2026-07-22 | Interfaz de escritorio | PySide6 sera la base de la GUI del MVP y vivira en `presentation/desktop`. | La presentacion queda separada de CLI, dominio e infraestructura. | Integrar la interfaz dentro de la logica de aplicacion o depender de otra biblioteca grafica. |
-| 2026-07-22 | Inspeccion tecnica | `ffprobe` sera la herramienta requerida para la inspeccion tecnica local; `ffmpeg` solo se usara para miniatura inicial. | El video original no se modifica y la inspeccion puede persistir un resumen tecnico real. | Acoplar la fase tecnica a un pipeline de IA o exigir `ffmpeg` para todo el flujo. |
-| 2026-07-22 | Caché tecnico | Las inspecciones y miniaturas viviran en `cache/videos/<video-id>/...` y seguiran ignoradas por Git. | Los artefactos derivados se reutilizan y no contaminan el repositorio. | Escribir miniaturas o inspecciones junto al video original. |
+| 2026-07-22 | Inspeccion tecnica | `ffprobe` sera la herramienta requerida para la inspeccion tecnica local; `ffmpeg` se usara para miniatura inicial y audio normalizado. | El video original no se modifica y la fase tecnica puede persistir un resumen real y un audio reutilizable. | Acoplar la fase tecnica a un pipeline de IA o exigir `ffmpeg` para todo el flujo. |
+| 2026-07-22 | Cache tecnico | Las inspecciones, miniaturas y audio preparado viviran en `cache/videos/<video-id>/...` y seguiran ignoradas por Git. | Los artefactos derivados se reutilizan y no contaminan el repositorio. | Escribir miniaturas, inspecciones o audio junto al video original. |
+| 2026-07-22 | Preparacion de audio | `ffmpeg` tambien se usara para preparar una pista de audio normalizada reutilizable en WAV PCM16 mono 16 kHz. | El flujo audiovisual puede reutilizar audio tecnico sin tocar el video original y sin transcripcion aun. | Extraer audio con herramientas no encapsuladas o introducir IA en esta fase. |
 
 ## Pendientes
 

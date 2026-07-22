@@ -1,4 +1,4 @@
-"""Migraciones SQLite mínimas y reales."""
+"""Migraciones SQLite minimas y reales."""
 
 from __future__ import annotations
 
@@ -174,9 +174,77 @@ def migration_2(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_3(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS prepared_audio_assets (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            source_inspection_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_prepared',
+                    'queued',
+                    'extracting',
+                    'completed',
+                    'failed',
+                    'file_missing',
+                    'no_audio_stream',
+                    'tool_unavailable',
+                    'stale'
+                )
+            ),
+            relative_cache_path TEXT,
+            metadata_relative_path TEXT,
+            format_name TEXT,
+            codec_name TEXT,
+            sample_rate_hz INTEGER,
+            channels INTEGER,
+            channel_layout TEXT,
+            bit_depth INTEGER,
+            duration_seconds REAL,
+            file_size_bytes INTEGER,
+            source_file_size_bytes INTEGER,
+            source_file_modified_at TEXT,
+            selected_stream_index INTEGER,
+            selected_stream_codec_name TEXT,
+            selected_stream_channels INTEGER,
+            selected_stream_channel_layout TEXT,
+            selected_stream_sample_rate_hz INTEGER,
+            selected_stream_language TEXT,
+            selected_stream_is_default INTEGER,
+            extraction_started_at TEXT,
+            extraction_completed_at TEXT,
+            ffmpeg_version TEXT,
+            cache_version TEXT NOT NULL,
+            normalization_sample_rate_hz INTEGER NOT NULL,
+            normalization_channels INTEGER NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_inspection_id) REFERENCES video_inspections(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prepared_audio_assets_video_asset_id ON prepared_audio_assets(video_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prepared_audio_assets_source_inspection_id ON prepared_audio_assets(source_inspection_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prepared_audio_assets_status ON prepared_audio_assets(status)"
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
+    Migration(version=3, name="prepared_audio_assets"),
 )
 
 
@@ -218,7 +286,9 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_1(connection)
                 elif migration.version == 2:
                     migration_2(connection)
-                else:  # pragma: no cover - no hay más migraciones todavía
+                elif migration.version == 3:
+                    migration_3(connection)
+                else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(
                     """
@@ -229,5 +299,5 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                 )
         except sqlite3.Error as exc:
             raise MigrationError(
-                f"No se pudo aplicar la migración {migration.version}: {migration.name}"
+                f"No se pudo aplicar la migracion {migration.version}: {migration.name}"
             ) from exc

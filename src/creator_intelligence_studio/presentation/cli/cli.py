@@ -10,6 +10,12 @@ from creator_intelligence_studio.application.commands.creator_commands import (
     ArchiveCreatorCommand,
     CreateCreatorCommand,
 )
+from creator_intelligence_studio.application.commands.audio_commands import (
+    ClearAudioCacheCommand,
+    PrepareAudioCommand,
+    ShowPreparedAudioCommand,
+    VerifyPreparedAudioCommand,
+)
 from creator_intelligence_studio.application.commands.media_commands import (
     InspectVideoCommand,
     ShowVideoInspectionCommand,
@@ -25,6 +31,11 @@ from creator_intelligence_studio.application.commands.video_commands import (
 from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     VideoVerificationReport,
+)
+from creator_intelligence_studio.application.services.audio_preparation_service import (
+    AudioCacheDeletionResult,
+    AudioPreparationService,
+    PreparedAudioReport,
 )
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
@@ -107,6 +118,22 @@ def build_parser() -> argparse.ArgumentParser:
     media_show = media_sub.add_parser("show", help="Mostrar una inspeccion tecnica")
     media_show.add_argument("--video-id", required=True)
     media_show.add_argument("--json", action="store_true")
+
+    audio_parser = subparsers.add_parser("audio", help="Preparacion tecnica de audio")
+    audio_sub = audio_parser.add_subparsers(dest="action", required=True)
+    audio_prepare = audio_sub.add_parser("prepare", help="Preparar audio normalizado")
+    audio_prepare.add_argument("--video-id", required=True)
+    audio_prepare.add_argument("--force", action="store_true")
+    audio_prepare.add_argument("--json", action="store_true")
+    audio_show = audio_sub.add_parser("show", help="Mostrar un audio preparado")
+    audio_show.add_argument("--video-id", required=True)
+    audio_show.add_argument("--json", action="store_true")
+    audio_verify = audio_sub.add_parser("verify", help="Verificar audio preparado")
+    audio_verify.add_argument("--video-id", required=True)
+    audio_verify.add_argument("--json", action="store_true")
+    audio_clear = audio_sub.add_parser("clear-cache", help="Limpiar caché de audio")
+    audio_clear.add_argument("--video-id", required=True)
+    audio_clear.add_argument("--json", action="store_true")
 
     return parser
 
@@ -242,6 +269,59 @@ def _print_video_inspection(report: VideoInspectionReport, stream) -> None:
         print(f"Error: {error}", file=stream)
 
 
+def _print_audio_report(report: PreparedAudioReport, stream) -> None:
+    _print_video(report.video, stream)
+    print(f"Estado de audio: {report.status.value}", file=stream)
+    print(f"Audio stale: {'si' if report.is_stale else 'no'}", file=stream)
+    print(f"Stream seleccionado: {_audio_stream_summary(report)}", file=stream)
+    if report.prepared_audio:
+        print(f"Formato: {report.prepared_audio.format_name or 'no verificado'}", file=stream)
+        print(f"Codec: {report.prepared_audio.codec_name or 'no verificado'}", file=stream)
+        print(
+            f"Sample rate: {report.prepared_audio.sample_rate_hz or 'no verificado'} Hz",
+            file=stream,
+        )
+        print(f"Canales: {report.prepared_audio.channels or 'no verificado'}", file=stream)
+        print(f"Bit depth: {report.prepared_audio.bit_depth or 'no verificado'}", file=stream)
+        print(
+            f"Duracion: {report.prepared_audio.duration_seconds:.3f} s"
+            if report.prepared_audio.duration_seconds is not None
+            else "Duracion: no verificada",
+            file=stream,
+        )
+        print(
+            f"Tamano: {report.prepared_audio.file_size_bytes} bytes"
+            if report.prepared_audio.file_size_bytes is not None
+            else "Tamano: no verificado",
+            file=stream,
+        )
+        print(
+            f"Generado: {report.prepared_audio.extraction_completed_at.isoformat()}"
+            if report.prepared_audio.extraction_completed_at
+            else "Generado: no verificado",
+            file=stream,
+        )
+        print(f"Ruta de caché: {report.cache_path or 'no disponible'}", file=stream)
+    for warning in report.warnings:
+        print(f"Advertencia: {warning}", file=stream)
+    for error in report.errors:
+        print(f"Error: {error}", file=stream)
+
+
+def _audio_stream_summary(report: PreparedAudioReport) -> str:
+    if report.selected_stream is None:
+        return "No seleccionado"
+    stream = report.selected_stream
+    pieces = [f"stream {stream.index}"]
+    if stream.channels is not None:
+        pieces.append(f"{stream.channels} canales")
+    if stream.language:
+        pieces.append(stream.language)
+    if stream.is_default:
+        pieces.append("default")
+    return " · ".join(pieces)
+
+
 def _handle_creator(args, service: CatalogService, stdout) -> int:
     if args.action == "create":
         command = CreateCreatorCommand(
@@ -368,11 +448,52 @@ def _handle_media(args, service: MediaInspectionService, stdout) -> int:
     raise ValueError("Accion de media no reconocida.")
 
 
+def _handle_audio(args, service: AudioPreparationService, stdout) -> int:
+    if args.action == "prepare":
+        command = PrepareAudioCommand(video_id=args.video_id, force=args.force)
+        report = service.prepare_audio(command.video_id, force=command.force)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Preparacion de audio completada", file=stdout)
+            _print_audio_report(report, stdout)
+        return 0 if report.status.value == "completed" and not report.is_stale else 1
+    if args.action == "show":
+        command = ShowPreparedAudioCommand(args.video_id)
+        report = service.get_prepared_audio(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_audio_report(report, stdout)
+        return 0
+    if args.action == "verify":
+        command = VerifyPreparedAudioCommand(args.video_id)
+        report = service.verify_prepared_audio(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Verificacion de audio completada", file=stdout)
+            _print_audio_report(report, stdout)
+        return 0 if report.status.value == "completed" and not report.is_stale else 1
+    if args.action == "clear-cache":
+        command = ClearAudioCacheCommand(args.video_id)
+        result = service.delete_prepared_audio_cache(command.video_id)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Cache de audio limpiada", file=stdout)
+            print(f"Registro eliminado: {'si' if result.deleted_record else 'no'}", file=stdout)
+            print(f"Archivos eliminados: {len(result.deleted_files)}", file=stdout)
+        return 0
+    raise ValueError("Accion de audio no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
     service: CatalogService,
     media_service: MediaInspectionService,
+    audio_service: AudioPreparationService,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -394,6 +515,8 @@ def dispatch(
             return _handle_video(args, service, stdout)
         if args.entity == "media":
             return _handle_media(args, media_service, stdout)
+        if args.entity == "audio":
+            return _handle_audio(args, audio_service, stdout)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

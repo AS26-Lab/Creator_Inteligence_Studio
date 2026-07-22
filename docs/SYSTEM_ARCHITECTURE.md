@@ -23,15 +23,15 @@ flowchart TD
 
 - Coordina casos de uso.
 - Valida comandos.
-- Orquesta jobs, caché, permisos y progresos.
+- Orquesta jobs, cache, permisos y progresos.
 - Traduce entradas de UI en acciones del dominio.
 
 ### Dominio
 
 - Entidades, reglas y politicas.
-- Cálculos de negocio.
+- Calculos de negocio.
 - Contratos de repositorios y proveedores.
-- Separacion de datos de creador, proyecto, video e inspeccion tecnica.
+- Separacion de datos de creador, proyecto, video, inspeccion tecnica y audio preparado.
 
 ### Infraestructura
 
@@ -41,7 +41,7 @@ flowchart TD
 - Integraciones oficiales con plataformas.
 - Proveedores externos opcionales.
 - Registro, metricas y telemetria local.
-- Encapsulacion de `ffprobe` y `ffmpeg` para inspeccion tecnica.
+- Encapsulacion de `ffprobe` y `ffmpeg` para inspeccion tecnica y preparacion de audio.
 
 ## Modulos
 
@@ -49,6 +49,7 @@ flowchart TD
 - `Project Management`
 - `Media Ingestion`
 - `Technical Inspection`
+- `Audio Preparation`
 - `Artifact Store`
 - `Job Orchestrator`
 - `Analysis Pipeline`
@@ -64,10 +65,11 @@ flowchart TD
 2. El sistema guarda metadatos de registro y la ruta absoluta normalizada.
 3. Se inspecciona tecnicamente el archivo con `ffprobe` cuando esta disponible.
 4. Se guarda un resumen tecnico normalizado y el JSON completo limitado de `ffprobe`.
-5. Si `ffmpeg` esta disponible, se genera una miniatura tecnica inicial en caché local.
-6. El caché se reutiliza si tamaño y fecha de modificacion siguen vigentes.
-7. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion.
-8. La UI solo consume resultados publicados por la capa de aplicacion.
+5. Si `ffmpeg` esta disponible, se genera una miniatura tecnica inicial en cache local.
+6. Si `ffmpeg` esta disponible y existe una inspeccion vigente, se puede preparar un audio normalizado reutilizable en cache local.
+7. El cache se reutiliza si tamano y fecha de modificacion siguen vigentes.
+8. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion o preparacion.
+9. La UI solo consume resultados publicados por la capa de aplicacion.
 
 ## Jobs
 
@@ -81,6 +83,7 @@ flowchart TD
 - ranking de clips;
 - sincronizacion con plataformas;
 - inspeccion tecnica local de medios;
+- preparacion tecnica local de audio;
 - entrenamiento o evaluacion local cuando aplique.
 
 ### Reglas para jobs
@@ -100,26 +103,27 @@ flowchart TD
 - separacion por creador y proyecto;
 - artefactos derivados versionados;
 - metadatos estructurados;
-- caché por huella y configuracion.
+- cache por huella y configuracion.
 
 ### Tipos de persistencia
 
 - SQLite para metadatos estructurados;
 - archivos binarios para video, audio y proxies;
 - archivos JSON para resultados normalizados;
-- caché local para inspecciones y miniaturas;
+- cache local para inspecciones, audio y miniaturas;
 - bitacoras para auditoria.
 
-### Caché tecnica
+### Cache tecnica
 
 - `cache/videos/<video-id>/inspection/`
 - `cache/videos/<video-id>/thumbnails/`
+- `cache/videos/<video-id>/audio/`
 
 El video original no se copia ni se modifica.
 
 ## Proveedores
 
-- Proveedores internos: reglas, ranking, embeddings, caché y evaluadores.
+- Proveedores internos: reglas, ranking, embeddings, cache y evaluadores.
 - Proveedores locales de GPU: CUDA.
 - Proveedores externos: opcionales y reemplazables.
 - Proveedores multimedia locales: `ffprobe` y `ffmpeg`.
@@ -143,7 +147,7 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - fallo de proveedor externo;
 - fallo de datos invalidos;
 - fallo de cancelacion;
-- fallo de caché desactualizada;
+- fallo de cache desactualizada;
 - fallo de herramienta multimedia;
 - fallo de archivo faltante.
 
@@ -172,6 +176,14 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - agregar modelos especializados;
 - incorporar entrenamiento incremental;
 - mejorar orquestacion distribuida si fuera necesario.
+
+## Preparacion de audio
+
+- la capa de aplicacion coordina `prepare_audio`, `verify_prepared_audio` y la limpieza de cache;
+- la infraestructura encapsula la invocacion segura de `ffmpeg` y la validacion del WAV generado;
+- la capa de dominio define la seleccion de stream de audio y la configuracion de normalizacion;
+- la salida normalizada inicial es WAV PCM signed 16-bit little-endian, mono, 16 kHz;
+- el video original nunca se modifica.
 
 ## Presentacion de escritorio
 

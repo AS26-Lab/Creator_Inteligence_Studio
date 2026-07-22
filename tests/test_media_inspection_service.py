@@ -94,6 +94,26 @@ def make_service(root: Path) -> tuple[object, MediaInspectionService, ProjectPat
     return catalog, media, paths
 
 
+def make_audio_service():
+    class _FakeAudioService:
+        def prepare_audio(self, video_id: str, force: bool = False):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def get_prepared_audio(self, video_id: str):
+            return None
+
+        def is_prepared_audio_stale(self, video_id: str) -> bool:
+            return False
+
+        def verify_prepared_audio(self, video_id: str):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def delete_prepared_audio_cache(self, video_id: str):
+            return SimpleNamespace(deleted_record=False, deleted_files=())
+
+    return _FakeAudioService()
+
+
 def load_fixture(name: str) -> dict[str, object]:
     return json.loads((FIXTURE_ROOT / name).read_text(encoding="utf-8"))
 
@@ -210,7 +230,7 @@ class MediaInspectionServiceTests(unittest.TestCase):
                 tables = connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='video_inspections'"
                 ).fetchall()
-            self.assertEqual([row["version"] for row in versions], [1, 2])
+            self.assertEqual([row["version"] for row in versions], [1, 2, 3])
             self.assertEqual(len(tables), 1)
 
     def test_inspect_video_reuses_cache_and_force_reinspect(self) -> None:
@@ -393,6 +413,7 @@ class MediaCliTests(unittest.TestCase):
                 logger=logging.getLogger("test"),
                 service=service,
                 media_service=media_service,
+                audio_service=make_audio_service(),
             )
             stdout = io.StringIO()
             stderr = io.StringIO()

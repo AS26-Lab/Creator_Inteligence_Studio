@@ -15,7 +15,7 @@
 - Los artefactos y modelos deben incluir `version`.
 - Las relaciones deben ser explicitas y no implicitas.
 
-## Esquema inicial implementado
+## Esquema implementado
 
 ### `schema_migrations`
 
@@ -100,6 +100,41 @@
 - `error_code` y `error_message`.
 - `created_at` y `updated_at` UTC.
 
+### `prepared_audio_assets`
+
+- `id` UUID string.
+- `video_asset_id` FK unica a `video_assets.id`.
+- `source_inspection_id` FK a `video_inspections.id`.
+- `status` con valores `not_prepared`, `queued`, `extracting`, `completed`, `failed`, `file_missing`, `no_audio_stream`, `tool_unavailable`, `stale`.
+- `relative_cache_path` relativo a `cache/`.
+- `metadata_relative_path` relativo a `cache/`.
+- `format_name`.
+- `codec_name`.
+- `sample_rate_hz`.
+- `channels`.
+- `channel_layout`.
+- `bit_depth`.
+- `duration_seconds`.
+- `file_size_bytes`.
+- `source_file_size_bytes`.
+- `source_file_modified_at` UTC.
+- `selected_stream_index`.
+- `selected_stream_codec_name`.
+- `selected_stream_channels`.
+- `selected_stream_channel_layout`.
+- `selected_stream_sample_rate_hz`.
+- `selected_stream_language`.
+- `selected_stream_is_default`.
+- `extraction_started_at` UTC.
+- `extraction_completed_at` UTC.
+- `ffmpeg_version`.
+- `cache_version`.
+- `normalization_sample_rate_hz`.
+- `normalization_channels`.
+- `warning_code` y `warning_message`.
+- `error_code` y `error_message`.
+- `created_at` y `updated_at` UTC.
+
 ## Relaciones
 
 ```mermaid
@@ -107,15 +142,19 @@ erDiagram
     CREATOR ||--o{ PROJECT : owns
     PROJECT ||--o{ VIDEO_ASSET : contains
     VIDEO_ASSET ||--o{ VIDEO_INSPECTION : has
+    VIDEO_ASSET ||--o{ PREPARED_AUDIO_ASSET : has
+    VIDEO_INSPECTION ||--o{ PREPARED_AUDIO_ASSET : source
 ```
 
 ## Estado y vigencia
 
 - `video_assets.processing_status` describe el flujo de registro.
 - `video_inspections.inspection_status` describe el resultado tecnico persistido.
-- Un resultado puede ser `stale` si el archivo cambia despues de inspeccion.
+- `prepared_audio_assets.status` describe la preparacion tecnica de audio.
+- Un resultado puede ser `stale` si el archivo cambia despues de inspeccion o preparacion.
 - `file_missing` indica que el archivo ya no esta disponible.
-- `tool_unavailable` indica que `ffprobe` no estaba disponible para completar la fase.
+- `tool_unavailable` indica que `ffprobe` o `ffmpeg` no estaban disponibles para completar la fase.
+- `no_audio_stream` indica que no se encontro un stream de audio utilizable.
 
 ## Artefactos
 
@@ -138,8 +177,15 @@ Los artefactos minimos contemplados son:
 - costos;
 - tiempos.
 
+## Migracion v3
+
+- agrega `prepared_audio_assets`;
+- conserva la compatibilidad con `creators`, `projects`, `video_assets` y `video_inspections`;
+- no modifica IDs existentes;
+- mantiene indices utiles por `video_asset_id`, `source_inspection_id` y `status`.
+
 ## Pendientes
 
-- formato fisico exacto de persistencia para artefactos grandes;
+- formato fisico final de persistencia para artefactos grandes;
 - estrategia final de rutas portables;
-- versionado adicional de inspeccion y miniaturas.
+- versionado adicional de inspeccion, audio y miniaturas.

@@ -91,6 +91,26 @@ def make_media_service():
     return _FakeMediaService()
 
 
+def make_audio_service():
+    class _FakeAudioService:
+        def prepare_audio(self, video_id: str, force: bool = False):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def get_prepared_audio(self, video_id: str):
+            return None
+
+        def is_prepared_audio_stale(self, video_id: str) -> bool:
+            return False
+
+        def verify_prepared_audio(self, video_id: str):
+            return SimpleNamespace(status=SimpleNamespace(value="not_prepared"), is_stale=False)
+
+        def clear_prepared_audio_cache(self, video_id: str):
+            return SimpleNamespace(deleted_record=False, deleted_files=())
+
+    return _FakeAudioService()
+
+
 class DesktopViewModelTests(unittest.TestCase):
     def test_workspace_view_model_selection_and_transforms(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -103,6 +123,7 @@ class DesktopViewModelTests(unittest.TestCase):
             workspace = WorkspaceViewModel(
                 service=service,
                 media_service=make_media_service(),
+                audio_service=make_audio_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -149,6 +170,7 @@ class DesktopViewModelTests(unittest.TestCase):
             workspace = WorkspaceViewModel(
                 service=service,
                 media_service=make_media_service(),
+                audio_service=make_audio_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,
@@ -170,6 +192,7 @@ class DesktopViewModelTests(unittest.TestCase):
             workspace = WorkspaceViewModel(
                 service=service,
                 media_service=make_media_service(),
+                audio_service=make_audio_service(),
                 diagnostic=diagnostic,
                 settings=settings,
                 paths=paths,

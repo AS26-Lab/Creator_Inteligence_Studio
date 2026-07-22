@@ -59,6 +59,16 @@ def make_diagnostic(root: Path) -> EnvironmentDiagnostic:
     )
 
 
+def make_audio_service():
+    return MagicMock(
+        prepare_audio=MagicMock(return_value=MagicMock(status=MagicMock(value="not_prepared"), is_stale=False)),
+        get_prepared_audio=MagicMock(return_value=None),
+        is_prepared_audio_stale=MagicMock(return_value=False),
+        verify_prepared_audio=MagicMock(return_value=MagicMock(status=MagicMock(value="not_prepared"), is_stale=False)),
+        delete_prepared_audio_cache=MagicMock(return_value=MagicMock(deleted_record=False, deleted_files=())),
+    )
+
+
 class BootstrapTests(unittest.TestCase):
     def test_bootstrap_basic_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -120,6 +130,7 @@ class BootstrapTests(unittest.TestCase):
                 logger=logging.getLogger("test"),
                 service=MagicMock(),
                 media_service=MagicMock(),
+                audio_service=make_audio_service(),
             )
 
             with patch(
@@ -150,6 +161,7 @@ class BootstrapTests(unittest.TestCase):
                 logger=logging.getLogger("test"),
                 service=MagicMock(),
                 media_service=MagicMock(),
+                audio_service=make_audio_service(),
             )
 
             with patch(

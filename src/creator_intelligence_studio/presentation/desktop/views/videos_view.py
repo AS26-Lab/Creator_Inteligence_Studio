@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from creator_intelligence_studio.domain.errors import DomainError
+from creator_intelligence_studio.domain.audio.entities import PreparedAudioStatus
 from creator_intelligence_studio.presentation.desktop.dialogs.entity_dialogs import VideoDialog
 from creator_intelligence_studio.presentation.desktop.view_models.models import VideoFiltersViewModel
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
@@ -52,6 +53,38 @@ class InspectionThread(QThread):
         self.result_ready.emit(report)
 
 
+class AudioTaskThread(QThread):
+    """Ejecuta tareas de preparacion de audio sin bloquear la UI."""
+
+    result_ready = Signal(object)
+    error_ready = Signal(str)
+
+    def __init__(self, workspace: WorkspaceViewModel, video_id: str, action: str, force: bool = False) -> None:
+        super().__init__()
+        self.workspace = workspace
+        self.video_id = video_id
+        self.action = action
+        self.force = force
+
+    def run(self) -> None:  # pragma: no cover - flujo Qt
+        try:
+            if self.action == "prepare":
+                result = self.workspace.prepare_audio(self.video_id, force=self.force)
+            elif self.action == "verify":
+                result = self.workspace.verify_prepared_audio(self.video_id)
+            elif self.action == "clear-cache":
+                result = self.workspace.clear_prepared_audio_cache(self.video_id)
+            else:
+                raise ValueError("Accion de audio no reconocida.")
+        except DomainError as exc:
+            self.error_ready.emit(str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - defensa general
+            self.error_ready.emit(str(exc))
+            return
+        self.result_ready.emit(result)
+
+
 class VideosView(QWidget):
     """Lista, filtros y registro de videos."""
 
@@ -60,6 +93,7 @@ class VideosView(QWidget):
         self.workspace = workspace
         self.inspector = inspector
         self._inspection_thread: InspectionThread | None = None
+        self._audio_thread: AudioTaskThread | None = None
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Buscar por titulo, nombre o ruta")
         self.project_combo = QComboBox()
@@ -88,8 +122,12 @@ class VideosView(QWidget):
         self.reinspect_button = QPushButton("Reinspeccionar")
         self.verify_button = QPushButton("Verificar archivo")
         self.open_button = QPushButton("Abrir ubicacion")
-        self.analysis_button = QPushButton("Iniciar analisis")
-        self.analysis_button.setEnabled(False)
+        self.prepare_audio_button = QPushButton("Preparar audio")
+        self.reprepare_audio_button = QPushButton("Regenerar audio")
+        self.verify_audio_button = QPushButton("Verificar audio")
+        self.clear_audio_cache_button = QPushButton("Limpiar caché de audio")
+        self.transcription_button = QPushButton("Transcripción (Próximamente)")
+        self.transcription_button.setEnabled(False)
 
         for widget, tip in (
             (self.project_combo, "Filtra los videos del proyecto activo"),
@@ -102,10 +140,24 @@ class VideosView(QWidget):
             (self.reinspect_button, "Forzar una nueva inspeccion tecnica"),
             (self.verify_button, "Comprobar si el archivo sigue disponible"),
             (self.open_button, "Abrir la carpeta del archivo original"),
-            (self.analysis_button, "Analisis audiovisual no disponible todavia"),
+            (self.prepare_audio_button, "Extraer y normalizar audio local para usos posteriores"),
+            (self.reprepare_audio_button, "Regenerar el audio preparado"),
+            (self.verify_audio_button, "Comprobar la vigencia del audio preparado"),
+            (self.clear_audio_cache_button, "Eliminar solo artefactos de audio generados"),
+            (self.transcription_button, "Transcripción no disponible todavia"),
         ):
             widget.setToolTip(tip)
-        for button in (self.register_button, self.inspect_button, self.reinspect_button, self.verify_button, self.open_button):
+        for button in (
+            self.register_button,
+            self.inspect_button,
+            self.reinspect_button,
+            self.verify_button,
+            self.open_button,
+            self.prepare_audio_button,
+            self.reprepare_audio_button,
+            self.verify_audio_button,
+            self.clear_audio_cache_button,
+        ):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         buttons = QHBoxLayout()
@@ -114,7 +166,11 @@ class VideosView(QWidget):
         buttons.addWidget(self.reinspect_button)
         buttons.addWidget(self.verify_button)
         buttons.addWidget(self.open_button)
-        buttons.addWidget(self.analysis_button)
+        buttons.addWidget(self.prepare_audio_button)
+        buttons.addWidget(self.reprepare_audio_button)
+        buttons.addWidget(self.verify_audio_button)
+        buttons.addWidget(self.clear_audio_cache_button)
+        buttons.addWidget(self.transcription_button)
         buttons.addStretch(1)
 
         filters = QHBoxLayout()
@@ -143,6 +199,10 @@ class VideosView(QWidget):
         self.reinspect_button.clicked.connect(self._reinspect_video)
         self.verify_button.clicked.connect(self._verify_video)
         self.open_button.clicked.connect(self._open_location)
+        self.prepare_audio_button.clicked.connect(self._prepare_audio)
+        self.reprepare_audio_button.clicked.connect(self._reprepare_audio)
+        self.verify_audio_button.clicked.connect(self._verify_audio)
+        self.clear_audio_cache_button.clicked.connect(self._clear_audio_cache)
 
     def _selected_filters(self) -> VideoFiltersViewModel:
         return VideoFiltersViewModel(
@@ -237,17 +297,45 @@ class VideosView(QWidget):
             return None
         return self.workspace.get_video_inspection(video_id)
 
+    def _audio_for_selected_video(self):
+        video_id = self._selected_video_id() or self.workspace.selected_video_id
+        if not video_id:
+            return None
+        return self.workspace.get_prepared_audio(video_id)
+
+    def _audio_running(self) -> bool:
+        return self._audio_thread is not None and self._audio_thread.isRunning()
+
+    def _set_audio_running(self, running: bool) -> None:
+        self.prepare_audio_button.setEnabled(not running)
+        self.reprepare_audio_button.setEnabled(not running and self.workspace.selected_video_id is not None)
+        self.verify_audio_button.setEnabled(not running)
+        self.clear_audio_cache_button.setEnabled(not running)
+        self.inspect_button.setEnabled(not running)
+        self.reinspect_button.setEnabled(not running and self.workspace.selected_video_id is not None)
+        self.register_button.setEnabled(not running)
+        self.verify_button.setEnabled(not running)
+        self.open_button.setEnabled(not running)
+        self.transcription_button.setEnabled(False)
+        self.prepare_audio_button.setText("Preparando audio..." if running else "Preparar audio")
+        self.reprepare_audio_button.setText("Regenerando audio..." if running else "Regenerar audio")
+
     def _sync_selection(self) -> None:
         video_id = self._selected_video_id() or self.workspace.selected_video_id
         video = self.workspace.service.get_video(video_id) if video_id else self.workspace.selected_video()
         if video is None:
             self.inspect_button.setEnabled(False)
             self.reinspect_button.setEnabled(False)
+            self.prepare_audio_button.setEnabled(False)
+            self.reprepare_audio_button.setEnabled(False)
+            self.verify_audio_button.setEnabled(False)
+            self.clear_audio_cache_button.setEnabled(False)
             self.inspector.set_empty("Inspector", "Selecciona un video para ver sus detalles.")
             return
         self.workspace.select_video(video.id)
         inspection = self.workspace.get_video_inspection(video.id)
-        items = self.workspace.video_inspector_items(video, inspection)
+        audio_report = self.workspace.get_prepared_audio(video.id)
+        items = self.workspace.video_inspector_items(video, inspection, audio_report)
         footer = "Registrar un video no lo copia ni lo procesa; solo guarda metadatos locales."
         self.inspector.set_items(f"Video: {video.title}", items, footer=footer)
         self.inspector.set_actions(
@@ -256,10 +344,26 @@ class VideosView(QWidget):
                 ("Reinspeccionar", self._reinspect_video),
                 ("Verificar archivo", self._verify_video),
                 ("Abrir ubicacion", self._open_location),
+                ("Preparar audio", self._prepare_audio),
+                ("Regenerar audio", self._reprepare_audio),
+                ("Verificar audio", self._verify_audio),
+                ("Limpiar caché de audio", self._clear_audio_cache),
             ]
         )
         self.inspect_button.setEnabled(True)
         self.reinspect_button.setEnabled(inspection is not None)
+        audio_available = audio_report is not None and audio_report.status in {
+            PreparedAudioStatus.COMPLETED,
+            PreparedAudioStatus.STALE,
+            PreparedAudioStatus.FAILED,
+            PreparedAudioStatus.FILE_MISSING,
+            PreparedAudioStatus.NO_AUDIO_STREAM,
+            PreparedAudioStatus.TOOL_UNAVAILABLE,
+        }
+        self.prepare_audio_button.setEnabled(not self._audio_running())
+        self.reprepare_audio_button.setEnabled(not self._audio_running() and audio_available)
+        self.verify_audio_button.setEnabled(not self._audio_running() and audio_report is not None)
+        self.clear_audio_cache_button.setEnabled(not self._audio_running() and audio_report is not None)
 
     def _set_inspection_running(self, running: bool) -> None:
         self.inspect_button.setEnabled(not running)
@@ -267,7 +371,11 @@ class VideosView(QWidget):
         self.register_button.setEnabled(not running)
         self.verify_button.setEnabled(not running)
         self.open_button.setEnabled(not running)
-        self.analysis_button.setEnabled(False)
+        self.prepare_audio_button.setEnabled(not running and self.workspace.selected_video_id is not None)
+        self.reprepare_audio_button.setEnabled(False)
+        self.verify_audio_button.setEnabled(False)
+        self.clear_audio_cache_button.setEnabled(False)
+        self.transcription_button.setEnabled(False)
         self.inspect_button.setText("Inspeccionando..." if running else "Inspeccionar video")
         self.reinspect_button.setText("Reinspeccionando..." if running else "Reinspeccionar")
 
@@ -302,11 +410,64 @@ class VideosView(QWidget):
         QMessageBox.warning(self, "No se pudo inspeccionar", message)
         self._inspection_thread = None
 
+    def _run_audio_task(self, action: str, force: bool = False) -> None:
+        video_id = self._selected_video_id() or self.workspace.selected_video_id
+        if not video_id:
+            QMessageBox.information(self, "Sin seleccion", "Selecciona un video primero.")
+            return
+        if self._audio_thread is not None and self._audio_thread.isRunning():
+            return
+        self._set_audio_running(True)
+        self._audio_thread = AudioTaskThread(self.workspace, video_id, action=action, force=force)
+        self._audio_thread.result_ready.connect(self._audio_finished)
+        self._audio_thread.error_ready.connect(self._audio_failed)
+        self._audio_thread.finished.connect(self._audio_thread.deleteLater)
+        self._audio_thread.start()
+
+    def _audio_finished(self, result) -> None:
+        self._set_audio_running(False)
+        result_video_id = getattr(getattr(result, "video", None), "id", None)
+        self.refresh()
+        if result_video_id:
+            self.workspace.select_video(result_video_id)
+        self._sync_selection()
+        if hasattr(result, "status"):
+            QMessageBox.information(
+                self,
+                "Audio",
+                f"Estado: {getattr(result.status, 'value', result.status)}",
+            )
+        elif hasattr(result, "deleted_record"):
+            deleted_count = len(getattr(result, "deleted_files", ()))
+            QMessageBox.information(
+                self,
+                "Audio",
+                f"Caché de audio limpiada correctamente ({deleted_count} archivos).",
+            )
+        self._audio_thread = None
+
+    def _audio_failed(self, message: str) -> None:
+        self._set_audio_running(False)
+        QMessageBox.warning(self, "No se pudo preparar el audio", message)
+        self._audio_thread = None
+
     def _inspect_video(self) -> None:
         self._run_inspection(force=False)
 
     def _reinspect_video(self) -> None:
         self._run_inspection(force=True)
+
+    def _prepare_audio(self) -> None:
+        self._run_audio_task("prepare", force=False)
+
+    def _reprepare_audio(self) -> None:
+        self._run_audio_task("prepare", force=True)
+
+    def _verify_audio(self) -> None:
+        self._run_audio_task("verify", force=False)
+
+    def _clear_audio_cache(self) -> None:
+        self._run_audio_task("clear-cache", force=False)
 
     def _register_video(self) -> None:
         project = self.workspace.selected_project()

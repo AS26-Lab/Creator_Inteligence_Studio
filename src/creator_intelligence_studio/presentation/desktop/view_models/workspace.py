@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from creator_intelligence_studio.application.services.audio_preparation_service import (
+    AudioCacheDeletionResult,
+    AudioPreparationService,
+    PreparedAudioReport,
+)
 from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     VideoVerificationReport,
@@ -125,6 +130,45 @@ def _fps_text(report: VideoInspectionReport | None) -> str:
     return f"{value:.3f} fps"
 
 
+def _audio_status_label(report: PreparedAudioReport | None) -> str:
+    if report is None:
+        return "No preparado"
+    labels = {
+        "not_prepared": "No preparado",
+        "queued": "Pendiente",
+        "extracting": "Preparando",
+        "completed": "Preparado",
+        "failed": "Error",
+        "file_missing": "Archivo faltante",
+        "no_audio_stream": "Sin audio",
+        "tool_unavailable": "Herramienta no disponible",
+        "stale": "Desactualizado",
+    }
+    return labels.get(report.status.value, report.status.value)
+
+
+def _audio_stream_label(report: PreparedAudioReport | None) -> str:
+    if report is None or report.selected_stream is None:
+        return "No seleccionado"
+    stream = report.selected_stream
+    parts = [f"Stream {stream.index}"]
+    if stream.channels is not None:
+        parts.append(f"{stream.channels} canales")
+    if stream.language:
+        parts.append(stream.language)
+    if stream.is_default:
+        parts.append("default")
+    return " · ".join(parts)
+
+
+def _audio_text(value: int | None, unit: str) -> str:
+    if value is None:
+        return "No verificado"
+    if not unit:
+        return str(value)
+    return f"{value} {unit}"
+
+
 class WorkspaceViewModel:
     """Coordina datos, selecciones y transformaciones de presentacion."""
 
@@ -133,12 +177,14 @@ class WorkspaceViewModel:
         *,
         service: CatalogService,
         media_service: MediaInspectionService,
+        audio_service: AudioPreparationService,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
     ) -> None:
         self.service = service
         self.media_service = media_service
+        self.audio_service = audio_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -269,6 +315,29 @@ class WorkspaceViewModel:
 
     def media_tools(self) -> MediaToolsReport:
         return self.media_service.verify_media_tools()
+
+    def prepare_audio(self, video_id: str, force: bool = False) -> PreparedAudioReport:
+        report = self.audio_service.prepare_audio(video_id, force=force)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Audio preparado: {report.status.value}")
+        return report
+
+    def get_prepared_audio(self, video_id: str) -> PreparedAudioReport:
+        return self.audio_service.get_prepared_audio(video_id)
+
+    def is_prepared_audio_stale(self, video_id: str) -> bool:
+        return self.audio_service.is_prepared_audio_stale(video_id)
+
+    def verify_prepared_audio(self, video_id: str) -> PreparedAudioReport:
+        report = self.audio_service.verify_prepared_audio(video_id)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Audio verificado: {report.status.value}")
+        return report
+
+    def clear_prepared_audio_cache(self, video_id: str) -> AudioCacheDeletionResult:
+        result = self.audio_service.delete_prepared_audio_cache(video_id)
+        self.activity_log.insert(0, "Cache de audio limpiada")
+        return result
 
     def creator_rows(self) -> list[CreatorRowViewModel]:
         creators = self.service.list_creators()
@@ -508,7 +577,12 @@ class WorkspaceViewModel:
             InspectorItemViewModel("Descripcion", project.description or "Sin descripcion"),
         ]
 
-    def video_inspector_items(self, video, inspection_report: VideoInspectionReport | None = None) -> list[InspectorItemViewModel]:
+    def video_inspector_items(
+        self,
+        video,
+        inspection_report: VideoInspectionReport | None = None,
+        audio_report: PreparedAudioReport | None = None,
+    ) -> list[InspectorItemViewModel]:
         if video is None:
             return []
         items = [
@@ -566,4 +640,53 @@ class WorkspaceViewModel:
                     ),
                 ]
             )
+        items.append(InspectorItemViewModel("Audio preparado", _audio_status_label(audio_report)))
+        if audio_report is not None:
+            selected = audio_report.selected_stream
+            items.extend(
+                [
+                    InspectorItemViewModel("Stream seleccionado", _audio_stream_label(audio_report)),
+                    InspectorItemViewModel("Formato de audio", audio_report.prepared_audio.format_name if audio_report.prepared_audio else "No verificado"),
+                    InspectorItemViewModel("Codec de audio", audio_report.prepared_audio.codec_name if audio_report.prepared_audio else "No verificado"),
+                    InspectorItemViewModel(
+                        "Sample rate",
+                        _audio_text(audio_report.prepared_audio.sample_rate_hz if audio_report.prepared_audio else None, "Hz"),
+                    ),
+                    InspectorItemViewModel(
+                        "Canales",
+                        _audio_text(audio_report.prepared_audio.channels if audio_report.prepared_audio else None, ""),
+                    ),
+                    InspectorItemViewModel(
+                        "Bit depth",
+                        _audio_text(audio_report.prepared_audio.bit_depth if audio_report.prepared_audio else None, "bit"),
+                    ),
+                    InspectorItemViewModel(
+                        "Duracion",
+                        _humanize_seconds(audio_report.prepared_audio.duration_seconds if audio_report.prepared_audio else None),
+                    ),
+                    InspectorItemViewModel(
+                        "Tamano",
+                        _humanize_bytes(audio_report.prepared_audio.file_size_bytes if audio_report.prepared_audio else None),
+                    ),
+                    InspectorItemViewModel(
+                        "Generado",
+                        _format_datetime(audio_report.prepared_audio.extraction_completed_at if audio_report.prepared_audio else None),
+                    ),
+                    InspectorItemViewModel(
+                        "Vigencia",
+                        "Stale" if audio_report.is_stale else "Vigente",
+                    ),
+                    InspectorItemViewModel(
+                        "Ruta de caché",
+                        audio_report.cache_path or "No disponible",
+                    ),
+                ]
+            )
+            if selected is not None:
+                items.extend(
+                    [
+                        InspectorItemViewModel("Stream idioma", selected.language or "No verificado"),
+                        InspectorItemViewModel("Stream default", "Si" if selected.is_default else "No"),
+                    ]
+                )
         return items

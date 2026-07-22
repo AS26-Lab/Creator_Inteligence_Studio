@@ -13,5 +13,9 @@
   "database_timeout_seconds": 5.0,
   "ffmpeg_path": null,
   "ffprobe_path": null,
-  "ffmpeg_bin_directory": null
+  "ffmpeg_bin_directory": null,
+  "audio_normalization_sample_rate_hz": 16000,
+  "audio_extraction_timeout_seconds": 60.0,
+  "audio_cache_version": "v1",
+  "preferred_audio_language": null
 }

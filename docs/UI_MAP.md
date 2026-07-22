@@ -47,7 +47,9 @@ flowchart LR
 - apertura de ubicacion;
 - inspeccion tecnica con `ffprobe`;
 - miniatura tecnica inicial cuando exista `ffmpeg`;
-- estado `stale` cuando el archivo cambia tras la inspeccion.
+- preparacion tecnica de audio normalizado con `ffmpeg`;
+- inspector de audio preparado con estado, stream seleccionado, formato, sample rate, canales, bit depth y vigencia;
+- estado `stale` cuando el archivo cambia tras la inspeccion o la preparacion.
 
 ### Sistema
 

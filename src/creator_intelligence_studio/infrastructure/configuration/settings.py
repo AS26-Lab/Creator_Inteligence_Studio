@@ -36,6 +36,10 @@ class AppSettings:
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
     ffmpeg_bin_directory: str | None = None
+    audio_normalization_sample_rate_hz: int = 16000
+    audio_extraction_timeout_seconds: float = 60.0
+    audio_cache_version: str = "v1"
+    preferred_audio_language: str | None = None
 
     @classmethod
     def from_file(cls, config_path: Path) -> "AppSettings":
@@ -84,6 +88,14 @@ class AppSettings:
                 raise SettingsError(f"El campo '{key}' debe ser una cadena no vacia.")
             return value.strip()
 
+        def optional_int(key: str, default: int) -> int:
+            value = payload.get(key, default)
+            if isinstance(value, bool):
+                raise SettingsError(f"El campo '{key}' debe ser entero.")
+            if isinstance(value, int):
+                return value
+            raise SettingsError(f"El campo '{key}' debe ser entero.")
+
         def optional_number(key: str, default: float) -> float:
             value = payload.get(key, default)
             if isinstance(value, bool):
@@ -108,6 +120,10 @@ class AppSettings:
             ffmpeg_path=optional_path("ffmpeg_path"),
             ffprobe_path=optional_path("ffprobe_path"),
             ffmpeg_bin_directory=optional_path("ffmpeg_bin_directory"),
+            audio_normalization_sample_rate_hz=optional_int("audio_normalization_sample_rate_hz", 16000),
+            audio_extraction_timeout_seconds=optional_number("audio_extraction_timeout_seconds", 60.0),
+            audio_cache_version=optional_str("audio_cache_version", "v1"),
+            preferred_audio_language=optional_path("preferred_audio_language"),
         )
         settings.validate()
         return settings
@@ -133,6 +149,12 @@ class AppSettings:
             )
         if self.database_timeout_seconds <= 0:
             raise SettingsError("database_timeout_seconds debe ser mayor que cero.")
+        if self.audio_normalization_sample_rate_hz <= 0:
+            raise SettingsError("audio_normalization_sample_rate_hz debe ser mayor que cero.")
+        if self.audio_extraction_timeout_seconds <= 0:
+            raise SettingsError("audio_extraction_timeout_seconds debe ser mayor que cero.")
+        if not self.audio_cache_version.strip():
+            raise SettingsError("audio_cache_version no puede estar vacio.")
 
     def resolved_directories(self, project_root: Path) -> dict[str, Path]:
         """Resuelve directorios relativos al proyecto."""

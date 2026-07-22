@@ -12,7 +12,8 @@ El proyecto ya dispone de:
 - diagnostico del entorno;
 - persistencia SQLite;
 - inspeccion tecnica local de videos con `ffprobe`;
-- miniatura tecnica inicial en caché local con `ffmpeg` cuando esta disponible.
+- miniatura tecnica inicial en cache local con `ffmpeg` cuando esta disponible;
+- preparacion tecnica de audio normalizado a WAV PCM16 mono 16 kHz cuando `ffmpeg` esta disponible.
 
 Todavia no existen:
 
@@ -39,11 +40,9 @@ AMD, ROCm, DirectML, Vulkan y macOS quedan fuera del MVP.
 - PySide6 instalado en el entorno virtual
 - Git instalado
 - `ffprobe` requerido para la inspeccion tecnica
-- `ffmpeg` opcional para miniaturas tecnicas iniciales
+- `ffmpeg` requerido para miniaturas tecnicas iniciales y para la preparacion tecnica de audio
 
-La localizacion de herramientas multimedia puede configurarse mas adelante con
-`ffmpeg_path`, `ffprobe_path` o `ffmpeg_bin_directory`, o mediante las
-variables `CIS_FFMPEG_PATH`, `CIS_FFPROBE_PATH` y `CIS_FFMPEG_BIN_DIRECTORY`.
+La localizacion de herramientas multimedia puede configurarse mas adelante con `ffmpeg_path`, `ffprobe_path` o `ffmpeg_bin_directory`, o mediante las variables `CIS_FFMPEG_PATH`, `CIS_FFPROBE_PATH` y `CIS_FFMPEG_BIN_DIRECTORY`.
 
 ## Arranque de la GUI
 
@@ -71,8 +70,9 @@ La aplicacion ya permite:
 - listar y consultar videos registrados;
 - verificar si un archivo sigue disponible;
 - inspeccionar tecnicamente un video registrado;
+- preparar un audio normalizado reutilizable a partir de un video inspeccionado;
 - guardar un resumen tecnico real de `ffprobe`;
-- generar una miniatura tecnica inicial en caché local cuando `ffmpeg` esta disponible;
+- generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -86,7 +86,7 @@ El archivo esta ignorado por Git. No debe subirse al repositorio.
 
 Advertencia: en esta primera version el registro conserva la ruta absoluta normalizada del archivo local. Eso es funcional para desarrollo, pero no es una estrategia portable final.
 
-La inspeccion tecnica escribe artefactos derivados en `cache/videos/<video-id>/inspection/` y `cache/videos/<video-id>/thumbnails/`. Ese caché permanece local y no debe subirse.
+La inspeccion tecnica escribe artefactos derivados en `cache/videos/<video-id>/inspection/`, `cache/videos/<video-id>/thumbnails/` y `cache/videos/<video-id>/audio/`. Ese cache permanece local y no debe subirse.
 
 ## Activar `.venv`
 
@@ -158,6 +158,16 @@ python -m creator_intelligence_studio media show --video-id <video_id>
 python -m creator_intelligence_studio media show --video-id <video_id> --json
 ```
 
+## Comandos de audio
+
+```bat
+python -m creator_intelligence_studio audio prepare --video-id <video_id>
+python -m creator_intelligence_studio audio prepare --video-id <video_id> --force
+python -m creator_intelligence_studio audio show --video-id <video_id>
+python -m creator_intelligence_studio audio verify --video-id <video_id>
+python -m creator_intelligence_studio audio clear-cache --video-id <video_id>
+```
+
 ## Ejecutar pruebas
 
 ```bat
@@ -172,23 +182,26 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ## Estructura principal
 
-- `docs/`: documentacion maestra y diagnósticos.
+- `docs/`: documentacion maestra y diagnosticos.
 - `src/creator_intelligence_studio/`: paquete principal del proyecto.
 - `tests/`: pruebas unitarias.
 - `config/`: configuracion por defecto.
 - `scripts/`: scripts de arranque y pruebas en Windows.
 - `data/`, `logs/`, `models/`, `artifacts/`, `cache/`: carpetas operativas locales.
 - `data/creator_intelligence_studio.db`: base SQLite local estructurada.
+- `cache/videos/<video-id>/inspection/`: resultados tecnicos de `ffprobe`.
+- `cache/videos/<video-id>/thumbnails/`: miniaturas tecnicas.
+- `cache/videos/<video-id>/audio/`: audio normalizado reutilizable.
 
 ## Script & Voice Studio
 
-Script & Voice Studio es un modulo opcional. No es necesario para analizar videos, revisar metricas, administrar proyectos ni usar el nucleo del sistema.
+Script & Voice Studio es un modulo opcional. No es necesario para analizar videos, revisar metricas, administrar proyectos ni usar el nucleo del sistema. No participa en el flujo base de videos o audio.
 
 ## Advertencia sobre CUDA y PyTorch
 
-CUDA Toolkit y PyTorch todavia no estan instalados en este repositorio. La aplicacion actual solo realiza diagnostico basico, catalogo, inspeccion tecnica local con herramientas externas si existen, preparacion de rutas, logging e interfaz.
+CUDA Toolkit y PyTorch todavia no estan instalados en este repositorio. La aplicacion actual solo realiza diagnostico basico, catalogo, inspeccion tecnica local con herramientas externas si existen, preparacion tecnica de audio cuando `ffmpeg` esta disponible, preparacion de rutas, logging e interfaz.
 
-`ffprobe` es la herramienta requerida para la inspeccion tecnica. `ffmpeg` solo se usa para la miniatura inicial. El video original nunca se copia ni se modifica.
+`ffprobe` es la herramienta requerida para la inspeccion tecnica. `ffmpeg` se usa para miniaturas tecnicas y para extraer audio normalizado. El video original nunca se copia ni se modifica.
 
 ## Seguridad y repositorio
 
