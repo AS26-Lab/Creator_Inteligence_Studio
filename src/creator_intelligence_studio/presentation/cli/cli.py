@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Sequence
 
 from creator_intelligence_studio.application.commands.creator_commands import (
@@ -15,6 +16,16 @@ from creator_intelligence_studio.application.commands.audio_commands import (
     PrepareAudioCommand,
     ShowPreparedAudioCommand,
     VerifyPreparedAudioCommand,
+)
+from creator_intelligence_studio.application.commands.transcription_commands import (
+    DeleteTranscriptionCommand,
+    DownloadModelCommand,
+    ExportTranscriptionCommand,
+    ListSegmentsCommand,
+    ModelStatusCommand,
+    ShowTranscriptionCommand,
+    TranscribeVideoCommand,
+    VerifyModelCommand,
 )
 from creator_intelligence_studio.application.commands.media_commands import (
     InspectVideoCommand,
@@ -37,12 +48,19 @@ from creator_intelligence_studio.application.services.audio_preparation_service 
     AudioPreparationService,
     PreparedAudioReport,
 )
+from creator_intelligence_studio.application.services.transcription_service import (
+    TranscriptionExportResult,
+    TranscriptionReport,
+    TranscriptionService,
+)
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
     MediaToolsReport,
     VideoInspectionReport,
 )
 from creator_intelligence_studio.domain.errors import DomainError
+from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
+from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionExportFormat, TranscriptionOptions
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
 
 
@@ -134,6 +152,57 @@ def build_parser() -> argparse.ArgumentParser:
     audio_clear = audio_sub.add_parser("clear-cache", help="Limpiar caché de audio")
     audio_clear.add_argument("--video-id", required=True)
     audio_clear.add_argument("--json", action="store_true")
+
+    transcription_parser = subparsers.add_parser("transcription", help="Gestion de transcripcion local")
+    transcription_sub = transcription_parser.add_subparsers(dest="action", required=True)
+
+    transcription_backend = transcription_sub.add_parser("backend", help="Verificar backend de transcripcion")
+    transcription_backend.add_argument("--json", action="store_true")
+
+    transcription_models = transcription_sub.add_parser("models", help="Listar modelos de transcripcion")
+    transcription_models.add_argument("--json", action="store_true")
+
+    transcription_model_status = transcription_sub.add_parser("model-status", help="Mostrar el estado de un modelo")
+    transcription_model_status.add_argument("--model", required=True)
+    transcription_model_status.add_argument("--json", action="store_true")
+
+    transcription_download_model = transcription_sub.add_parser("download-model", help="Descargar un modelo")
+    transcription_download_model.add_argument("--model", required=True)
+    transcription_download_model.add_argument("--json", action="store_true")
+
+    transcription_verify_model = transcription_sub.add_parser("verify-model", help="Verificar un modelo local")
+    transcription_verify_model.add_argument("--model", required=True)
+    transcription_verify_model.add_argument("--json", action="store_true")
+
+    transcription_transcribe = transcription_sub.add_parser("transcribe", help="Transcribir un video")
+    transcription_transcribe.add_argument("--video-id", required=True)
+    transcription_transcribe.add_argument("--profile", default="balanced")
+    transcription_transcribe.add_argument("--model-name")
+    transcription_transcribe.add_argument("--device", default="auto")
+    transcription_transcribe.add_argument("--compute-type")
+    transcription_transcribe.add_argument("--language", default="auto")
+    transcription_transcribe.add_argument("--beam-size", type=int, default=5)
+    transcription_transcribe.add_argument("--vad-filter", action="store_true")
+    transcription_transcribe.add_argument("--word-timestamps", action="store_true")
+    transcription_transcribe.add_argument("--json", action="store_true")
+
+    transcription_show = transcription_sub.add_parser("show", help="Mostrar una transcripcion")
+    transcription_show.add_argument("--video-id", required=True)
+    transcription_show.add_argument("--json", action="store_true")
+
+    transcription_segments = transcription_sub.add_parser("segments", help="Listar segmentos de transcripcion")
+    transcription_segments.add_argument("--video-id", required=True)
+    transcription_segments.add_argument("--json", action="store_true")
+
+    transcription_export = transcription_sub.add_parser("export", help="Exportar una transcripcion")
+    transcription_export.add_argument("--video-id", required=True)
+    transcription_export.add_argument("--format", required=True, choices=["txt", "srt", "json"])
+    transcription_export.add_argument("--output")
+    transcription_export.add_argument("--json", action="store_true")
+
+    transcription_delete = transcription_sub.add_parser("delete", help="Eliminar una transcripcion")
+    transcription_delete.add_argument("--video-id", required=True)
+    transcription_delete.add_argument("--json", action="store_true")
 
     return parser
 
@@ -306,6 +375,53 @@ def _print_audio_report(report: PreparedAudioReport, stream) -> None:
         print(f"Advertencia: {warning}", file=stream)
     for error in report.errors:
         print(f"Error: {error}", file=stream)
+
+
+def _print_transcription_segment(segment: TranscriptionSegment, stream) -> None:
+    print(f"[{segment.segment_index}] {segment.start_seconds:.3f} -> {segment.end_seconds:.3f}", file=stream)
+    print(segment.text, file=stream)
+
+
+def _print_transcription_report(report: TranscriptionReport, stream) -> None:
+    _print_video(report.video, stream)
+    print(f"Estado de transcripcion: {report.status.value}", file=stream)
+    print(f"Stale: {'si' if report.is_stale else 'no'}", file=stream)
+    if report.transcription:
+        transcription = report.transcription
+        print(f"Motor: {transcription.engine}", file=stream)
+        print(f"Modelo: {transcription.model_name}", file=stream)
+        print(f"Dispositivo: {transcription.device}", file=stream)
+        print(f"Compute type: {transcription.compute_type}", file=stream)
+        print(f"Idioma detectado: {transcription.detected_language or 'no verificado'}", file=stream)
+        print(
+            f"Probabilidad de idioma: {transcription.language_probability if transcription.language_probability is not None else 'no verificada'}",
+            file=stream,
+        )
+        print(f"Texto completo: {transcription.full_text}", file=stream)
+        print(f"Segmentos: {transcription.segment_count}", file=stream)
+        print(f"Tiempo de procesamiento: {transcription.processing_time_seconds:.3f} s", file=stream)
+        print(f"Real-time factor: {transcription.real_time_factor:.3f}", file=stream)
+    if report.backend:
+        print(f"Backend: {report.backend.backend}", file=stream)
+        print(f"CUDA device count: {report.backend.device_count}", file=stream)
+    for warning in report.warnings:
+        print(f"Advertencia: {warning}", file=stream)
+    for error in report.errors:
+        print(f"Error: {error}", file=stream)
+
+
+def _print_model_info(model_info, stream) -> None:
+    print(f"Modelo: {model_info.model_name}", file=stream)
+    print(f"Perfil: {model_info.profile}", file=stream)
+    print(f"Instalado: {'si' if model_info.installed else 'no'}", file=stream)
+    print(f"Estado: {model_info.status.value}", file=stream)
+    print(f"Ruta: {model_info.path}", file=stream)
+    if model_info.size_bytes is not None:
+        print(f"Tamano: {model_info.size_bytes} bytes", file=stream)
+    if model_info.notes:
+        print(f"Notas: {model_info.notes}", file=stream)
+    if model_info.error_message:
+        print(f"Error: {model_info.error_message}", file=stream)
 
 
 def _audio_stream_summary(report: PreparedAudioReport) -> str:
@@ -488,12 +604,118 @@ def _handle_audio(args, service: AudioPreparationService, stdout) -> int:
     raise ValueError("Accion de audio no reconocida.")
 
 
+def _handle_transcription(args, service: TranscriptionService, stdout, stderr) -> int:
+    if args.action == "backend":
+        report = service.verify_transcription_backend()
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Backend de transcripcion:", file=stdout)
+            print(f"Backend: {report.backend.backend}", file=stdout)
+            print(f"Disponible: {'si' if report.backend.available else 'no'}", file=stdout)
+            print(f"Device count: {report.backend.device_count}", file=stdout)
+            print(f"Compute types: {', '.join(report.backend.supported_compute_types) or 'no verificados'}", file=stdout)
+        return 0 if report.backend.available else 1
+    if args.action == "models":
+        models = service.list_models()
+        if args.json:
+            print(json.dumps([model.to_dict() for model in models], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for model in models:
+                _print_model_info(model, stdout)
+                print("", file=stdout)
+        return 0
+    if args.action == "model-status":
+        command = ModelStatusCommand(args.model)
+        model = service.get_model_status(command.model_name)
+        if args.json:
+            print(json.dumps(model.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_model_info(model, stdout)
+        return 0
+    if args.action == "download-model":
+        command = DownloadModelCommand(args.model)
+        model = service.download_model(command.model_name)
+        if args.json:
+            print(json.dumps(model.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Descarga de modelo completada", file=stdout)
+            _print_model_info(model, stdout)
+        return 0 if model.installed else 1
+    if args.action == "verify-model":
+        command = VerifyModelCommand(args.model)
+        model = service.verify_model(command.model_name)
+        if args.json:
+            print(json.dumps(model.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Verificacion de modelo completada", file=stdout)
+            _print_model_info(model, stdout)
+        return 0 if model.installed else 1
+    if args.action == "transcribe":
+        model_name = args.model_name or "small"
+        options = TranscriptionOptions(
+            profile=args.profile,
+            model_name=model_name,
+            device=args.device,
+            compute_type=args.compute_type,
+            language=args.language,
+            beam_size=args.beam_size,
+            vad_filter=args.vad_filter,
+            word_timestamps=args.word_timestamps,
+        )
+        report = service.transcribe_video(args.video_id, options)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Transcripcion completada", file=stdout)
+            _print_transcription_report(report, stdout)
+        return 0 if report.status == TranscriptionStatus.COMPLETED else 1
+    if args.action == "show":
+        command = ShowTranscriptionCommand(args.video_id)
+        report = service.get_transcription(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_transcription_report(report, stdout)
+        return 0 if report.transcription is not None else 1
+    if args.action == "segments":
+        command = ListSegmentsCommand(args.video_id)
+        report = service.get_transcription(command.video_id)
+        segments = list(report.segments)
+        if args.json:
+            print(json.dumps([segment.to_dict() for segment in segments], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for segment in segments:
+                _print_transcription_segment(segment, stdout)
+                print("", file=stdout)
+        return 0
+    if args.action == "export":
+        command = ExportTranscriptionCommand(args.video_id, TranscriptionExportFormat(args.format))
+        destination = Path(args.output) if args.output else None
+        result = service.export_transcription(command.video_id, command.format, destination=destination)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print(f"Exportado: {result.path}", file=stdout)
+        return 0
+    if args.action == "delete":
+        command = DeleteTranscriptionCommand(args.video_id)
+        deleted = service.delete_transcription(command.video_id)
+        if args.json:
+            print(json.dumps({"video_id": command.video_id, "deleted": deleted}, ensure_ascii=False), file=stdout)
+        else:
+            print("Transcripcion eliminada" if deleted else "No existia transcripcion", file=stdout)
+        return 0
+    raise ValueError("Accion de transcripcion no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
     service: CatalogService,
     media_service: MediaInspectionService,
     audio_service: AudioPreparationService,
+    transcription_service: TranscriptionService,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -517,6 +739,8 @@ def dispatch(
             return _handle_media(args, media_service, stdout)
         if args.entity == "audio":
             return _handle_audio(args, audio_service, stdout)
+        if args.entity == "transcription":
+            return _handle_transcription(args, transcription_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

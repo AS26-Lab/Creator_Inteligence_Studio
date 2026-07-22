@@ -114,6 +114,42 @@ def make_audio_service():
     return _FakeAudioService()
 
 
+def make_transcription_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_transcribed"),
+        is_stale=False,
+        transcription=None,
+        segments=(),
+        backend=None,
+        model_status=None,
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    backend = SimpleNamespace(available=False, backend="cpu", device_count=0, supported_compute_types=(), to_dict=lambda: {})
+    model = SimpleNamespace(model_name="small", installed=False, to_dict=lambda: {"model_name": "small"})
+    verification = SimpleNamespace(
+        backend=backend,
+        model_statuses=(model,),
+        notes=(),
+        to_dict=lambda: {"backend": backend.to_dict(), "model_statuses": [model.to_dict()], "notes": []},
+    )
+    return SimpleNamespace(
+        verify_transcription_backend=lambda: verification,
+        list_models=lambda: (model,),
+        get_model_status=lambda model_name: model,
+        verify_model=lambda model_name: model,
+        download_model=lambda model_name, **kwargs: model,
+        remove_model=lambda model_name: False,
+        transcribe_video=lambda *args, **kwargs: report,
+        get_transcription=lambda *args, **kwargs: report,
+        is_transcription_stale=lambda *args, **kwargs: False,
+        cancel_transcription=lambda *args, **kwargs: False,
+        delete_transcription=lambda *args, **kwargs: False,
+        export_transcription=lambda *args, **kwargs: SimpleNamespace(path="cache/transcriptions/video/transcription.txt", to_dict=lambda: {}),
+    )
+
+
 def load_fixture(name: str) -> dict[str, object]:
     return json.loads((FIXTURE_ROOT / name).read_text(encoding="utf-8"))
 
@@ -230,7 +266,7 @@ class MediaInspectionServiceTests(unittest.TestCase):
                 tables = connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='video_inspections'"
                 ).fetchall()
-            self.assertEqual([row["version"] for row in versions], [1, 2, 3])
+            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4])
             self.assertEqual(len(tables), 1)
 
     def test_inspect_video_reuses_cache_and_force_reinspect(self) -> None:
@@ -414,6 +450,7 @@ class MediaCliTests(unittest.TestCase):
                 service=service,
                 media_service=media_service,
                 audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
             )
             stdout = io.StringIO()
             stderr = io.StringIO()

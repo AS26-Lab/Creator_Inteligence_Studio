@@ -7,6 +7,7 @@ flowchart LR
     Home[Inicio] --> Creators[Creadores]
     Home --> Projects[Proyectos]
     Home --> Media[Videos]
+    Home --> Transcription[Transcripcion]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -49,7 +50,22 @@ flowchart LR
 - miniatura tecnica inicial cuando exista `ffmpeg`;
 - preparacion tecnica de audio normalizado con `ffmpeg`;
 - inspector de audio preparado con estado, stream seleccionado, formato, sample rate, canales, bit depth y vigencia;
-- estado `stale` cuando el archivo cambia tras la inspeccion o la preparacion.
+- estado `stale` cuando el archivo cambia tras la inspeccion o la preparacion;
+- resumen de transcripcion en el inspector contextual.
+
+### Transcripcion
+
+- selector de perfil rapido / equilibrado / calidad;
+- selector de modelo base / small / medium;
+- selector de dispositivo auto / cuda / cpu;
+- selector de idioma;
+- boton de transcribir;
+- cancelar;
+- exportar TXT, SRT y JSON;
+- texto completo;
+- tabla de segmentos;
+- indicador de progreso aproximado;
+- estado de stale.
 
 ### Sistema
 
@@ -81,6 +97,7 @@ flowchart LR
 - sin modelos registrados;
 - sin feedback todavia;
 - sin inspeccion tecnica aun;
+- sin transcripcion aun;
 - sin herramientas multimedia disponibles.
 
 ## Separacion de Script & Voice Studio

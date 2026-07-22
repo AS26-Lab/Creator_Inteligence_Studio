@@ -18,7 +18,17 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     MediaToolsReport,
     VideoInspectionReport,
 )
+from creator_intelligence_studio.application.services.transcription_service import (
+    TranscriptionExportResult,
+    TranscriptionReport,
+    TranscriptionService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
+from creator_intelligence_studio.domain.transcription.value_objects import (
+    TranscriptionExportFormat,
+    TranscriptionModelInfo,
+    TranscriptionOptions,
+)
 from creator_intelligence_studio.domain.projects.entities import ProjectStatus
 from creator_intelligence_studio.domain.videos.entities import (
     VideoAsset,
@@ -178,6 +188,7 @@ class WorkspaceViewModel:
         service: CatalogService,
         media_service: MediaInspectionService,
         audio_service: AudioPreparationService,
+        transcription_service: TranscriptionService,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -185,6 +196,7 @@ class WorkspaceViewModel:
         self.service = service
         self.media_service = media_service
         self.audio_service = audio_service
+        self.transcription_service = transcription_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -337,6 +349,54 @@ class WorkspaceViewModel:
     def clear_prepared_audio_cache(self, video_id: str) -> AudioCacheDeletionResult:
         result = self.audio_service.delete_prepared_audio_cache(video_id)
         self.activity_log.insert(0, "Cache de audio limpiada")
+        return result
+
+    def verify_transcription_backend(self):
+        return self.transcription_service.verify_transcription_backend()
+
+    def transcription_models(self):
+        return self.transcription_service.list_models()
+
+    def transcription_model_status(self, model_name: str) -> TranscriptionModelInfo:
+        return self.transcription_service.get_model_status(model_name)
+
+    def verify_transcription_model(self, model_name: str) -> TranscriptionModelInfo:
+        return self.transcription_service.verify_model(model_name)
+
+    def download_transcription_model(self, model_name: str, *, progress_callback=None):
+        return self.transcription_service.download_model(model_name, progress_callback=progress_callback)
+
+    def remove_transcription_model(self, model_name: str) -> bool:
+        return self.transcription_service.remove_model(model_name)
+
+    def transcribe_video(self, video_id: str, options: TranscriptionOptions, *, progress_callback=None):
+        report = self.transcription_service.transcribe_video(
+            video_id,
+            options,
+            progress_callback=progress_callback,
+        )
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Transcripcion: {report.status.value}")
+        return report
+
+    def get_transcription(self, video_id: str) -> TranscriptionReport:
+        return self.transcription_service.get_transcription(video_id)
+
+    def is_transcription_stale(self, video_id: str) -> bool:
+        return self.transcription_service.is_transcription_stale(video_id)
+
+    def cancel_transcription(self, video_id: str) -> bool:
+        return self.transcription_service.cancel_transcription(video_id)
+
+    def delete_transcription(self, video_id: str) -> bool:
+        deleted = self.transcription_service.delete_transcription(video_id)
+        if deleted:
+            self.activity_log.insert(0, "Transcripcion eliminada")
+        return deleted
+
+    def export_transcription(self, video_id: str, format: TranscriptionExportFormat) -> TranscriptionExportResult:
+        result = self.transcription_service.export_transcription(video_id, format)
+        self.activity_log.insert(0, f"Transcripcion exportada: {format.value}")
         return result
 
     def creator_rows(self) -> list[CreatorRowViewModel]:
@@ -689,4 +749,33 @@ class WorkspaceViewModel:
                         InspectorItemViewModel("Stream default", "Si" if selected.is_default else "No"),
                     ]
                 )
+        transcription_report = self.get_transcription(video.id)
+        transcription = transcription_report.transcription
+        items.extend(
+            [
+                InspectorItemViewModel("Transcripcion", transcription_report.status.value),
+                InspectorItemViewModel("Transcripcion stale", "Si" if transcription_report.is_stale else "No"),
+            ]
+        )
+        if transcription is not None:
+            items.extend(
+                [
+                    InspectorItemViewModel("Modelo de transcripcion", transcription.model_name),
+                    InspectorItemViewModel(
+                        "Estado del modelo",
+                        self.transcription_model_status(transcription.model_name).status.value,
+                    ),
+                    InspectorItemViewModel("Dispositivo de transcripcion", transcription.device),
+                    InspectorItemViewModel("Compute type", transcription.compute_type),
+                    InspectorItemViewModel("Idioma detectado", transcription.detected_language or "No verificado"),
+                    InspectorItemViewModel(
+                        "Tiempo de procesamiento",
+                        f"{transcription.processing_time_seconds:.3f} s",
+                    ),
+                    InspectorItemViewModel(
+                        "Real-time factor",
+                        f"{transcription.real_time_factor:.3f}",
+                    ),
+                ]
+            )
         return items

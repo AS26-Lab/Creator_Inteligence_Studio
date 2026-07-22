@@ -120,6 +120,42 @@ def make_audio_service():
     return _FakeAudioService()
 
 
+def make_transcription_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_transcribed"),
+        is_stale=False,
+        transcription=None,
+        segments=(),
+        backend=None,
+        model_status=None,
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    backend = SimpleNamespace(available=False, backend="cpu", device_count=0, supported_compute_types=(), to_dict=lambda: {})
+    model = SimpleNamespace(model_name="small", installed=False, to_dict=lambda: {"model_name": "small"})
+    verification = SimpleNamespace(
+        backend=backend,
+        model_statuses=(model,),
+        notes=(),
+        to_dict=lambda: {"backend": backend.to_dict(), "model_statuses": [model.to_dict()], "notes": []},
+    )
+    return SimpleNamespace(
+        verify_transcription_backend=lambda: verification,
+        list_models=lambda: (model,),
+        get_model_status=lambda model_name: model,
+        verify_model=lambda model_name: model,
+        download_model=lambda model_name, **kwargs: model,
+        remove_model=lambda model_name: False,
+        transcribe_video=lambda *args, **kwargs: report,
+        get_transcription=lambda *args, **kwargs: report,
+        is_transcription_stale=lambda *args, **kwargs: False,
+        cancel_transcription=lambda *args, **kwargs: False,
+        delete_transcription=lambda *args, **kwargs: False,
+        export_transcription=lambda *args, **kwargs: SimpleNamespace(path="cache/transcriptions/video/transcription.txt", to_dict=lambda: {}),
+    )
+
+
 class CatalogServiceTests(unittest.TestCase):
     def test_migration_initial(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -132,10 +168,11 @@ class CatalogServiceTests(unittest.TestCase):
                 versions = connection.execute(
                     "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
                 ).fetchall()
-            self.assertEqual(len(versions), 3)
+            self.assertEqual(len(versions), 4)
             self.assertEqual(versions[0]["version"], 1)
             self.assertEqual(versions[1]["version"], 2)
             self.assertEqual(versions[2]["version"], 3)
+            self.assertEqual(versions[3]["version"], 4)
             self.assertEqual(versions[0]["name"], "initial_schema")
 
     def test_migrations_idempotent(self) -> None:
@@ -150,7 +187,7 @@ class CatalogServiceTests(unittest.TestCase):
                 count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-            self.assertEqual(count, 3)
+            self.assertEqual(count, 4)
 
     def test_foreign_keys_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -453,6 +490,7 @@ class CatalogServiceTests(unittest.TestCase):
                 service=service,
                 media_service=make_media_service(),
                 audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
             )
             bootstrap_context = BootstrapContext(
                 settings=settings,

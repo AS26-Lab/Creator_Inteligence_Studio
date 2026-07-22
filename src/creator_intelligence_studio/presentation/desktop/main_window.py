@@ -28,6 +28,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     DashboardView,
     ProjectsView,
     SystemView,
+    TranscriptionView,
     VideosView,
 )
 from creator_intelligence_studio.presentation.desktop.widgets.inspector import InspectorPanel
@@ -42,7 +43,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "system"]
+        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "system"]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -101,11 +102,13 @@ class MainWindow(QMainWindow):
         self.creators_view = CreatorsView(workspace, self.inspector)
         self.projects_view = ProjectsView(workspace, self.inspector)
         self.videos_view = VideosView(workspace, self.inspector)
+        self.transcription_view = TranscriptionView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
         self.stack.addWidget(self.creators_view)
         self.stack.addWidget(self.projects_view)
         self.stack.addWidget(self.videos_view)
+        self.stack.addWidget(self.transcription_view)
         self.stack.addWidget(self.system_view)
 
         central = QWidget()
@@ -158,6 +161,7 @@ class MainWindow(QMainWindow):
         self.creators_view.refresh()
         self.projects_view.refresh()
         self.videos_view.refresh()
+        self.transcription_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
 
@@ -232,3 +236,5 @@ class MainWindow(QMainWindow):
             self.videos_view.search_edit.setText(text)
             self.videos_view.search_edit.blockSignals(False)
             self.videos_view.refresh()
+        elif current_key == "transcription":
+            self.transcription_view.refresh()

@@ -168,6 +168,30 @@ python -m creator_intelligence_studio audio verify --video-id <video_id>
 python -m creator_intelligence_studio audio clear-cache --video-id <video_id>
 ```
 
+## Comandos de transcripcion
+
+```bat
+python -m creator_intelligence_studio transcription backend
+python -m creator_intelligence_studio transcription backend --json
+python -m creator_intelligence_studio transcription models
+python -m creator_intelligence_studio transcription model-status --model small
+python -m creator_intelligence_studio transcription download-model --model small
+python -m creator_intelligence_studio transcription verify-model --model small
+python -m creator_intelligence_studio transcription transcribe --video-id <video_id>
+python -m creator_intelligence_studio transcription transcribe --video-id <video_id> --profile fast
+python -m creator_intelligence_studio transcription transcribe --video-id <video_id> --profile quality
+python -m creator_intelligence_studio transcription transcribe --video-id <video_id> --device cpu
+python -m creator_intelligence_studio transcription show --video-id <video_id>
+python -m creator_intelligence_studio transcription segments --video-id <video_id>
+python -m creator_intelligence_studio transcription export --video-id <video_id> --format txt
+python -m creator_intelligence_studio transcription export --video-id <video_id> --format srt
+python -m creator_intelligence_studio transcription export --video-id <video_id> --format json
+python -m creator_intelligence_studio transcription delete --video-id <video_id>
+```
+
+El caché de modelos vive en `models/transcription/faster-whisper/`.
+Las exportaciones controladas se escriben en `cache/transcriptions/` salvo que el usuario indique otra ruta.
+
 ## Ejecutar pruebas
 
 ```bat

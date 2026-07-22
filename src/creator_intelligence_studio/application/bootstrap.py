@@ -20,6 +20,10 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     MediaInspectionService,
     build_media_inspection_service,
 )
+from creator_intelligence_studio.application.services.transcription_service import (
+    TranscriptionService,
+    build_transcription_service,
+)
 from creator_intelligence_studio.infrastructure.configuration.settings import (
     AppSettings,
     SettingsError,
@@ -38,6 +42,9 @@ from creator_intelligence_studio.infrastructure.persistence.database import buil
 from creator_intelligence_studio.infrastructure.persistence.migrations import run_migrations
 from creator_intelligence_studio.infrastructure.persistence.sqlite_prepared_audio_repository import (
     SQLitePreparedAudioRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
+    SQLiteTranscriptionRepository,
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_video_inspection_repository import (
     SQLiteVideoInspectionRepository,
@@ -66,6 +73,7 @@ class ServiceContext(BootstrapContext):
     service: CatalogService
     media_service: MediaInspectionService
     audio_service: AudioPreparationService
+    transcription_service: TranscriptionService
 
 
 def _load_context() -> BootstrapContext:
@@ -113,6 +121,14 @@ def _load_service_context() -> ServiceContext:
         audio_repository=SQLitePreparedAudioRepository(database),
         logger=context.logger,
     )
+    transcription_service = build_transcription_service(
+        settings=context.settings,
+        paths=context.paths,
+        video_repository=SQLiteVideoRepository(database),
+        prepared_audio_repository=SQLitePreparedAudioRepository(database),
+        transcription_repository=SQLiteTranscriptionRepository(database),
+        logger=context.logger,
+    )
     return ServiceContext(
         settings=context.settings,
         paths=context.paths,
@@ -121,6 +137,7 @@ def _load_service_context() -> ServiceContext:
         service=service,
         media_service=media_service,
         audio_service=audio_service,
+        transcription_service=transcription_service,
     )
 
 
@@ -187,6 +204,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             service=context.service,
             media_service=context.media_service,
             audio_service=context.audio_service,
+            transcription_service=context.transcription_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

@@ -189,3 +189,31 @@ Los artefactos minimos contemplados son:
 - formato fisico final de persistencia para artefactos grandes;
 - estrategia final de rutas portables;
 - versionado adicional de inspeccion, audio y miniaturas.
+
+## Migration v4: Transcription
+
+La migracion v4 agrega:
+
+- `transcriptions`
+- `transcription_segments`
+
+Campos principales:
+
+- `video_asset_id`
+- `prepared_audio_asset_id`
+- `status`
+- `engine`
+- `model_name`
+- `device`
+- `compute_type`
+- `requested_language`
+- `detected_language`
+- `full_text`
+- `duration_seconds`
+- `processing_time_seconds`
+- `real_time_factor`
+- `segment_count`
+- `source_audio_fingerprint`
+- `configuration_fingerprint`
+
+`transcription_segments` conserva `segment_index` con orden estable y FK hacia `transcriptions`.

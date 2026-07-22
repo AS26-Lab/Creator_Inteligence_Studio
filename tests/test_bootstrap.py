@@ -6,6 +6,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from creator_intelligence_studio.application import bootstrap
@@ -66,6 +67,43 @@ def make_audio_service():
         is_prepared_audio_stale=MagicMock(return_value=False),
         verify_prepared_audio=MagicMock(return_value=MagicMock(status=MagicMock(value="not_prepared"), is_stale=False)),
         delete_prepared_audio_cache=MagicMock(return_value=MagicMock(deleted_record=False, deleted_files=())),
+    )
+
+
+def make_transcription_service():
+    report = MagicMock(
+        status=MagicMock(value="not_transcribed"),
+        is_stale=False,
+        transcription=None,
+        segments=(),
+        backend=None,
+        model_status=None,
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    model = MagicMock(model_name="small", installed=False)
+    model.to_dict = MagicMock(return_value={"model_name": "small"})
+    backend = MagicMock(available=False, backend="cpu", device_count=0, supported_compute_types=(), to_dict=lambda: {})
+    verification = SimpleNamespace(
+        backend=backend,
+        model_statuses=(model,),
+        notes=(),
+        to_dict=lambda: {"backend": backend.to_dict(), "model_statuses": [model.to_dict()], "notes": []},
+    )
+    return MagicMock(
+        verify_transcription_backend=MagicMock(return_value=verification),
+        list_models=MagicMock(return_value=(model,)),
+        get_model_status=MagicMock(return_value=model),
+        verify_model=MagicMock(return_value=model),
+        download_model=MagicMock(return_value=model),
+        remove_model=MagicMock(return_value=False),
+        transcribe_video=MagicMock(return_value=report),
+        get_transcription=MagicMock(return_value=report),
+        is_transcription_stale=MagicMock(return_value=False),
+        cancel_transcription=MagicMock(return_value=False),
+        delete_transcription=MagicMock(return_value=False),
+        export_transcription=MagicMock(return_value=MagicMock(path="cache/transcriptions/video/transcription.txt", to_dict=lambda: {})),
     )
 
 
@@ -131,6 +169,7 @@ class BootstrapTests(unittest.TestCase):
                 service=MagicMock(),
                 media_service=MagicMock(),
                 audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
             )
 
             with patch(
@@ -162,6 +201,7 @@ class BootstrapTests(unittest.TestCase):
                 service=MagicMock(),
                 media_service=MagicMock(),
                 audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
             )
 
             with patch(
@@ -177,3 +217,32 @@ class BootstrapTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         launch_gui.assert_called_once()
+
+    def test_transcription_backend_cli_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            diagnostic = make_diagnostic(root)
+            service_context = bootstrap.ServiceContext(
+                settings=settings,
+                paths=paths,
+                diagnostic=diagnostic,
+                logger=logging.getLogger("test"),
+                service=MagicMock(),
+                media_service=MagicMock(),
+                audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
+            )
+
+            with patch(
+                "creator_intelligence_studio.application.bootstrap._load_service_context",
+                return_value=service_context,
+            ):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                code = bootstrap.run(argv=["transcription", "backend", "--json"], stdout=stdout, stderr=stderr)
+
+        self.assertEqual(code, 1)
+        payload = json.loads(stdout.getvalue())
+        self.assertIn("backend", payload)

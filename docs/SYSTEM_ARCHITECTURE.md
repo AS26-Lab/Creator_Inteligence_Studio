@@ -185,6 +185,16 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - la salida normalizada inicial es WAV PCM signed 16-bit little-endian, mono, 16 kHz;
 - el video original nunca se modifica.
 
+## Transcription Layer
+
+La transcripcion local se divide en:
+
+- `domain/transcription`: entidades, errores, repositorios, reglas y value objects.
+- `application/services/transcription_service.py`: orquestacion, estados, persistencia y exportaciones.
+- `infrastructure/transcription`: loader de DLL NVIDIA, manager de modelos, adaptador `faster-whisper` y exportador.
+
+La capa de dominio no importa `faster_whisper`, `ctranslate2`, Qt ni SQLite.
+
 ## Presentacion de escritorio
 
 - `presentation/desktop` concentra la interfaz de escritorio con PySide6.

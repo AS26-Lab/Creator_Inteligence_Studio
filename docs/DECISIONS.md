@@ -23,6 +23,21 @@
 | 2026-07-22 | Inspeccion tecnica | `ffprobe` sera la herramienta requerida para la inspeccion tecnica local; `ffmpeg` se usara para miniatura inicial y audio normalizado. | El video original no se modifica y la fase tecnica puede persistir un resumen real y un audio reutilizable. | Acoplar la fase tecnica a un pipeline de IA o exigir `ffmpeg` para todo el flujo. |
 | 2026-07-22 | Cache tecnico | Las inspecciones, miniaturas y audio preparado viviran en `cache/videos/<video-id>/...` y seguiran ignoradas por Git. | Los artefactos derivados se reutilizan y no contaminan el repositorio. | Escribir miniaturas, inspecciones o audio junto al video original. |
 | 2026-07-22 | Preparacion de audio | `ffmpeg` tambien se usara para preparar una pista de audio normalizada reutilizable en WAV PCM16 mono 16 kHz. | El flujo audiovisual puede reutilizar audio tecnico sin tocar el video original y sin transcripcion aun. | Extraer audio con herramientas no encapsuladas o introducir IA en esta fase. |
+| 2026-07-22 | Transcripcion local | `faster-whisper` + `CTranslate2` sera el backend local principal de transcripcion. | Se obtiene CUDA con fallback CPU, timestamps por segmento y cache local de modelos. | Resolver la transcripcion con API externa o con un backend no optimizado para Windows/CUDA. |
+
+## Transcription Decision
+
+Se adopto `faster-whisper` + `CTranslate2` como backend local principal.
+
+Motivos:
+
+- CUDA util en RTX 2080;
+- fallback CPU simple;
+- timestamps por segmento;
+- integracion limpia con WAV normalizado;
+- caché de modelos y resultados local.
+
+Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no se requiere CUDA Toolkit completo para esta primera integracion.
 
 ## Pendientes
 

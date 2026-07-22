@@ -256,6 +256,42 @@ class AudioPreparationDomainTests(unittest.TestCase):
                 inspect_wav_file(bad_path)
 
 
+def make_transcription_service():
+    report = SimpleNamespace(
+        status=SimpleNamespace(value="not_transcribed"),
+        is_stale=False,
+        transcription=None,
+        segments=(),
+        backend=None,
+        model_status=None,
+        warnings=(),
+        errors=(),
+        progress_message=None,
+    )
+    backend = SimpleNamespace(available=False, backend="cpu", device_count=0, supported_compute_types=(), to_dict=lambda: {})
+    model = SimpleNamespace(model_name="small", installed=False, to_dict=lambda: {"model_name": "small"})
+    verification = SimpleNamespace(
+        backend=backend,
+        model_statuses=(model,),
+        notes=(),
+        to_dict=lambda: {"backend": backend.to_dict(), "model_statuses": [model.to_dict()], "notes": []},
+    )
+    return SimpleNamespace(
+        verify_transcription_backend=lambda: verification,
+        list_models=lambda: (model,),
+        get_model_status=lambda model_name: model,
+        verify_model=lambda model_name: model,
+        download_model=lambda model_name, **kwargs: model,
+        remove_model=lambda model_name: False,
+        transcribe_video=lambda *args, **kwargs: report,
+        get_transcription=lambda *args, **kwargs: report,
+        is_transcription_stale=lambda *args, **kwargs: False,
+        cancel_transcription=lambda *args, **kwargs: False,
+        delete_transcription=lambda *args, **kwargs: False,
+        export_transcription=lambda *args, **kwargs: SimpleNamespace(path="cache/transcriptions/video/transcription.txt", to_dict=lambda: {}),
+    )
+
+
 class AudioPreparationServiceTests(unittest.TestCase):
     def test_prepare_audio_completed_reuses_cache_and_force_reextracts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -292,8 +328,10 @@ class AudioPreparationServiceTests(unittest.TestCase):
                         version="ffmpeg version 8.1.2",
                         error_message=None,
                     )
-                ),
-            )
+        ),
+    )
+
+
             persist_inspection(database, video, "inspection-1", metadata)
             extractor = FakeExtractor()
             with patch(
@@ -518,6 +556,7 @@ class AudioPreparationServiceTests(unittest.TestCase):
                 service=catalog,
                 media_service=_FakeInspectionService(),
                 audio_service=service,
+                transcription_service=make_transcription_service(),
                 diagnostic=make_diagnostic(root),
                 settings=settings,
                 paths=paths,
@@ -539,6 +578,7 @@ class AudioPreparationServiceTests(unittest.TestCase):
                 service=catalog,
                 media_service=_FakeInspectionService(),
                 audio_service=service,
+                transcription_service=make_transcription_service(),
             )
             with patch(
                 "creator_intelligence_studio.application.bootstrap._load_service_context",
