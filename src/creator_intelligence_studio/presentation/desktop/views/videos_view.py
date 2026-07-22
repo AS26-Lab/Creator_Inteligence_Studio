@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QThread, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
@@ -28,6 +28,30 @@ from creator_intelligence_studio.presentation.desktop.widgets.cards import Empty
 from creator_intelligence_studio.presentation.desktop.widgets.inspector import InspectorPanel
 
 
+class InspectionThread(QThread):
+    """Ejecuta inspecciones tecnicas sin bloquear la UI."""
+
+    result_ready = Signal(object)
+    error_ready = Signal(str)
+
+    def __init__(self, workspace: WorkspaceViewModel, video_id: str, force: bool = False) -> None:
+        super().__init__()
+        self.workspace = workspace
+        self.video_id = video_id
+        self.force = force
+
+    def run(self) -> None:  # pragma: no cover - flujo Qt
+        try:
+            report = self.workspace.inspect_video(self.video_id, force=self.force)
+        except DomainError as exc:
+            self.error_ready.emit(str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - defensa general
+            self.error_ready.emit(str(exc))
+            return
+        self.result_ready.emit(report)
+
+
 class VideosView(QWidget):
     """Lista, filtros y registro de videos."""
 
@@ -35,18 +59,19 @@ class VideosView(QWidget):
         super().__init__(parent)
         self.workspace = workspace
         self.inspector = inspector
+        self._inspection_thread: InspectionThread | None = None
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Buscar por título, nombre o ruta")
+        self.search_edit.setPlaceholderText("Buscar por titulo, nombre o ruta")
         self.project_combo = QComboBox()
         self.status_combo = QComboBox()
         self.status_combo.addItems(["Todos", "Registrado", "Pendiente", "Procesando", "Completado", "Archivo faltante", "Error"])
         self.availability_combo = QComboBox()
         self.availability_combo.addItems(["Todas", "Disponible", "Archivo faltante"])
         self.source_combo = QComboBox()
-        self.source_combo.addItems(["Todas", "Archivo local", "Importación de plataforma", "Referencia manual"])
+        self.source_combo.addItems(["Todas", "Archivo local", "Importacion de plataforma", "Referencia manual"])
         self.table = QTableWidget(0, 11, self)
         self.table.setHorizontalHeaderLabels(
-            ["Título", "Original", "Extensión", "Tamaño", "Fuente", "Estado", "Disponible", "Registro", "Proyecto", "ID", "Ruta"]
+            ["Titulo", "Original", "Extension", "Tamano", "Fuente", "Estado", "Disponible", "Registro", "Proyecto", "ID", "Ruta"]
         )
         self.table.setColumnHidden(8, True)
         self.table.setColumnHidden(9, True)
@@ -58,24 +83,35 @@ class VideosView(QWidget):
         )
         self.empty_state.hide()
 
-        buttons = QHBoxLayout()
         self.register_button = QPushButton("Registrar video")
+        self.inspect_button = QPushButton("Inspeccionar video")
+        self.reinspect_button = QPushButton("Reinspeccionar")
         self.verify_button = QPushButton("Verificar archivo")
-        self.open_button = QPushButton("Abrir ubicación")
-        self.analysis_button = QPushButton("Iniciar análisis")
+        self.open_button = QPushButton("Abrir ubicacion")
+        self.analysis_button = QPushButton("Iniciar analisis")
         self.analysis_button.setEnabled(False)
-        self.project_combo.setToolTip("Filtra los videos del proyecto activo")
-        self.status_combo.setToolTip("Filtra por estado de procesamiento")
-        self.availability_combo.setToolTip("Filtra por disponibilidad del archivo")
-        self.source_combo.setToolTip("Filtra por tipo de fuente")
-        self.search_edit.setToolTip("Busca por título, nombre original, ruta o notas")
-        self.register_button.setToolTip("Registrar un video local como metadatos")
-        self.verify_button.setToolTip("Comprobar si el archivo sigue disponible")
-        self.open_button.setToolTip("Abrir la carpeta del archivo original")
-        self.analysis_button.setToolTip("Análisis audiovisual no disponible todavía")
-        for button in (self.register_button, self.verify_button, self.open_button):
+
+        for widget, tip in (
+            (self.project_combo, "Filtra los videos del proyecto activo"),
+            (self.status_combo, "Filtra por estado de procesamiento"),
+            (self.availability_combo, "Filtra por disponibilidad del archivo"),
+            (self.source_combo, "Filtra por tipo de fuente"),
+            (self.search_edit, "Busca por titulo, nombre original, ruta o notas"),
+            (self.register_button, "Registrar un video local como metadatos"),
+            (self.inspect_button, "Ejecutar inspeccion tecnica local"),
+            (self.reinspect_button, "Forzar una nueva inspeccion tecnica"),
+            (self.verify_button, "Comprobar si el archivo sigue disponible"),
+            (self.open_button, "Abrir la carpeta del archivo original"),
+            (self.analysis_button, "Analisis audiovisual no disponible todavia"),
+        ):
+            widget.setToolTip(tip)
+        for button in (self.register_button, self.inspect_button, self.reinspect_button, self.verify_button, self.open_button):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        buttons = QHBoxLayout()
         buttons.addWidget(self.register_button)
+        buttons.addWidget(self.inspect_button)
+        buttons.addWidget(self.reinspect_button)
         buttons.addWidget(self.verify_button)
         buttons.addWidget(self.open_button)
         buttons.addWidget(self.analysis_button)
@@ -103,6 +139,8 @@ class VideosView(QWidget):
         self.source_combo.currentIndexChanged.connect(self.refresh)
         self.search_edit.textChanged.connect(self.refresh)
         self.register_button.clicked.connect(self._register_video)
+        self.inspect_button.clicked.connect(self._inspect_video)
+        self.reinspect_button.clicked.connect(self._reinspect_video)
         self.verify_button.clicked.connect(self._verify_video)
         self.open_button.clicked.connect(self._open_location)
 
@@ -124,10 +162,7 @@ class VideosView(QWidget):
             self.project_combo.addItem(project.name, project.id)
         if self.workspace.selected_project_id:
             index = self.project_combo.findData(self.workspace.selected_project_id)
-            if index >= 0:
-                self.project_combo.setCurrentIndex(index)
-            else:
-                self.project_combo.setCurrentIndex(0)
+            self.project_combo.setCurrentIndex(index if index >= 0 else 0)
         else:
             self.project_combo.setCurrentIndex(0)
         self.project_combo.blockSignals(False)
@@ -157,7 +192,7 @@ class VideosView(QWidget):
                 str(video.file_size_bytes),
                 video.source_type,
                 video.processing_status,
-                "Sí" if video.file_available else "No",
+                "Si" if video.file_available else "No",
                 video.registered_at,
                 video.project_id,
                 video.id,
@@ -196,22 +231,82 @@ class VideosView(QWidget):
                 self.table.selectRow(row)
                 break
 
+    def _inspection_for_selected_video(self):
+        video_id = self._selected_video_id() or self.workspace.selected_video_id
+        if not video_id:
+            return None
+        return self.workspace.get_video_inspection(video_id)
+
     def _sync_selection(self) -> None:
-        video_id = self._selected_video_id()
+        video_id = self._selected_video_id() or self.workspace.selected_video_id
         video = self.workspace.service.get_video(video_id) if video_id else self.workspace.selected_video()
         if video is None:
+            self.inspect_button.setEnabled(False)
+            self.reinspect_button.setEnabled(False)
             self.inspector.set_empty("Inspector", "Selecciona un video para ver sus detalles.")
             return
         self.workspace.select_video(video.id)
-        items = self.workspace.video_inspector_items(video)
+        inspection = self.workspace.get_video_inspection(video.id)
+        items = self.workspace.video_inspector_items(video, inspection)
         footer = "Registrar un video no lo copia ni lo procesa; solo guarda metadatos locales."
         self.inspector.set_items(f"Video: {video.title}", items, footer=footer)
         self.inspector.set_actions(
             [
+                ("Inspeccionar video", self._inspect_video),
+                ("Reinspeccionar", self._reinspect_video),
                 ("Verificar archivo", self._verify_video),
-                ("Abrir ubicación", self._open_location),
+                ("Abrir ubicacion", self._open_location),
             ]
         )
+        self.inspect_button.setEnabled(True)
+        self.reinspect_button.setEnabled(inspection is not None)
+
+    def _set_inspection_running(self, running: bool) -> None:
+        self.inspect_button.setEnabled(not running)
+        self.reinspect_button.setEnabled(not running and self.workspace.selected_video_id is not None)
+        self.register_button.setEnabled(not running)
+        self.verify_button.setEnabled(not running)
+        self.open_button.setEnabled(not running)
+        self.analysis_button.setEnabled(False)
+        self.inspect_button.setText("Inspeccionando..." if running else "Inspeccionar video")
+        self.reinspect_button.setText("Reinspeccionando..." if running else "Reinspeccionar")
+
+    def _run_inspection(self, force: bool) -> None:
+        video_id = self._selected_video_id() or self.workspace.selected_video_id
+        if not video_id:
+            QMessageBox.information(self, "Sin seleccion", "Selecciona un video primero.")
+            return
+        if self._inspection_thread is not None and self._inspection_thread.isRunning():
+            return
+        self._set_inspection_running(True)
+        self._inspection_thread = InspectionThread(self.workspace, video_id, force=force)
+        self._inspection_thread.result_ready.connect(self._inspection_finished)
+        self._inspection_thread.error_ready.connect(self._inspection_failed)
+        self._inspection_thread.finished.connect(self._inspection_thread.deleteLater)
+        self._inspection_thread.start()
+
+    def _inspection_finished(self, report) -> None:
+        self._set_inspection_running(False)
+        self.refresh()
+        self.workspace.select_video(report.video.id)
+        self._sync_selection()
+        QMessageBox.information(
+            self,
+            "Inspeccion tecnica",
+            f"Estado: {report.status.value}\nVigente: {'si' if not report.is_stale else 'no'}",
+        )
+        self._inspection_thread = None
+
+    def _inspection_failed(self, message: str) -> None:
+        self._set_inspection_running(False)
+        QMessageBox.warning(self, "No se pudo inspeccionar", message)
+        self._inspection_thread = None
+
+    def _inspect_video(self) -> None:
+        self._run_inspection(force=False)
+
+    def _reinspect_video(self) -> None:
+        self._run_inspection(force=True)
 
     def _register_video(self) -> None:
         project = self.workspace.selected_project()
@@ -238,7 +333,7 @@ class VideosView(QWidget):
     def _verify_video(self) -> None:
         video_id = self._selected_video_id() or self.workspace.selected_video_id
         if not video_id:
-            QMessageBox.information(self, "Sin selección", "Selecciona un video primero.")
+            QMessageBox.information(self, "Sin seleccion", "Selecciona un video primero.")
             return
         try:
             report = self.workspace.verify_video(video_id)
@@ -248,14 +343,14 @@ class VideosView(QWidget):
         self.refresh()
         QMessageBox.information(
             self,
-            "Verificación completada",
-            f"Estado: {report.status}\nMetadata modificada: {'sí' if report.metadata_changed else 'no'}",
+            "Verificacion completada",
+            f"Estado: {report.status}\nMetadata modificada: {'si' if report.metadata_changed else 'no'}",
         )
 
     def _open_location(self) -> None:
         video_id = self._selected_video_id() or self.workspace.selected_video_id
         if not video_id:
-            QMessageBox.information(self, "Sin selección", "Selecciona un video primero.")
+            QMessageBox.information(self, "Sin seleccion", "Selecciona un video primero.")
             return
         video = self.workspace.service.get_video(video_id)
         if video is None:

@@ -1,0 +1,19 @@
+{
+  "format": {
+    "filename": "audio_only.m4a",
+    "nb_streams": 1,
+    "format_name": "ipod",
+    "format_long_name": "iPod H.264 MP4 (MPEG-4 Part 14)"
+  },
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "audio",
+      "codec_name": "aac",
+      "sample_rate": "44100",
+      "channels": 1,
+      "channel_layout": "mono",
+      "bit_rate": "96000"
+    }
+  ]
+}

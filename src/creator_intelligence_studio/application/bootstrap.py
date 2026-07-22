@@ -12,6 +12,10 @@ from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     build_catalog_service,
 )
+from creator_intelligence_studio.application.services.media_inspection_service import (
+    MediaInspectionService,
+    build_media_inspection_service,
+)
 from creator_intelligence_studio.infrastructure.configuration.settings import (
     AppSettings,
     SettingsError,
@@ -25,6 +29,14 @@ from creator_intelligence_studio.infrastructure.diagnostics.models import (
 )
 from creator_intelligence_studio.infrastructure.logging.logging_setup import (
     setup_logging,
+)
+from creator_intelligence_studio.infrastructure.persistence.database import build_database
+from creator_intelligence_studio.infrastructure.persistence.migrations import run_migrations
+from creator_intelligence_studio.infrastructure.persistence.sqlite_video_inspection_repository import (
+    SQLiteVideoInspectionRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_video_repository import (
+    SQLiteVideoRepository,
 )
 from creator_intelligence_studio.presentation.cli.cli import dispatch, parse_args
 from creator_intelligence_studio.shared.paths import ProjectPaths, discover_project_root
@@ -42,9 +54,10 @@ class BootstrapContext:
 
 @dataclass(frozen=True, slots=True)
 class ServiceContext(BootstrapContext):
-    """Contexto con servicio de catálogo listo."""
+    """Contexto con servicios listos."""
 
     service: CatalogService
+    media_service: MediaInspectionService
 
 
 def _load_context() -> BootstrapContext:
@@ -68,9 +81,20 @@ def _load_context() -> BootstrapContext:
 
 def _load_service_context() -> ServiceContext:
     context = _load_context()
+    database = build_database(context.settings, context.paths)
+    with database.connect() as connection:
+        run_migrations(connection)
     service = build_catalog_service(
         settings=context.settings,
         paths=context.paths,
+        logger=context.logger,
+        database=database,
+    )
+    media_service = build_media_inspection_service(
+        settings=context.settings,
+        paths=context.paths,
+        video_repository=SQLiteVideoRepository(database),
+        inspection_repository=SQLiteVideoInspectionRepository(database),
         logger=context.logger,
     )
     return ServiceContext(
@@ -79,6 +103,7 @@ def _load_service_context() -> ServiceContext:
         diagnostic=context.diagnostic,
         logger=context.logger,
         service=service,
+        media_service=media_service,
     )
 
 
@@ -143,6 +168,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
         return dispatch(
             args,
             service=context.service,
+            media_service=context.media_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

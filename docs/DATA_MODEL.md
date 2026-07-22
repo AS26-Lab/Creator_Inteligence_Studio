@@ -2,10 +2,10 @@
 
 ## Principios
 
-- Cada creador tiene aislamiento lógico.
+- Cada creador tiene aislamiento logico.
 - Cada proyecto pertenece a un creador.
 - Cada video y cada artefacto derivado son rastreables.
-- Cada análisis debe conservar versión, origen y configuración.
+- Cada analisis debe conservar version, origen y configuracion.
 - Los datos calculados deben diferenciarse de los observables.
 
 ## Identificadores
@@ -13,205 +13,21 @@
 - Identificadores internos: UUID recomendado.
 - Los objetos persistidos deben tener `id` estable.
 - Los artefactos y modelos deben incluir `version`.
-- Las relaciones deben ser explícitas y no implícitas.
-
-## Entidades principales
-
-### Creator
-
-- identidad del creador;
-- preferencias;
-- perfil lingüístico;
-- benchmarks personales;
-- configuración de privacidad;
-- rutas y espacio de trabajo.
-
-### Project
-
-- pertenece a un creador;
-- agrupa videos, jobs, análisis y feedback;
-- define configuración de procesamiento.
-
-### MediaAsset
-
-- video original;
-- proxy;
-- audio extraído;
-- fotogramas;
-- miniaturas;
-- exportaciones.
-
-### Video
-
-- referencia al archivo original;
-- hash;
-- duración;
-- formato;
-- estado de importación;
-- vínculo con proyecto.
-
-### Job
-
-- tipo;
-- estado;
-- prioridad;
-- progreso;
-- errores;
-- timestamps;
-- resultados intermedios.
-
-### Analysis
-
-- tipo de análisis;
-- fuente;
-- versión del pipeline;
-- métricas;
-- inferencias;
-- timestamps;
-- confianza.
-
-### Artifact
-
-- transcripción;
-- segmentos;
-- escenas;
-- embeddings;
-- eventos;
-- recomendaciones;
-- reportes;
-- salidas del proveedor.
-
-### Model
-
-- nombre;
-- versión;
-- backend;
-- métricas;
-- compatibilidad;
-- estado;
-- ubicación.
-
-### Feedback
-
-- aprobaciones;
-- rechazos;
-- correcciones;
-- comentarios;
-- señal de entrenamiento;
-- vínculo con resultado o modelo.
-
-### ConnectorAccount
-
-- proveedor;
-- ámbito;
-- credenciales;
-- estado;
-- permisos;
-- sincronización.
-
-### CostRecord
-
-- tarea;
-- proveedor;
-- unidad de costo;
-- presupuesto;
-- consumo;
-- decisión de ejecución;
-- timestamps.
-
-## Relaciones
-
-```mermaid
-erDiagram
-    CREATOR ||--o{ PROJECT : owns
-    PROJECT ||--o{ VIDEO : contains
-    VIDEO ||--o{ JOB : triggers
-    JOB ||--o{ ANALYSIS : produces
-    ANALYSIS ||--o{ ARTIFACT : emits
-    CREATOR ||--o{ FEEDBACK : submits
-    PROJECT ||--o{ FEEDBACK : collects
-    CREATOR ||--o{ MODEL : personalizes
-    PROJECT ||--o{ COST_RECORD : tracks
-    CONNECTOR_ACCOUNT ||--o{ JOB : enables
-```
-
-## Estados
-
-### Job
-
-- `queued`
-- `running`
-- `paused`
-- `cancelled`
-- `failed`
-- `completed`
-
-### Analysis
-
-- `draft`
-- `partial`
-- `final`
-- `stale`
-- `superseded`
-
-### Model
-
-- `registered`
-- `candidate`
-- `validated`
-- `deprecated`
-- `blocked`
-
-## Versionado
-
-- Cada pipeline debe registrar su versión.
-- Cada modelo debe registrar su versión.
-- Cada resultado debe recordar con qué versión fue generado.
-- Las revisiones del usuario crean nueva evidencia sin borrar la anterior.
-
-## Artefactos
-
-Los artefactos mínimos contemplados son:
-
-- original;
-- hash;
-- proxy;
-- audio;
-- transcripción;
-- segmentos;
-- escenas;
-- fotogramas clave;
-- eventos acústicos;
-- características visuales;
-- embeddings;
-- análisis;
-- recomendaciones;
-- feedback;
-- historial;
-- costos;
-- tiempos.
-
-## Persistencia recomendada
-
-- metadatos estructurados;
-- archivos para binarios pesados;
-- índice local para búsqueda;
-- manifiestos por proyecto y modelo.
+- Las relaciones deben ser explicitas y no implicitas.
 
 ## Esquema inicial implementado
 
-La base SQLite inicial del MVP guarda cuatro tablas estructurales:
+### `schema_migrations`
 
-- `schema_migrations`
-- `creators`
-- `projects`
-- `video_assets`
+- `version` entero.
+- `name` texto.
+- `applied_at` UTC.
 
 ### `creators`
 
 - `id` UUID string.
 - `display_name`.
-- `slug` único.
+- `slug` unico.
 - `description` opcional.
 - `created_at` UTC.
 - `updated_at` UTC.
@@ -245,8 +61,85 @@ La base SQLite inicial del MVP guarda cuatro tablas estructurales:
 - `notes` opcional.
 - `file_available` booleano calculado o actualizado.
 
+### `video_inspections`
+
+- `id` UUID string.
+- `video_asset_id` FK unica a `video_assets.id`.
+- `inspection_status` con valores `not_inspected`, `queued`, `inspecting`, `completed`, `failed`, `file_missing`, `tool_unavailable`, `stale`.
+- `inspected_at` UTC.
+- `source_file_size_bytes`.
+- `source_file_modified_at` UTC.
+- `duration_seconds`.
+- `format_name`.
+- `format_long_name`.
+- `overall_bitrate`.
+- `stream_count`.
+- `video_stream_count`.
+- `audio_stream_count`.
+- `subtitle_stream_count`.
+- `width`.
+- `height`.
+- `display_aspect_ratio`.
+- `pixel_aspect_ratio`.
+- `frame_rate_numerator` y `frame_rate_denominator`.
+- `average_frame_rate_numerator` y `average_frame_rate_denominator`.
+- `video_codec`.
+- `video_codec_profile`.
+- `pixel_format`.
+- `video_bitrate`.
+- `audio_codec`.
+- `audio_sample_rate`.
+- `audio_channels`.
+- `audio_channel_layout`.
+- `audio_bitrate`.
+- `rotation_degrees`.
+- `metadata_json` con el JSON normalizado de `ffprobe`.
+- `ffprobe_version` y `ffprobe_path`.
+- `ffmpeg_version` y `ffmpeg_path`.
+- `thumbnail_relative_path`.
+- `error_code` y `error_message`.
+- `created_at` y `updated_at` UTC.
+
+## Relaciones
+
+```mermaid
+erDiagram
+    CREATOR ||--o{ PROJECT : owns
+    PROJECT ||--o{ VIDEO_ASSET : contains
+    VIDEO_ASSET ||--o{ VIDEO_INSPECTION : has
+```
+
+## Estado y vigencia
+
+- `video_assets.processing_status` describe el flujo de registro.
+- `video_inspections.inspection_status` describe el resultado tecnico persistido.
+- Un resultado puede ser `stale` si el archivo cambia despues de inspeccion.
+- `file_missing` indica que el archivo ya no esta disponible.
+- `tool_unavailable` indica que `ffprobe` no estaba disponible para completar la fase.
+
+## Artefactos
+
+Los artefactos minimos contemplados son:
+
+- original;
+- hash futuro;
+- proxy;
+- audio;
+- inspeccion tecnica;
+- miniatura tecnica;
+- segmentos;
+- escenas;
+- fotogramas clave;
+- eventos acusticos;
+- analisis;
+- recomendaciones;
+- feedback;
+- historial;
+- costos;
+- tiempos.
+
 ## Pendientes
 
-- formato físico exacto de persistencia;
-- motor concreto de almacenamiento;
-- estrategia final de migraciones.
+- formato fisico exacto de persistencia para artefactos grandes;
+- estrategia final de rutas portables;
+- versionado adicional de inspeccion y miniaturas.

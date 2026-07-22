@@ -1,0 +1,59 @@
+{
+  "format": {
+    "filename": "sample.mp4",
+    "nb_streams": 2,
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "format_long_name": "QuickTime / MOV",
+    "duration": "10.000000",
+    "bit_rate": "1000000",
+    "tags": {
+      "title": "Sample"
+    }
+  },
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "video",
+      "codec_name": "h264",
+      "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+      "profile": "High",
+      "width": 1920,
+      "height": 1080,
+      "display_aspect_ratio": "16:9",
+      "sample_aspect_ratio": "1:1",
+      "pix_fmt": "yuv420p",
+      "bit_rate": "800000",
+      "r_frame_rate": "30000/1001",
+      "avg_frame_rate": "30000/1001",
+      "tags": {
+        "rotate": "90"
+      },
+      "disposition": {
+        "default": 1
+      }
+    },
+    {
+      "index": 1,
+      "codec_type": "audio",
+      "codec_name": "aac",
+      "codec_long_name": "AAC (Advanced Audio Coding)",
+      "sample_rate": "48000",
+      "channels": 2,
+      "channel_layout": "stereo",
+      "bit_rate": "128000",
+      "disposition": {
+        "default": 1
+      }
+    }
+  ],
+  "chapters": [
+    {
+      "id": 0,
+      "start_time": "0.000000",
+      "end_time": "10.000000",
+      "tags": {
+        "title": "Chapter 1"
+      }
+    }
+  ]
+}

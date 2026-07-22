@@ -1,17 +1,14 @@
 # UI Map - Creator Intelligence Studio
 
-## Navegación principal
+## Navegacion principal
 
 ```mermaid
 flowchart LR
-    Home[Inicio] --> Creators[Creador]
+    Home[Inicio] --> Creators[Creadores]
     Home --> Projects[Proyectos]
-    Home --> Media[Videoteca]
-    Home --> Jobs[Jobs]
-    Home --> Insights[Insights]
-    Home --> Connectors[Conectores]
-    Home --> Settings[Configuración]
-    Home --> Scripts[Script & Voice Studio]
+    Home --> Media[Videos]
+    Home --> System[Sistema]
+    Home --> Future[Proximamente]
 ```
 
 ## Pantallas
@@ -20,158 +17,95 @@ flowchart LR
 
 - estado del entorno;
 - estado de GPU y fallback;
-- accesos rápidos;
-- últimos trabajos;
-- alertas relevantes.
+- accesos rapidos;
+- ultimos trabajos;
+- actividad reciente;
+- resumen de almacenamiento y herramientas.
 
-### Creador
+### Creadores
 
-- alta y edición de creador;
-- preferencias;
-- privacidad;
-- benchmarks personales;
+- alta y edicion de creador;
+- preferencias futuras;
+- privacidad futura;
+- benchmarks personales futuros;
 - historial resumido.
 
 ### Proyectos
 
 - lista de proyectos;
-- creación y apertura;
+- creacion y apertura;
 - vista del estado de procesamiento;
 - artefactos principales;
-- comparación entre versiones.
+- comparacion entre versiones.
 
-### Videoteca
+### Videos
 
-- importación de videos;
-- registro de fuentes;
-- hash y deduplicación;
-- estado de ingestión;
-- proxies y derivados.
+- registro de videos locales como metadatos;
+- lista filtrable por proyecto, estado, disponibilidad y fuente;
+- inspector contextual con metadatos tecnicos;
+- verificacion de archivo;
+- apertura de ubicacion;
+- inspeccion tecnica con `ffprobe`;
+- miniatura tecnica inicial cuando exista `ffmpeg`;
+- estado `stale` cuando el archivo cambia tras la inspeccion.
 
-### Jobs
+### Sistema
 
-- cola;
-- progreso;
-- cancelación;
-- reintentos;
-- errores;
-- trazabilidad.
-
-### Insights
-
-- transcripción;
-- escenas;
-- audio;
-- narrativa;
-- clips;
-- títulos;
-- miniaturas;
-- rendimiento.
-
-### Conectores
-
-- conexión por proveedor;
-- estado de credenciales;
-- sincronización;
-- límites;
-- errores.
-
-### Configuración
-
-- rutas;
+- diagnostico del entorno;
+- hardware;
 - GPU;
-- modos local e híbrido;
-- presupuestos;
-- privacidad;
-- diagnóstico.
+- CUDA;
+- base local;
+- espacio disponible;
+- disponibilidad de `ffprobe` y `ffmpeg`.
 
-### Script & Voice Studio
+### Proximamente
 
-- módulo separado y opcional;
-- acceso solo cuando el usuario lo habilita;
-- nunca bloquea el uso del resto de la aplicación.
+- Analisis;
+- Clips;
+- Miniaturas avanzadas;
+- Audiencia;
+- Tendencias;
+- Script & Voice Studio;
+- Modelos.
 
-## Funciones por pantalla
-
-- cada pantalla debe mostrar estado vacío;
-- cada pantalla debe mostrar progreso;
-- cada pantalla debe mostrar errores con causa y acción sugerida;
-- cada pantalla debe evitar ocultar fallos como si fueran éxito.
-
-## Estados vacíos
+## Estados vacios
 
 - sin creadores;
 - sin proyectos;
 - sin videos;
 - sin jobs activos;
-- sin conexión a un proveedor;
 - sin CUDA disponible;
 - sin modelos registrados;
-- sin feedback todavía.
+- sin feedback todavia;
+- sin inspeccion tecnica aun;
+- sin herramientas multimedia disponibles.
 
-## Progreso
+## Separacion de Script & Voice Studio
 
-- barra por job;
-- porcentaje por fase;
-- tiempo estimado cuando exista suficiente información;
-- detalle de fase actual;
-- opción de cancelar.
+- debe aparecer como modulo opcional;
+- no debe mezclarse con el flujo base de analisis;
+- su activacion no debe afectar la navegacion principal;
+- sus datos, modelos y metricas deben quedar aislados.
 
-## Errores
-
-- fallo de importación;
-- fallo de GPU;
-- fallo de proveedor;
-- fallo de credenciales;
-- fallo de IO;
-- fallo de validación;
-- fallo de permisos.
-
-Los errores deben explicarse en lenguaje operativo, no como mensajes genéricos.
-
-## Configuración
-
-- configuración global;
-- configuración por creador;
-- configuración por proyecto;
-- configuración por job;
-- configuración por proveedor.
-
-## Separación de Script & Voice Studio
-
-- debe aparecer como módulo opcional;
-- no debe mezclarse con el flujo base de análisis;
-- su activación no debe afectar la navegación principal;
-- sus datos, modelos y métricas deben quedar aislados.
-
-## Arquitectura de presentación
+## Arquitectura de presentacion
 
 - barra lateral izquierda con secciones funcionales y futuras deshabilitadas;
-- barra superior con selector de creador, selector de proyecto, búsqueda visual, estado de procesamiento, GPU e indicadores operativos;
-- área principal con `QStackedWidget`;
+- barra superior con selector de creador, selector de proyecto, busqueda visual, estado de procesamiento, GPU e indicadores operativos;
+- area principal con `QStackedWidget`;
 - inspector contextual derecho para detalles y acciones;
 - barra inferior compacta para estado operativo.
 
 ## Sistema visual
 
-- identidad fría y técnica;
+- identidad fria y tecnica;
 - fondo azul marino muy oscuro;
-- paneles azul grisáceo oscuro;
-- superficies secundarias grafito frío;
-- acento principal azul eléctrico o cian;
+- paneles azul grisaceo oscuro;
+- superficies secundarias grafito frio;
+- acento principal azul electrico o cian;
 - acento ML violeta;
-- éxito teal;
-- advertencias ámbar;
+- exito teal;
+- advertencias ambar;
 - errores rojos;
 - texto principal blanco suave;
 - texto secundario gris azulado claro.
-
-Reglas:
-
-- densidad profesional;
-- bordes redondeados moderados;
-- separadores finos;
-- sombras sutiles;
-- tablas legibles;
-- sin estética de lujo;
-- sin imágenes decorativas.

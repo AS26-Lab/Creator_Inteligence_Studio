@@ -119,6 +119,7 @@ class BootstrapTests(unittest.TestCase):
                 diagnostic=diagnostic,
                 logger=logging.getLogger("test"),
                 service=MagicMock(),
+                media_service=MagicMock(),
             )
 
             with patch(
@@ -148,6 +149,7 @@ class BootstrapTests(unittest.TestCase):
                 diagnostic=diagnostic,
                 logger=logging.getLogger("test"),
                 service=MagicMock(),
+                media_service=MagicMock(),
             )
 
             with patch(

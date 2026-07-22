@@ -1,21 +1,27 @@
 # Creator Intelligence Studio
 
-Creator Intelligence Studio es una aplicación de escritorio para Windows orientada al análisis inteligente de contenido audiovisual para creadores.
+Creator Intelligence Studio es una aplicacion de escritorio para Windows orientada al analisis inteligente de contenido audiovisual para creadores.
 
 ## Estado actual
 
-Este repositorio está en una etapa temprana. Ya existe una base ejecutable, diagnóstica, un primer flujo vertical funcional para creadores, proyectos y videos locales, y una interfaz de escritorio funcional con PySide6.
+El proyecto ya dispone de:
 
-Todavía no existen:
+- base ejecutable con Python 3.11;
+- catalogo de creadores, proyectos y videos locales;
+- GUI con PySide6;
+- diagnostico del entorno;
+- persistencia SQLite;
+- inspeccion tecnica local de videos con `ffprobe`;
+- miniatura tecnica inicial en caché local con `ffmpeg` cuando esta disponible.
 
-- análisis audiovisual;
+Todavia no existen:
+
+- analisis audiovisual con IA;
 - PyTorch;
 - CUDA Toolkit;
-- FFmpeg;
 - modelos descargados;
 - conectores reales;
-- Script & Voice Studio implementado como flujo obligatorio;
-- procesamiento creativo final.
+- Script & Voice Studio como flujo obligatorio.
 
 ## Plataforma principal
 
@@ -28,11 +34,16 @@ AMD, ROCm, DirectML, Vulkan y macOS quedan fuera del MVP.
 
 ## Requisitos actuales
 
-- Windows 11 recomendado para el uso final, aunque este entorno de desarrollo está en Windows 10 Pro 22H2.
+- Windows 11 recomendado para uso final, aunque este entorno de desarrollo esta en Windows 10 Pro 22H2.
 - Python 3.11.9 dentro de `.venv`
 - PySide6 instalado en el entorno virtual
 - Git instalado
-- No se requieren dependencias externas adicionales en esta etapa
+- `ffprobe` requerido para la inspeccion tecnica
+- `ffmpeg` opcional para miniaturas tecnicas iniciales
+
+La localizacion de herramientas multimedia puede configurarse mas adelante con
+`ffmpeg_path`, `ffprobe_path` o `ffmpeg_bin_directory`, o mediante las
+variables `CIS_FFMPEG_PATH`, `CIS_FFPROBE_PATH` y `CIS_FFMPEG_BIN_DIRECTORY`.
 
 ## Arranque de la GUI
 
@@ -48,7 +59,7 @@ python -m creator_intelligence_studio --gui
 
 ## Estado funcional actual
 
-La aplicación ya permite:
+La aplicacion ya permite:
 
 - crear creadores;
 - listar y consultar creadores;
@@ -59,8 +70,11 @@ La aplicación ya permite:
 - registrar videos locales como metadatos;
 - listar y consultar videos registrados;
 - verificar si un archivo sigue disponible;
-- abrir una interfaz de escritorio funcional con navegación, inspector y diagnóstico del sistema;
-- persistir toda la información en SQLite local.
+- inspeccionar tecnicamente un video registrado;
+- guardar un resumen tecnico real de `ffprobe`;
+- generar una miniatura tecnica inicial en caché local cuando `ffmpeg` esta disponible;
+- abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
+- persistir toda la informacion en SQLite local.
 
 ## Base local
 
@@ -68,9 +82,11 @@ La base estructurada inicial se guarda en:
 
 `data/creator_intelligence_studio.db`
 
-El archivo está ignorado por Git. No debe subirse al repositorio.
+El archivo esta ignorado por Git. No debe subirse al repositorio.
 
-Advertencia: en esta primera versión el registro conserva la ruta absoluta normalizada del archivo local. Eso es funcional para desarrollo, pero no es una estrategia portable final.
+Advertencia: en esta primera version el registro conserva la ruta absoluta normalizada del archivo local. Eso es funcional para desarrollo, pero no es una estrategia portable final.
+
+La inspeccion tecnica escribe artefactos derivados en `cache/videos/<video-id>/inspection/` y `cache/videos/<video-id>/thumbnails/`. Ese caché permanece local y no debe subirse.
 
 ## Activar `.venv`
 
@@ -86,7 +102,7 @@ En `cmd.exe`:
 .\.venv\Scripts\activate.bat
 ```
 
-## Ejecutar la aplicación
+## Ejecutar la aplicacion
 
 ```bat
 scripts\run_app.bat
@@ -98,7 +114,7 @@ O directamente:
 python -m creator_intelligence_studio
 ```
 
-## Ejecutar el diagnóstico en JSON
+## Ejecutar el diagnostico en JSON
 
 ```bat
 python -m creator_intelligence_studio --diagnostic-json
@@ -125,10 +141,21 @@ python -m creator_intelligence_studio project archive <project_id>
 ## Comandos de videos
 
 ```bat
-python -m creator_intelligence_studio video register --project <project_id> --file "C:\ruta\video.mp4" --title "Título provisional"
+python -m creator_intelligence_studio video register --project <project_id> --file "C:\ruta\video.mp4" --title "Titulo provisional"
 python -m creator_intelligence_studio video list --project <project_id>
 python -m creator_intelligence_studio video show <video_id>
 python -m creator_intelligence_studio video verify <video_id>
+```
+
+## Comandos de medios
+
+```bat
+python -m creator_intelligence_studio media tools
+python -m creator_intelligence_studio media tools --json
+python -m creator_intelligence_studio media inspect --video-id <video_id>
+python -m creator_intelligence_studio media inspect --video-id <video_id> --force
+python -m creator_intelligence_studio media show --video-id <video_id>
+python -m creator_intelligence_studio media show --video-id <video_id> --json
 ```
 
 ## Ejecutar pruebas
@@ -145,21 +172,23 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ## Estructura principal
 
-- `docs/`: documentación maestra y diagnósticos.
+- `docs/`: documentacion maestra y diagnósticos.
 - `src/creator_intelligence_studio/`: paquete principal del proyecto.
 - `tests/`: pruebas unitarias.
-- `config/`: configuración por defecto.
+- `config/`: configuracion por defecto.
 - `scripts/`: scripts de arranque y pruebas en Windows.
-- `data/`, `logs/`, `models/`, `artifacts/`: carpetas operativas locales.
+- `data/`, `logs/`, `models/`, `artifacts/`, `cache/`: carpetas operativas locales.
 - `data/creator_intelligence_studio.db`: base SQLite local estructurada.
 
 ## Script & Voice Studio
 
-Script & Voice Studio es un módulo opcional. No es necesario para analizar videos, revisar métricas, administrar proyectos ni usar el núcleo del sistema.
+Script & Voice Studio es un modulo opcional. No es necesario para analizar videos, revisar metricas, administrar proyectos ni usar el nucleo del sistema.
 
 ## Advertencia sobre CUDA y PyTorch
 
-CUDA Toolkit y PyTorch todavía no están instalados en este repositorio. La aplicación actual solo realiza diagnóstico básico y preparación de rutas, logging e interfaz.
+CUDA Toolkit y PyTorch todavia no estan instalados en este repositorio. La aplicacion actual solo realiza diagnostico basico, catalogo, inspeccion tecnica local con herramientas externas si existen, preparacion de rutas, logging e interfaz.
+
+`ffprobe` es la herramienta requerida para la inspeccion tecnica. `ffmpeg` solo se usa para la miniatura inicial. El video original nunca se copia ni se modifica.
 
 ## Seguridad y repositorio
 
@@ -167,4 +196,4 @@ No subas videos, modelos, datos privados, credenciales ni la base SQLite al repo
 
 ## Borrado manual de una base de desarrollo
 
-Si necesitas reiniciar los datos de desarrollo, borra manualmente `data/creator_intelligence_studio.db` solo cuando estés seguro de que no necesitas conservar la información. No hay borrado automático en la aplicación.
+Si necesitas reiniciar los datos de desarrollo, borra manualmente `data/creator_intelligence_studio.db` solo cuando estes seguro de que no necesitas conservar la informacion. No hay borrado automatico en la aplicacion.

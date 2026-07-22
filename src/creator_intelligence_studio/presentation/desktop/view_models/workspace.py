@@ -8,6 +8,11 @@ from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     VideoVerificationReport,
 )
+from creator_intelligence_studio.application.services.media_inspection_service import (
+    MediaInspectionService,
+    MediaToolsReport,
+    VideoInspectionReport,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.projects.entities import ProjectStatus
 from creator_intelligence_studio.domain.videos.entities import (
@@ -46,6 +51,22 @@ def _humanize_bytes(value: int | None) -> str:
     return f"{amount:.1f} {units[unit_index]}"
 
 
+def _humanize_seconds(value: float | None) -> str:
+    if value is None:
+        return "No verificada"
+    if value < 60:
+        return f"{value:.1f} s"
+    minutes = int(value // 60)
+    seconds = value % 60
+    return f"{minutes} min {seconds:.1f} s"
+
+
+def _humanize_hz(value: int | None) -> str:
+    if value is None:
+        return "No verificada"
+    return f"{value} Hz"
+
+
 def _format_datetime(value) -> str:
     return to_iso_z(value) if value is not None else "No verificado"
 
@@ -68,7 +89,7 @@ def _project_type_label(value: str) -> str:
         "long_form": "Largo",
         "short_form": "Corto",
         "mixed": "Mixto",
-        "research": "Investigación",
+        "research": "Investigacion",
     }.get(value, value)
 
 
@@ -89,9 +110,19 @@ def _video_status_label(video: VideoAsset) -> str:
 def _source_type_label(value: VideoSourceType) -> str:
     return {
         VideoSourceType.LOCAL_FILE: "Archivo local",
-        VideoSourceType.PLATFORM_IMPORT: "Importación de plataforma",
+        VideoSourceType.PLATFORM_IMPORT: "Importacion de plataforma",
         VideoSourceType.MANUAL_REFERENCE: "Referencia manual",
     }[value]
+
+
+def _fps_text(report: VideoInspectionReport | None) -> str:
+    if report is None or report.summary is None:
+        return "No verificado"
+    summary = report.summary
+    value = summary.average_frame_rate.to_float() or summary.frame_rate.to_float()
+    if value is None:
+        return "No verificado"
+    return f"{value:.3f} fps"
 
 
 class WorkspaceViewModel:
@@ -101,11 +132,13 @@ class WorkspaceViewModel:
         self,
         *,
         service: CatalogService,
+        media_service: MediaInspectionService,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
     ) -> None:
         self.service = service
+        self.media_service = media_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -222,6 +255,21 @@ class WorkspaceViewModel:
         self.activity_log.insert(0, f"Verificacion de video: {report.status}")
         return report
 
+    def inspect_video(self, video_id: str, force: bool = False) -> VideoInspectionReport:
+        report = self.media_service.inspect_video(video_id, force=force)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Inspeccion tecnica: {report.status.value}")
+        return report
+
+    def get_video_inspection(self, video_id: str) -> VideoInspectionReport | None:
+        return self.media_service.get_video_inspection(video_id)
+
+    def is_inspection_stale(self, video_id: str) -> bool:
+        return self.media_service.is_inspection_stale(video_id)
+
+    def media_tools(self) -> MediaToolsReport:
+        return self.media_service.verify_media_tools()
+
     def creator_rows(self) -> list[CreatorRowViewModel]:
         creators = self.service.list_creators()
         projects = self.service.list_projects()
@@ -336,7 +384,11 @@ class WorkspaceViewModel:
         pending_videos = [
             video
             for video in videos
-            if video.processing_status in {VideoProcessingStatus.REGISTERED, VideoProcessingStatus.QUEUED, VideoProcessingStatus.PROCESSING}
+            if video.processing_status in {
+                VideoProcessingStatus.REGISTERED,
+                VideoProcessingStatus.QUEUED,
+                VideoProcessingStatus.PROCESSING,
+            }
         ]
         active_creator = self.selected_creator()
         active_project = self.selected_project()
@@ -371,7 +423,7 @@ class WorkspaceViewModel:
                 title="Almacenamiento disponible",
                 value=_humanize_bytes(self.paths.free_space_bytes()),
                 detail="Espacio libre en la unidad del proyecto",
-                icon="▤",
+                icon="¤",
             ),
             CardViewModel(
                 title="GPU detectada",
@@ -406,25 +458,31 @@ class WorkspaceViewModel:
 
     def system_items(self) -> list[SystemItemViewModel]:
         gpu = self.diagnostic.gpu_devices[0] if self.diagnostic.gpu_devices else None
+        tools = self.media_tools()
         return [
-            SystemItemViewModel("Aplicación", f"{self.diagnostic.application_name} {self.diagnostic.application_version}"),
+            SystemItemViewModel("Aplicacion", f"{self.diagnostic.application_name} {self.diagnostic.application_version}"),
             SystemItemViewModel("Sistema operativo", f"{self.diagnostic.os_name} {self.diagnostic.os_version or 'no verificado'}"),
             SystemItemViewModel("Arquitectura", self.diagnostic.os_architecture or "No verificado"),
             SystemItemViewModel("CPU", self.diagnostic.cpu_reported or "No verificado"),
-            SystemItemViewModel("Procesadores lógicos", str(self.diagnostic.logical_processors or "No verificado")),
+            SystemItemViewModel("Procesadores logicos", str(self.diagnostic.logical_processors or "No verificado")),
             SystemItemViewModel("Python", self.diagnostic.python_version),
-            SystemItemViewModel("Intérprete", self.diagnostic.python_executable),
+            SystemItemViewModel("Interprete", self.diagnostic.python_executable),
             SystemItemViewModel("Git", self.diagnostic.git_version or "No verificado"),
             SystemItemViewModel("nvidia-smi", "Disponible" if self.diagnostic.nvidia_smi_available else "No disponible"),
             SystemItemViewModel("GPU NVIDIA", gpu.name if gpu else "No verificada"),
             SystemItemViewModel("VRAM", f"{gpu.memory_total_mib} MiB" if gpu and gpu.memory_total_mib is not None else "No verificada"),
-            SystemItemViewModel("Versión del controlador NVIDIA", gpu.driver_version if gpu and gpu.driver_version else (self.diagnostic.nvidia_driver_version or "No verificado")),
+            SystemItemViewModel(
+                "Version del controlador NVIDIA",
+                gpu.driver_version if gpu and gpu.driver_version else (self.diagnostic.nvidia_driver_version or "No verificado"),
+            ),
             SystemItemViewModel("Detectada por el controlador", self.diagnostic.cuda_version_reported or "No verificado"),
             SystemItemViewModel("Runtime CUDA", "No verificado" if self.diagnostic.state.cuda_runtime_not_verified else "Verificado"),
             SystemItemViewModel("Base local", str(self.paths.database_path)),
             SystemItemViewModel("Espacio libre", f"{_humanize_bytes(self.paths.free_space_bytes())} disponibles"),
-            SystemItemViewModel("Modo básico", "Disponible" if self.diagnostic.state.ready_for_basic_mode else "No disponible"),
+            SystemItemViewModel("Modo basico", "Disponible" if self.diagnostic.state.ready_for_basic_mode else "No disponible"),
             SystemItemViewModel("Backend activo", self.diagnostic.preferred_compute_backend),
+            SystemItemViewModel("ffmpeg", f"{tools.ffmpeg.version or 'No verificada'}"),
+            SystemItemViewModel("ffprobe", f"{tools.ffprobe.version or 'No verificada'}"),
         ]
 
     def creator_inspector_items(self, creator) -> list[InspectorItemViewModel]:
@@ -435,7 +493,7 @@ class WorkspaceViewModel:
             InspectorItemViewModel("Nombre", creator.display_name),
             InspectorItemViewModel("Slug", creator.slug),
             InspectorItemViewModel("Estado", _creator_status_label(creator.status)),
-            InspectorItemViewModel("Descripción", creator.description or "Sin descripción"),
+            InspectorItemViewModel("Descripcion", creator.description or "Sin descripcion"),
         ]
 
     def project_inspector_items(self, project) -> list[InspectorItemViewModel]:
@@ -447,24 +505,65 @@ class WorkspaceViewModel:
             InspectorItemViewModel("Nombre", project.name),
             InspectorItemViewModel("Tipo", _project_type_label(project.project_type.value)),
             InspectorItemViewModel("Estado", _project_status_label(project.status)),
-            InspectorItemViewModel("Descripción", project.description or "Sin descripción"),
+            InspectorItemViewModel("Descripcion", project.description or "Sin descripcion"),
         ]
 
-    def video_inspector_items(self, video) -> list[InspectorItemViewModel]:
+    def video_inspector_items(self, video, inspection_report: VideoInspectionReport | None = None) -> list[InspectorItemViewModel]:
         if video is None:
             return []
-        return [
+        items = [
             InspectorItemViewModel("ID", video.id),
-            InspectorItemViewModel("Título", video.title),
+            InspectorItemViewModel("Titulo", video.title),
             InspectorItemViewModel("Ruta local", video.source_path),
             InspectorItemViewModel("Proyecto", video.project_id),
             InspectorItemViewModel("Nombre original", video.original_filename),
-            InspectorItemViewModel("Extensión", video.extension),
-            InspectorItemViewModel("Tamaño", _humanize_bytes(video.file_size_bytes)),
+            InspectorItemViewModel("Extension", video.extension),
+            InspectorItemViewModel("Tamano", _humanize_bytes(video.file_size_bytes)),
             InspectorItemViewModel("Fuente", _source_type_label(video.source_type)),
             InspectorItemViewModel("Estado", _video_status_label(video)),
-            InspectorItemViewModel("Disponible", "Sí" if video.file_available else "No"),
+            InspectorItemViewModel("Disponible", "Si" if video.file_available else "No"),
             InspectorItemViewModel("Registro", _format_datetime(video.registered_at)),
             InspectorItemViewModel("Modificado", _format_datetime(video.file_modified_at)),
             InspectorItemViewModel("Notas", video.notes or "Sin notas"),
         ]
+        if inspection_report is not None:
+            summary = inspection_report.summary
+            items.extend(
+                [
+                    InspectorItemViewModel("Estado de inspeccion", inspection_report.status.value),
+                    InspectorItemViewModel("Vigencia", "Stale" if inspection_report.is_stale else "Vigente"),
+                    InspectorItemViewModel("Duracion", _humanize_seconds(summary.duration_seconds if summary else None)),
+                    InspectorItemViewModel(
+                        "Resolucion",
+                        f"{summary.width}x{summary.height}" if summary and summary.width and summary.height else "No verificada",
+                    ),
+                    InspectorItemViewModel("FPS", _fps_text(inspection_report)),
+                    InspectorItemViewModel("Codec de video", summary.video_codec if summary and summary.video_codec else "No verificado"),
+                    InspectorItemViewModel("Codec de audio", summary.audio_codec if summary and summary.audio_codec else "No verificado"),
+                    InspectorItemViewModel(
+                        "Canales",
+                        str(summary.audio_channels) if summary and summary.audio_channels is not None else "No verificados",
+                    ),
+                    InspectorItemViewModel(
+                        "Frecuencia de muestreo",
+                        _humanize_hz(summary.audio_sample_rate if summary else None),
+                    ),
+                    InspectorItemViewModel(
+                        "Bitrate",
+                        f"{summary.overall_bitrate} bps" if summary and summary.overall_bitrate is not None else "No verificado",
+                    ),
+                    InspectorItemViewModel(
+                        "Streams",
+                        str(summary.stream_count) if summary else "No verificado",
+                    ),
+                    InspectorItemViewModel(
+                        "Ultima inspeccion",
+                        _format_datetime(inspection_report.inspection.inspected_at) if inspection_report.inspection else "No verificada",
+                    ),
+                    InspectorItemViewModel(
+                        "Miniatura inicial",
+                        inspection_report.thumbnail_path or "No disponible",
+                    ),
+                ]
+            )
+        return items

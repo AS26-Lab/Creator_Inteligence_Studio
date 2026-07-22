@@ -10,5 +10,8 @@
   "allow_cpu_basic_mode": true,
   "external_ai_enabled": false,
   "database_filename": "creator_intelligence_studio.db",
-  "database_timeout_seconds": 5.0
+  "database_timeout_seconds": 5.0,
+  "ffmpeg_path": null,
+  "ffprobe_path": null,
+  "ffmpeg_bin_directory": null
 }

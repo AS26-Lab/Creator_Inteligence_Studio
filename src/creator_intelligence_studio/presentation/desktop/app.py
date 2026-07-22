@@ -24,6 +24,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
 
     workspace = WorkspaceViewModel(
         service=context.service,
+        media_service=context.media_service,
         diagnostic=context.diagnostic,
         settings=context.settings,
         paths=context.paths,

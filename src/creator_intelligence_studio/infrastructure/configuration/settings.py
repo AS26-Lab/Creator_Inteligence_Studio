@@ -33,6 +33,9 @@ class AppSettings:
     external_ai_enabled: bool
     database_filename: str = "creator_intelligence_studio.db"
     database_timeout_seconds: float = 5.0
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
+    ffmpeg_bin_directory: str | None = None
 
     @classmethod
     def from_file(cls, config_path: Path) -> "AppSettings":
@@ -73,6 +76,14 @@ class AppSettings:
                 return default
             return value.strip()
 
+        def optional_path(key: str) -> str | None:
+            value = payload.get(key)
+            if value is None:
+                return None
+            if not isinstance(value, str) or not value.strip():
+                raise SettingsError(f"El campo '{key}' debe ser una cadena no vacia.")
+            return value.strip()
+
         def optional_number(key: str, default: float) -> float:
             value = payload.get(key, default)
             if isinstance(value, bool):
@@ -94,6 +105,9 @@ class AppSettings:
             external_ai_enabled=require_bool("external_ai_enabled"),
             database_filename=optional_str("database_filename", "creator_intelligence_studio.db"),
             database_timeout_seconds=optional_number("database_timeout_seconds", 5.0),
+            ffmpeg_path=optional_path("ffmpeg_path"),
+            ffprobe_path=optional_path("ffprobe_path"),
+            ffmpeg_bin_directory=optional_path("ffmpeg_bin_directory"),
         )
         settings.validate()
         return settings
@@ -130,6 +144,20 @@ class AppSettings:
             "artifacts_directory": resolve_configured_path(
                 project_root, self.artifacts_directory
             ),
+        }
+
+    def resolved_media_tool_paths(self, project_root: Path) -> dict[str, Path | None]:
+        """Resuelve rutas configuradas para herramientas multimedia."""
+
+        def resolve_optional_path(configured_value: str | None) -> Path | None:
+            if configured_value is None:
+                return None
+            return resolve_configured_path(project_root, configured_value)
+
+        return {
+            "ffmpeg_path": resolve_optional_path(self.ffmpeg_path),
+            "ffprobe_path": resolve_optional_path(self.ffprobe_path),
+            "ffmpeg_bin_directory": resolve_optional_path(self.ffmpeg_bin_directory),
         }
 
 

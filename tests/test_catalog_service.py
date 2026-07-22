@@ -6,6 +6,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from creator_intelligence_studio.application.bootstrap import (
@@ -78,6 +79,27 @@ def make_service(root: Path):
     return service, settings, paths
 
 
+def make_media_service():
+    tool = SimpleNamespace(path="C:/Tools/ffmpeg/bin/ffprobe.exe", version="ffprobe version", available=True, error_message=None)
+    other_tool = SimpleNamespace(path="C:/Tools/ffmpeg/bin/ffmpeg.exe", version="ffmpeg version", available=True, error_message=None)
+    report = SimpleNamespace(ffmpeg=other_tool, ffprobe=tool, warnings=(), available=True)
+
+    class _FakeMediaService:
+        def verify_media_tools(self):
+            return report
+
+        def get_video_inspection(self, video_id: str):
+            return None
+
+        def inspect_video(self, video_id: str, force: bool = False):
+            raise AssertionError("No se esperaba inspeccion en esta prueba.")
+
+        def is_inspection_stale(self, video_id: str) -> bool:
+            return False
+
+    return _FakeMediaService()
+
+
 class CatalogServiceTests(unittest.TestCase):
     def test_migration_initial(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -90,8 +112,9 @@ class CatalogServiceTests(unittest.TestCase):
                 versions = connection.execute(
                     "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
                 ).fetchall()
-            self.assertEqual(len(versions), 1)
+            self.assertEqual(len(versions), 2)
             self.assertEqual(versions[0]["version"], 1)
+            self.assertEqual(versions[1]["version"], 2)
             self.assertEqual(versions[0]["name"], "initial_schema")
 
     def test_migrations_idempotent(self) -> None:
@@ -106,7 +129,7 @@ class CatalogServiceTests(unittest.TestCase):
                 count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-            self.assertEqual(count, 1)
+            self.assertEqual(count, 2)
 
     def test_foreign_keys_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -407,6 +430,7 @@ class CatalogServiceTests(unittest.TestCase):
                 diagnostic=diagnostic,
                 logger=logging.getLogger("test"),
                 service=service,
+                media_service=make_media_service(),
             )
             bootstrap_context = BootstrapContext(
                 settings=settings,
@@ -438,4 +462,3 @@ class CatalogServiceTests(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             self.assertIn("Creador creado correctamente", stdout.getvalue())
-

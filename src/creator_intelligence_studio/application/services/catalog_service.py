@@ -227,10 +227,15 @@ class CatalogService:
         )
 
 
-def build_catalog_service(settings: AppSettings, paths: ProjectPaths, logger: logging.Logger | None = None) -> CatalogService:
+def build_catalog_service(
+    settings: AppSettings,
+    paths: ProjectPaths,
+    logger: logging.Logger | None = None,
+    database=None,
+) -> CatalogService:
     """Construye el servicio de catálogo con SQLite local."""
 
-    database = build_database(settings, paths)
+    database = database or build_database(settings, paths)
     with database.connect() as connection:
         run_migrations(connection)
     return CatalogService(

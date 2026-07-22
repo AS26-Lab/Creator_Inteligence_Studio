@@ -102,7 +102,82 @@ def migration_1(connection: sqlite3.Connection) -> None:
     )
 
 
-MIGRATIONS: tuple[Migration, ...] = (Migration(version=1, name="initial_schema"),)
+def migration_2(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS video_inspections (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            inspection_status TEXT NOT NULL CHECK (
+                inspection_status IN (
+                    'not_inspected',
+                    'queued',
+                    'inspecting',
+                    'completed',
+                    'failed',
+                    'file_missing',
+                    'tool_unavailable',
+                    'stale'
+                )
+            ),
+            inspected_at TEXT NOT NULL,
+            source_file_size_bytes INTEGER,
+            source_file_modified_at TEXT,
+            duration_seconds REAL,
+            format_name TEXT,
+            format_long_name TEXT,
+            overall_bitrate INTEGER,
+            stream_count INTEGER,
+            video_stream_count INTEGER,
+            audio_stream_count INTEGER,
+            subtitle_stream_count INTEGER,
+            width INTEGER,
+            height INTEGER,
+            display_aspect_ratio TEXT,
+            pixel_aspect_ratio TEXT,
+            frame_rate_numerator INTEGER,
+            frame_rate_denominator INTEGER,
+            average_frame_rate_numerator INTEGER,
+            average_frame_rate_denominator INTEGER,
+            video_codec TEXT,
+            video_codec_profile TEXT,
+            pixel_format TEXT,
+            video_bitrate INTEGER,
+            audio_codec TEXT,
+            audio_sample_rate INTEGER,
+            audio_channels INTEGER,
+            audio_channel_layout TEXT,
+            audio_bitrate INTEGER,
+            rotation_degrees INTEGER,
+            metadata_json TEXT NOT NULL,
+            ffprobe_version TEXT,
+            ffprobe_path TEXT,
+            ffmpeg_version TEXT,
+            ffmpeg_path TEXT,
+            thumbnail_relative_path TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_video_inspections_video_asset_id ON video_inspections(video_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_video_inspections_status ON video_inspections(inspection_status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_video_inspections_inspected_at ON video_inspections(inspected_at)"
+    )
+
+
+MIGRATIONS: tuple[Migration, ...] = (
+    Migration(version=1, name="initial_schema"),
+    Migration(version=2, name="video_inspections"),
+)
 
 
 def _applied_migrations(connection: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -141,6 +216,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             with connection:
                 if migration.version == 1:
                     migration_1(connection)
+                elif migration.version == 2:
+                    migration_2(connection)
                 else:  # pragma: no cover - no hay más migraciones todavía
                     migration.apply(connection)
                 connection.execute(
@@ -154,4 +231,3 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             raise MigrationError(
                 f"No se pudo aplicar la migración {migration.version}: {migration.name}"
             ) from exc
-
