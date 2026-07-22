@@ -96,6 +96,7 @@ class VideosView(QWidget):
         open_acoustic_callback: Callable[[], None] | None = None,
         open_visual_callback: Callable[[], None] | None = None,
         open_multimodal_callback: Callable[[], None] | None = None,
+        open_clips_callback: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -104,6 +105,7 @@ class VideosView(QWidget):
         self.open_acoustic_callback = open_acoustic_callback
         self.open_visual_callback = open_visual_callback
         self.open_multimodal_callback = open_multimodal_callback
+        self.open_clips_callback = open_clips_callback
         self._inspection_thread: InspectionThread | None = None
         self._audio_thread: AudioTaskThread | None = None
         self.search_edit = QLineEdit()
@@ -141,6 +143,7 @@ class VideosView(QWidget):
         self.acoustic_button = QPushButton("Análisis acústico")
         self.visual_button = QPushButton("Análisis visual")
         self.multimodal_button = QPushButton("Análisis multimodal")
+        self.clips_button = QPushButton("Clips")
         self.transcription_button = QPushButton("Transcripción (Próximamente)")
         self.transcription_button.setEnabled(False)
 
@@ -161,6 +164,7 @@ class VideosView(QWidget):
             (self.clear_audio_cache_button, "Eliminar solo artefactos de audio generados"),
             (self.acoustic_button, "Abrir el panel de analisis acustico"),
             (self.visual_button, "Abrir el panel de analisis visual"),
+            (self.clips_button, "Abrir el panel de ranking de clips"),
             (self.transcription_button, "Transcripción no disponible todavia"),
         ):
             widget.setToolTip(tip)
@@ -177,6 +181,7 @@ class VideosView(QWidget):
             self.acoustic_button,
             self.visual_button,
             self.multimodal_button,
+            self.clips_button,
         ):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -193,6 +198,7 @@ class VideosView(QWidget):
         buttons.addWidget(self.acoustic_button)
         buttons.addWidget(self.visual_button)
         buttons.addWidget(self.multimodal_button)
+        buttons.addWidget(self.clips_button)
         buttons.addWidget(self.transcription_button)
         buttons.addStretch(1)
 
@@ -229,6 +235,7 @@ class VideosView(QWidget):
         self.acoustic_button.clicked.connect(self._open_acoustic)
         self.visual_button.clicked.connect(self._open_visual)
         self.multimodal_button.clicked.connect(self._open_multimodal)
+        self.clips_button.clicked.connect(self._open_clips)
 
     def _selected_filters(self) -> VideoFiltersViewModel:
         return VideoFiltersViewModel(
@@ -340,6 +347,7 @@ class VideosView(QWidget):
         self.acoustic_button.setEnabled(not running)
         self.visual_button.setEnabled(not running)
         self.multimodal_button.setEnabled(not running)
+        self.clips_button.setEnabled(not running)
         self.inspect_button.setEnabled(not running)
         self.reinspect_button.setEnabled(not running and self.workspace.selected_video_id is not None)
         self.register_button.setEnabled(not running)
@@ -362,6 +370,7 @@ class VideosView(QWidget):
             self.acoustic_button.setEnabled(False)
             self.visual_button.setEnabled(False)
             self.multimodal_button.setEnabled(False)
+            self.clips_button.setEnabled(False)
             self.inspector.set_empty("Inspector", "Selecciona un video para ver sus detalles.")
             return
         self.workspace.select_video(video.id)
@@ -401,6 +410,7 @@ class VideosView(QWidget):
         self.acoustic_button.setEnabled(not self._audio_running())
         self.visual_button.setEnabled(not self._audio_running())
         self.multimodal_button.setEnabled(not self._audio_running())
+        self.clips_button.setEnabled(not self._audio_running())
 
     def _set_inspection_running(self, running: bool) -> None:
         self.inspect_button.setEnabled(not running)
@@ -415,6 +425,7 @@ class VideosView(QWidget):
         self.acoustic_button.setEnabled(False)
         self.visual_button.setEnabled(False)
         self.multimodal_button.setEnabled(False)
+        self.clips_button.setEnabled(False)
         self.transcription_button.setEnabled(False)
         self.inspect_button.setText("Inspeccionando..." if running else "Inspeccionar video")
         self.reinspect_button.setText("Reinspeccionando..." if running else "Reinspeccionar")
@@ -520,6 +531,10 @@ class VideosView(QWidget):
     def _open_multimodal(self) -> None:
         if self.open_multimodal_callback is not None:
             self.open_multimodal_callback()
+
+    def _open_clips(self) -> None:
+        if self.open_clips_callback is not None:
+            self.open_clips_callback()
 
     def _register_video(self) -> None:
         project = self.workspace.selected_project()

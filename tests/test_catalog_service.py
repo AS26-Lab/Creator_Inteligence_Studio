@@ -214,7 +214,7 @@ class CatalogServiceTests(unittest.TestCase):
                 versions = connection.execute(
                     "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
                 ).fetchall()
-            self.assertEqual(len(versions), 7)
+            self.assertEqual(len(versions), 8)
             self.assertEqual(versions[0]["version"], 1)
             self.assertEqual(versions[1]["version"], 2)
             self.assertEqual(versions[2]["version"], 3)
@@ -222,6 +222,7 @@ class CatalogServiceTests(unittest.TestCase):
             self.assertEqual(versions[4]["version"], 5)
             self.assertEqual(versions[5]["version"], 6)
             self.assertEqual(versions[6]["version"], 7)
+            self.assertEqual(versions[7]["version"], 8)
             self.assertEqual(versions[0]["name"], "initial_schema")
 
     def test_migrations_idempotent(self) -> None:
@@ -236,7 +237,7 @@ class CatalogServiceTests(unittest.TestCase):
                 count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-            self.assertEqual(count, 7)
+            self.assertEqual(count, 8)
 
     def test_foreign_keys_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

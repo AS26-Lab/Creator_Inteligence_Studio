@@ -75,6 +75,8 @@ La aplicacion ya permite:
 - analizar tecnicamente la estructura visual del video con cortes, escenas, keyframes, movimiento, brillo, contraste y eventos candidatos;
 - guardar un resumen tecnico real de `ffprobe`;
 - generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
+- construir una linea temporal multimodal con candidatos tecnicos sincronizados;
+- rankear candidatos de clip con revision humana, feedback e historial local;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -244,6 +246,35 @@ python -m creator_intelligence_studio multimodal delete --video-id <video_id>
 
 La capa multimodal une transcripcion, actividad acustica y analisis visual en ventanas sincronizadas. Sus artefactos viven en `cache/multimodal/<video-id>/` y no se suben al repositorio.
 
+## Comandos de ranking de clips
+
+```bat
+python -m creator_intelligence_studio clips rank --video-id <video_id>
+python -m creator_intelligence_studio clips rank --video-id <video_id> --profile balanced
+python -m creator_intelligence_studio clips rank --video-id <video_id> --profile speech-focused
+python -m creator_intelligence_studio clips rank --video-id <video_id> --profile visual-focused
+python -m creator_intelligence_studio clips rank --video-id <video_id> --profile high-energy
+python -m creator_intelligence_studio clips rank --video-id <video_id> --profile story-beats
+python -m creator_intelligence_studio clips show --video-id <video_id>
+python -m creator_intelligence_studio clips list --video-id <video_id>
+python -m creator_intelligence_studio clips candidate --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips approve --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips reject --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips shortlist --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips needs-review --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips rate --candidate-id <candidate_id> --rating 4
+python -m creator_intelligence_studio clips note --candidate-id <candidate_id> --text "..."
+python -m creator_intelligence_studio clips tags --candidate-id <candidate_id> --tags hook,highlight
+python -m creator_intelligence_studio clips adjust --candidate-id <candidate_id> --start 12.4 --end 38.7
+python -m creator_intelligence_studio clips history --candidate-id <candidate_id>
+python -m creator_intelligence_studio clips export --video-id <video_id> --format json
+python -m creator_intelligence_studio clips export --video-id <video_id> --format csv
+python -m creator_intelligence_studio clips export --video-id <video_id> --format edl
+python -m creator_intelligence_studio clips delete --video-id <video_id>
+```
+
+Los planes de clips se escriben en `cache/clips/<video-id>/exports/` salvo que el usuario elija otra ruta.
+
 ## Ejecutar pruebas
 
 ```bat
@@ -270,6 +301,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - `cache/videos/<video-id>/audio/`: audio normalizado reutilizable.
 - `cache/videos/<video-id>/visual/`: keyframes y artefactos de analisis visual.
 - `cache/multimodal/<video-id>/`: linea temporal multimodal y exportaciones controladas.
+- `cache/clips/<video-id>/exports/`: planes de clip y exportaciones controladas.
 
 ## Script & Voice Studio
 

@@ -32,6 +32,10 @@ from creator_intelligence_studio.application.services.multimodal_analysis_servic
     MultimodalAnalysisService,
     build_multimodal_analysis_service,
 )
+from creator_intelligence_studio.application.services.clip_ranking_service import (
+    ClipRankingService,
+    build_clip_ranking_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -63,6 +67,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_visual_analys
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_multimodal_analysis_repository import (
     SQLiteMultimodalAnalysisRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_clip_ranking_repository import (
+    SQLiteClipRankingRepository,
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
@@ -98,6 +105,7 @@ class ServiceContext(BootstrapContext):
     acoustic_service: AcousticAnalysisService
     visual_service: VisualAnalysisService
     multimodal_service: MultimodalAnalysisService | None = None
+    clip_service: ClipRankingService | None = None
 
 
 def _load_context() -> BootstrapContext:
@@ -184,6 +192,15 @@ def _load_service_context() -> ServiceContext:
         multimodal_repository=SQLiteMultimodalAnalysisRepository(database),
         logger=context.logger,
     )
+    clip_service = build_clip_ranking_service(
+        settings=context.settings,
+        paths=context.paths,
+        catalog_service=service,
+        multimodal_service=multimodal_service,
+        transcription_repository=transcription_repository,
+        clip_repository=SQLiteClipRankingRepository(database),
+        logger=context.logger,
+    )
     return ServiceContext(
         settings=context.settings,
         paths=context.paths,
@@ -196,6 +213,7 @@ def _load_service_context() -> ServiceContext:
         acoustic_service=acoustic_service,
         visual_service=visual_service,
         multimodal_service=multimodal_service,
+        clip_service=clip_service,
     )
 
 
@@ -266,6 +284,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             acoustic_service=context.acoustic_service,
             visual_service=context.visual_service,
             multimodal_service=context.multimodal_service,
+            clip_service=context.clip_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

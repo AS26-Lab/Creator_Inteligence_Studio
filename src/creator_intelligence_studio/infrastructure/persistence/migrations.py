@@ -776,6 +776,172 @@ def migration_7(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_8(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_ranking_runs (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            multimodal_analysis_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_ranked',
+                    'queued',
+                    'scoring',
+                    'adjusting_borders',
+                    'resolving_overlaps',
+                    'applying_diversity',
+                    'migrating_feedback',
+                    'saving_results',
+                    'completed',
+                    'failed',
+                    'cancelled',
+                    'stale'
+                )
+            ),
+            ranker_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            candidate_count INTEGER NOT NULL,
+            ranked_candidate_count INTEGER NOT NULL,
+            selected_count INTEGER NOT NULL,
+            rejected_count INTEGER NOT NULL,
+            review_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (multimodal_analysis_id) REFERENCES multimodal_analyses(id) ON DELETE RESTRICT,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ranked_clip_candidates (
+            id TEXT PRIMARY KEY,
+            ranking_run_id TEXT NOT NULL,
+            multimodal_candidate_id TEXT NOT NULL,
+            rank_position INTEGER NOT NULL,
+            original_start_seconds REAL NOT NULL,
+            original_end_seconds REAL NOT NULL,
+            adjusted_start_seconds REAL NOT NULL,
+            adjusted_end_seconds REAL NOT NULL,
+            duration_seconds REAL NOT NULL,
+            candidate_type TEXT NOT NULL,
+            source_score REAL NOT NULL,
+            source_confidence REAL NOT NULL,
+            rank_score REAL NOT NULL,
+            quality_score REAL NOT NULL,
+            diversity_score REAL NOT NULL,
+            overlap_penalty REAL NOT NULL,
+            duration_score REAL NOT NULL,
+            opening_score REAL NOT NULL,
+            closing_score REAL NOT NULL,
+            speech_score REAL NOT NULL,
+            visual_score REAL NOT NULL,
+            acoustic_score REAL NOT NULL,
+            transition_score REAL NOT NULL,
+            novelty_score REAL NOT NULL,
+            evidence_strength_score REAL NOT NULL,
+            review_status TEXT NOT NULL CHECK (
+                review_status IN (
+                    'unreviewed',
+                    'shortlisted',
+                    'approved',
+                    'rejected',
+                    'needs_review',
+                    'duplicate',
+                    'invalid',
+                    'exported'
+                )
+            ),
+            user_rating INTEGER,
+            user_note TEXT,
+            explanation_json TEXT NOT NULL,
+            tags_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (ranking_run_id) REFERENCES clip_ranking_runs(id) ON DELETE CASCADE,
+            UNIQUE (ranking_run_id, multimodal_candidate_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_review_events (
+            id TEXT PRIMARY KEY,
+            ranked_clip_candidate_id TEXT NOT NULL,
+            event_index INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            previous_status TEXT,
+            new_status TEXT,
+            previous_start_seconds REAL,
+            previous_end_seconds REAL,
+            new_start_seconds REAL,
+            new_end_seconds REAL,
+            rating INTEGER,
+            note TEXT,
+            tags_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (ranked_clip_candidate_id) REFERENCES ranked_clip_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_collections (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_collection_items (
+            id TEXT PRIMARY KEY,
+            collection_id TEXT NOT NULL,
+            ranked_clip_candidate_id TEXT NOT NULL,
+            item_index INTEGER NOT NULL,
+            custom_title TEXT,
+            custom_note TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (collection_id) REFERENCES clip_collections(id) ON DELETE CASCADE,
+            FOREIGN KEY (ranked_clip_candidate_id) REFERENCES ranked_clip_candidates(id) ON DELETE CASCADE,
+            UNIQUE (collection_id, ranked_clip_candidate_id)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_ranking_runs_video_asset_id ON clip_ranking_runs(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_ranking_runs_multimodal_analysis_id ON clip_ranking_runs(multimodal_analysis_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_ranking_runs_creator_id ON clip_ranking_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_ranking_runs_project_id ON clip_ranking_runs(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_ranking_runs_status ON clip_ranking_runs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_ranked_clip_candidates_run_id ON ranked_clip_candidates(ranking_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_ranked_clip_candidates_run_position ON ranked_clip_candidates(ranking_run_id, rank_position)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_ranked_clip_candidates_multimodal_candidate_id ON ranked_clip_candidates(multimodal_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_ranked_clip_candidates_review_status ON ranked_clip_candidates(review_status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_review_events_candidate_id ON clip_review_events(ranked_clip_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_review_events_event_index ON clip_review_events(ranked_clip_candidate_id, event_index)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_collections_video_asset_id ON clip_collections(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_collection_items_collection_id ON clip_collection_items(collection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_collection_items_candidate_id ON clip_collection_items(ranked_clip_candidate_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -784,6 +950,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=5, name="acoustic_analysis"),
     Migration(version=6, name="visual_analysis"),
     Migration(version=7, name="multimodal_analysis"),
+    Migration(version=8, name="clip_ranking"),
 )
 
 
@@ -835,6 +1002,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_6(connection)
                 elif migration.version == 7:
                     migration_7(connection)
+                elif migration.version == 8:
+                    migration_8(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

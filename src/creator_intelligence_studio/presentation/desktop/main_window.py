@@ -25,6 +25,7 @@ from creator_intelligence_studio.presentation.desktop.theme import SIDEBAR_WIDTH
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 from creator_intelligence_studio.presentation.desktop.views import (
     AcousticAnalysisView,
+    ClipRankingView,
     CreatorsView,
     DashboardView,
     MultimodalAnalysisView,
@@ -46,7 +47,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "system"]
+        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "system"]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -110,11 +111,13 @@ class MainWindow(QMainWindow):
             open_acoustic_callback=lambda: self.show_page("analysis"),
             open_visual_callback=lambda: self.show_page("visual"),
             open_multimodal_callback=lambda: self.show_page("multimodal"),
+            open_clips_callback=lambda: self.show_page("clips"),
         )
         self.transcription_view = TranscriptionView(workspace)
         self.acoustic_view = AcousticAnalysisView(workspace)
         self.visual_view = VisualAnalysisView(workspace)
         self.multimodal_view = MultimodalAnalysisView(workspace)
+        self.clip_ranking_view = ClipRankingView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
         self.stack.addWidget(self.creators_view)
@@ -124,6 +127,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.acoustic_view)
         self.stack.addWidget(self.visual_view)
         self.stack.addWidget(self.multimodal_view)
+        self.stack.addWidget(self.clip_ranking_view)
         self.stack.addWidget(self.system_view)
 
         central = QWidget()
@@ -179,6 +183,7 @@ class MainWindow(QMainWindow):
         self.transcription_view.refresh()
         self.visual_view.refresh()
         self.multimodal_view.refresh()
+        self.clip_ranking_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
 
@@ -269,3 +274,5 @@ class MainWindow(QMainWindow):
             self.transcription_view.refresh()
         elif current_key == "visual":
             self.visual_view.refresh()
+        elif current_key == "clips":
+            self.clip_ranking_view.refresh()

@@ -43,6 +43,21 @@ from creator_intelligence_studio.application.commands.multimodal_commands import
     ShowMultimodalCommand,
     TimelineMultimodalCommand,
 )
+from creator_intelligence_studio.application.commands.clip_commands import (
+    AdjustClipCandidateCommand,
+    AddClipToCollectionCommand,
+    CandidateClipCommand,
+    CreateClipCollectionCommand,
+    DeleteClipRankingCommand,
+    ExportClipPlanCommand,
+    ListClipCandidatesCommand,
+    NoteClipCandidateCommand,
+    RankClipCandidatesCommand,
+    RateClipCandidateCommand,
+    RemoveClipFromCollectionCommand,
+    ShowClipRankingCommand,
+    TagsClipCandidateCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -93,6 +108,11 @@ from creator_intelligence_studio.application.services.multimodal_analysis_servic
     MultimodalAnalysisExportResult,
     MultimodalAnalysisReport,
     MultimodalAnalysisService,
+)
+from creator_intelligence_studio.application.services.clip_ranking_service import (
+    ClipRankingExportResult,
+    ClipRankingReport,
+    ClipRankingService,
 )
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
@@ -348,6 +368,94 @@ def build_parser() -> argparse.ArgumentParser:
     multimodal_delete = multimodal_sub.add_parser("delete", help="Eliminar el analisis multimodal")
     multimodal_delete.add_argument("--video-id", required=True)
     multimodal_delete.add_argument("--json", action="store_true")
+
+    clips_parser = subparsers.add_parser("clips", help="Ranking de clips")
+    clips_sub = clips_parser.add_subparsers(dest="action", required=True)
+
+    clips_rank = clips_sub.add_parser("rank", help="Calcular ranking de clips")
+    clips_rank.add_argument("--video-id", required=True)
+    clips_rank.add_argument("--profile", default="balanced")
+    clips_rank.add_argument("--force", action="store_true")
+    clips_rank.add_argument("--json", action="store_true")
+
+    clips_show = clips_sub.add_parser("show", help="Mostrar ranking de clips")
+    clips_show.add_argument("--video-id", required=True)
+    clips_show.add_argument("--json", action="store_true")
+
+    clips_list = clips_sub.add_parser("list", help="Listar candidatos rankeados")
+    clips_list.add_argument("--video-id", required=True)
+    clips_list.add_argument("--json", action="store_true")
+
+    clips_candidate = clips_sub.add_parser("candidate", help="Mostrar un candidato rankeado")
+    clips_candidate.add_argument("--candidate-id", required=True)
+    clips_candidate.add_argument("--json", action="store_true")
+
+    clips_approve = clips_sub.add_parser("approve", help="Aprobar un candidato")
+    clips_approve.add_argument("--candidate-id", required=True)
+    clips_approve.add_argument("--json", action="store_true")
+
+    clips_reject = clips_sub.add_parser("reject", help="Rechazar un candidato")
+    clips_reject.add_argument("--candidate-id", required=True)
+    clips_reject.add_argument("--json", action="store_true")
+
+    clips_shortlist = clips_sub.add_parser("shortlist", help="Preseleccionar un candidato")
+    clips_shortlist.add_argument("--candidate-id", required=True)
+    clips_shortlist.add_argument("--json", action="store_true")
+
+    clips_needs_review = clips_sub.add_parser("needs-review", help="Marcar un candidato para revision")
+    clips_needs_review.add_argument("--candidate-id", required=True)
+    clips_needs_review.add_argument("--json", action="store_true")
+
+    clips_rate = clips_sub.add_parser("rate", help="Calificar un candidato")
+    clips_rate.add_argument("--candidate-id", required=True)
+    clips_rate.add_argument("--rating", required=True, type=int)
+    clips_rate.add_argument("--json", action="store_true")
+
+    clips_note = clips_sub.add_parser("note", help="Agregar nota a un candidato")
+    clips_note.add_argument("--candidate-id", required=True)
+    clips_note.add_argument("--text", required=True)
+    clips_note.add_argument("--json", action="store_true")
+
+    clips_tags = clips_sub.add_parser("tags", help="Asignar tags a un candidato")
+    clips_tags.add_argument("--candidate-id", required=True)
+    clips_tags.add_argument("--tags", required=True)
+    clips_tags.add_argument("--json", action="store_true")
+
+    clips_adjust = clips_sub.add_parser("adjust", help="Ajustar bordes de un candidato")
+    clips_adjust.add_argument("--candidate-id", required=True)
+    clips_adjust.add_argument("--start", required=True, type=float)
+    clips_adjust.add_argument("--end", required=True, type=float)
+    clips_adjust.add_argument("--json", action="store_true")
+
+    clips_history = clips_sub.add_parser("history", help="Mostrar historial de revision")
+    clips_history.add_argument("--candidate-id", required=True)
+    clips_history.add_argument("--json", action="store_true")
+
+    clips_export = clips_sub.add_parser("export", help="Exportar plan de clips")
+    clips_export.add_argument("--video-id", required=True)
+    clips_export.add_argument("--format", required=True, choices=["json", "csv", "edl"])
+    clips_export.add_argument("--output")
+    clips_export.add_argument("--json", action="store_true")
+
+    clips_delete = clips_sub.add_parser("delete", help="Eliminar ranking de clips")
+    clips_delete.add_argument("--video-id", required=True)
+    clips_delete.add_argument("--json", action="store_true")
+
+    clips_collection = clips_sub.add_parser("collection", help="Crear una coleccion")
+    clips_collection.add_argument("--video-id", required=True)
+    clips_collection.add_argument("--name", required=True)
+    clips_collection.add_argument("--description")
+    clips_collection.add_argument("--json", action="store_true")
+
+    clips_add_to_collection = clips_sub.add_parser("collection-add", help="Agregar candidato a coleccion")
+    clips_add_to_collection.add_argument("--collection-id", required=True)
+    clips_add_to_collection.add_argument("--candidate-id", required=True)
+    clips_add_to_collection.add_argument("--json", action="store_true")
+
+    clips_remove_from_collection = clips_sub.add_parser("collection-remove", help="Quitar candidato de coleccion")
+    clips_remove_from_collection.add_argument("--collection-id", required=True)
+    clips_remove_from_collection.add_argument("--candidate-id", required=True)
+    clips_remove_from_collection.add_argument("--json", action="store_true")
 
     return parser
 
@@ -694,6 +802,41 @@ def _print_multimodal_report(report: MultimodalAnalysisReport, stream) -> None:
         print(f"Alta actividad: {analysis.high_activity_candidate_count}", file=stream)
         print(f"Transicion: {analysis.transition_candidate_count}", file=stream)
         print(f"Baja actividad: {analysis.silence_candidate_count}", file=stream)
+    for warning in report.warnings:
+        print(f"Advertencia: {warning}", file=stream)
+    for error in report.errors:
+        print(f"Error: {error}", file=stream)
+
+
+def _print_clip_candidate(candidate, stream) -> None:
+    print(
+        f"[{candidate.rank_position}] {candidate.candidate_type} "
+        f"{candidate.adjusted_start_seconds:.3f} -> {candidate.adjusted_end_seconds:.3f} "
+        f"(score={candidate.rank_score:.3f}, conf={candidate.source_confidence:.3f})",
+        file=stream,
+    )
+    print(f"Estado: {candidate.review_status.value}", file=stream)
+    print(f"Rating: {candidate.user_rating if candidate.user_rating is not None else 'sin rating'}", file=stream)
+    if candidate.tags:
+        print(f"Tags: {', '.join(candidate.tags)}", file=stream)
+    if candidate.user_note:
+        print(f"Nota: {candidate.user_note}", file=stream)
+
+
+def _print_clip_report(report: ClipRankingReport, stream) -> None:
+    _print_video(report.video, stream)
+    print(f"Estado de ranking de clips: {report.status.value}", file=stream)
+    print(f"Stale: {'si' if report.is_stale else 'no'}", file=stream)
+    print(f"Fuentes disponibles: {', '.join(report.available_sources) or 'ninguna'}", file=stream)
+    print(f"Fuentes faltantes: {', '.join(report.missing_sources) or 'ninguna'}", file=stream)
+    if report.run is not None:
+        run = report.run
+        print(f"Ranker: {run.ranker_version}", file=stream)
+        print(f"Candidatos origen: {run.candidate_count}", file=stream)
+        print(f"Candidatos rankeados: {run.ranked_candidate_count}", file=stream)
+        print(f"Seleccionados: {run.selected_count}", file=stream)
+        print(f"Rechazados: {run.rejected_count}", file=stream)
+        print(f"Revision humana: {run.review_count}", file=stream)
     for warning in report.warnings:
         print(f"Advertencia: {warning}", file=stream)
     for error in report.errors:
@@ -1177,6 +1320,148 @@ def _handle_multimodal(args, service: MultimodalAnalysisService, stdout, stderr)
     raise ValueError("Accion de analisis multimodal no reconocida.")
 
 
+def _handle_clips(args, service: ClipRankingService, stdout, stderr) -> int:
+    if args.action == "rank":
+        command = RankClipCandidatesCommand(video_id=args.video_id, profile=args.profile, force=args.force)
+        report = service.rank_clip_candidates(command.video_id, profile=command.profile, force=command.force)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print("Ranking de clips completado", file=stdout)
+            _print_clip_report(report, stdout)
+        return 0
+    if args.action == "show":
+        command = ShowClipRankingCommand(args.video_id)
+        report = service.get_ranking_run(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_clip_report(report, stdout)
+        return 0
+    if args.action == "list":
+        command = ListClipCandidatesCommand(args.video_id)
+        candidates = service.list_ranked_candidates(command.video_id)
+        if args.json:
+            print(json.dumps([candidate.to_dict() for candidate in candidates], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            for candidate in candidates:
+                _print_clip_candidate(candidate, stdout)
+                print("", file=stdout)
+        return 0
+    if args.action == "candidate":
+        command = CandidateClipCommand(args.candidate_id)
+        candidate = service.get_ranked_candidate(command.candidate_id)
+        if args.json:
+            print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "approve":
+        candidate = service.approve_candidate(args.candidate_id)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Candidato aprobado", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "reject":
+        candidate = service.reject_candidate(args.candidate_id)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Candidato rechazado", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "shortlist":
+        candidate = service.shortlist_candidate(args.candidate_id)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Candidato preseleccionado", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "needs-review":
+        candidate = service.mark_candidate_needs_review(args.candidate_id)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Candidato marcado para revision", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "rate":
+        command = RateClipCandidateCommand(args.candidate_id, args.rating)
+        candidate = service.rate_candidate(command.candidate_id, command.rating)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Rating aplicado", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "note":
+        command = NoteClipCandidateCommand(args.candidate_id, args.text)
+        candidate = service.add_candidate_note(command.candidate_id, command.text)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Nota agregada", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "tags":
+        command = TagsClipCandidateCommand(args.candidate_id, [tag.strip() for tag in args.tags.split(",") if tag.strip()])
+        candidate = service.set_candidate_tags(command.candidate_id, command.tags)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Tags aplicados", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "adjust":
+        command = AdjustClipCandidateCommand(args.candidate_id, args.start, args.end)
+        candidate = service.adjust_candidate_bounds(command.candidate_id, command.start_seconds, command.end_seconds)
+        print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2, default=_json_default) if args.json else "Bordes ajustados", file=stdout)
+        if not args.json:
+            _print_clip_candidate(candidate, stdout)
+        return 0
+    if args.action == "history":
+        history = service.get_candidate_review_history(args.candidate_id)
+        if args.json:
+            print(json.dumps([event.to_dict() for event in history], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            for event in history:
+                print(json.dumps(event.to_dict(), ensure_ascii=False, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export":
+        command = ExportClipPlanCommand(args.video_id, args.format)
+        destination = Path(args.output) if args.output else None
+        result = service.export_clip_plan(command.video_id, command.format, destination=destination)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(f"Exportado: {result.path}", file=stdout)
+        return 0
+    if args.action == "delete":
+        command = DeleteClipRankingCommand(args.video_id)
+        deleted = service.delete_clip_ranking(command.video_id)
+        if args.json:
+            print(json.dumps({"video_id": command.video_id, "deleted": deleted}, ensure_ascii=False), file=stdout)
+        else:
+            print("Ranking de clips eliminado" if deleted else "No existia ranking de clips", file=stdout)
+        return 0
+    if args.action == "collection":
+        command = CreateClipCollectionCommand(args.video_id, args.name)
+        collection = service.create_clip_collection(command.video_id, command.name, description=args.description)
+        if args.json:
+            print(json.dumps(collection.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print("Coleccion creada", file=stdout)
+            print(json.dumps(collection.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "collection-add":
+        command = AddClipToCollectionCommand(args.collection_id, args.candidate_id)
+        item = service.add_candidate_to_collection(command.collection_id, command.candidate_id)
+        if args.json:
+            print(json.dumps(item.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print("Clip agregado a la coleccion", file=stdout)
+            print(json.dumps(item.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "collection-remove":
+        command = RemoveClipFromCollectionCommand(args.collection_id, args.candidate_id)
+        removed = service.remove_candidate_from_collection(command.collection_id, command.candidate_id)
+        if args.json:
+            print(json.dumps({"collection_id": command.collection_id, "candidate_id": command.candidate_id, "removed": removed}, ensure_ascii=False), file=stdout)
+        else:
+            print("Clip removido de la coleccion" if removed else "No existia el clip en la coleccion", file=stdout)
+        return 0
+    raise ValueError("Accion de ranking de clips no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -1187,6 +1472,7 @@ def dispatch(
     acoustic_service: AcousticAnalysisService,
     visual_service: VisualAnalysisService,
     multimodal_service: MultimodalAnalysisService,
+    clip_service: ClipRankingService,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -1218,6 +1504,8 @@ def dispatch(
             return _handle_visual(args, visual_service, stdout, stderr)
         if args.entity == "multimodal":
             return _handle_multimodal(args, multimodal_service, stdout, stderr)
+        if args.entity == "clips":
+            return _handle_clips(args, clip_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

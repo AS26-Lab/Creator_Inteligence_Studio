@@ -10,6 +10,7 @@ flowchart LR
     Home --> Transcription[Transcripcion]
     Home --> Visual[Analisis visual]
     Home --> Multimodal[Analisis multimodal]
+    Home --> Clips[Clips]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -108,6 +109,19 @@ flowchart LR
 - exportacion JSON, CSV de timeline, CSV de candidatos y TXT tecnico;
 - stale y reanalisis.
 
+### Clips
+
+- ranking determinista de candidatos multimodales;
+- perfiles balanced, speech-focused, visual-focused, high-energy y story-beats;
+- score separado del score multimodal original;
+- ajuste manual de bordes;
+- aprobacion, rechazo, preseleccion y revision;
+- rating humano, notas y tags;
+- historial de cambios;
+- colecciones locales de clips;
+- exportacion JSON, CSV y EDL tecnico;
+- stale y recalculo sin perder feedback humano.
+
 ### Sistema
 
 - diagnostico del entorno;
@@ -121,7 +135,6 @@ flowchart LR
 ### Proximamente
 
 - Analisis;
-- Clips;
 - Miniaturas avanzadas;
 - Audiencia;
 - Tendencias;

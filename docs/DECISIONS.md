@@ -27,6 +27,7 @@
 | 2026-07-22 | Analisis acustico | La primera fase de inteligencia acustica sera determinista, local y tecnica, sin inferir emociones como hechos. | Se priorizan reglas reproducibles, ventanas temporales, pausas, energia y eventos candidatos explicitos. | Clasificadores emocionales o modelos generativos en esta etapa. |
 | 2026-07-22 | Analisis visual | La primera fase de analisis visual sera tecnica, local y reproducible, centrada en cortes, escenas, keyframes y metricas de movimiento y luminancia. | Se evita interpretacion semantica y se conservan evidencias y cache en rutas locales controladas. | Reconocimiento de personas, OCR, deteccion de objetos o narrativa semantica. |
 | 2026-07-22 | Analisis multimodal | La primera capa multimodal unifica transcripcion, analisis acustico y analisis visual en ventanas sincronizadas con evidencia tecnica. | Se obtienen candidatos heuristics y scores transparentes sin convertirlos en interpretacion narrativa. | Seleccion definitiva de clips, prediccion de viralidad o LLM para etiquetado semantico. |
+| 2026-07-22 | Clip ranking | El ranking inicial de clips sera determinista, reproducible y editable por humanos, separado del score multimodal original. | Se conservan historial, tags, rating, notas, ajustes de bordes y colecciones sin reemplazar la evidencia tecnica. | Machine learning entrenado, prediccion de viralidad o edicion automatica. |
 
 ## Transcription Decision
 

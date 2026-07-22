@@ -220,3 +220,12 @@ The UI does not access source internals directly.
 - No retention prediction.
 - No LLM layer.
 - No personalized learning yet.
+
+## Clip ranking handoff
+
+The multimodal layer is the technical source for the clip ranker.
+
+- It provides aligned windows, candidate timestamps, evidence, and stable ordering.
+- The clip ranker adds human review, overlap resolution, diversity, and export planning.
+- Multimodal scores remain separate from clip ranking scores.
+- A multimodal candidate can map to multiple future review states, but it is not deleted when a clip is rejected.

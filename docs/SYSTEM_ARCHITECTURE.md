@@ -57,6 +57,7 @@ flowchart TD
 - `Acoustic Analysis`
 - `Visual Analysis`
 - `Multimodal Analysis`
+- `Clip Ranking`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -215,6 +216,15 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - `infrastructure/multimodal_analysis`: alineacion de ventanas, normalizacion robusta, scoring, evidencia y fusion de candidatos.
 - La capa consume transcripcion, analisis acustico y analisis visual sin acoplar la UI a sus estructuras internas.
 - El resultado distingue entre señal observada, metrica derivada, candidato heuristico e interpretacion futura.
+
+## Clip ranking layer
+
+- `domain/clip_ranking`: entidades, errores, repositorios, value objects y reglas de revision humana.
+- `application/services/clip_ranking_service.py`: orquestacion, ranking determinista, feedback humano, colecciones, exportaciones y stale.
+- `infrastructure/clip_ranking`: scoring basado en reglas, resolucion de solapamientos, diversidad, explicaciones y planificacion de exportacion.
+- La capa consume candidatos multimodales ya calculados y no reinterpreta la evidencia base.
+- La revision humana se conserva como historial; el ranking es separable del score multimodal original.
+- Las exportaciones de plan de clips son locales y no renderizan video.
 
 ## Transcription Layer
 

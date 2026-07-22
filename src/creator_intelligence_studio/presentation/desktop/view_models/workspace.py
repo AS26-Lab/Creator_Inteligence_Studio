@@ -38,6 +38,11 @@ from creator_intelligence_studio.application.services.multimodal_analysis_servic
     MultimodalAnalysisReport,
     MultimodalAnalysisService,
 )
+from creator_intelligence_studio.application.services.clip_ranking_service import (
+    ClipRankingExportResult,
+    ClipRankingReport,
+    ClipRankingService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
@@ -211,6 +216,7 @@ class WorkspaceViewModel:
         acoustic_service: AcousticAnalysisService,
         visual_service: VisualAnalysisService,
         multimodal_service: MultimodalAnalysisService | None = None,
+        clip_service: ClipRankingService | None = None,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -257,6 +263,56 @@ class WorkspaceViewModel:
                 export_multimodal_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/multimodal/video/multimodal_analysis.json", to_dict=lambda: {}),
             )
         self.multimodal_service = multimodal_service
+        if clip_service is None:
+            from types import SimpleNamespace
+
+            clip_service = SimpleNamespace(
+                rank_clip_candidates=lambda *args, **kwargs: SimpleNamespace(
+                    video=SimpleNamespace(to_dict=lambda: {}),
+                    multimodal_report=None,
+                    run=None,
+                    candidates=(),
+                    status=SimpleNamespace(value="not_ranked"),
+                    is_stale=False,
+                    available_sources=(),
+                    missing_sources=(),
+                    warnings=(),
+                    errors=(),
+                    progress_message=None,
+                ),
+                get_ranking_run=lambda *args, **kwargs: SimpleNamespace(
+                    video=SimpleNamespace(to_dict=lambda: {}),
+                    multimodal_report=None,
+                    run=None,
+                    candidates=(),
+                    status=SimpleNamespace(value="not_ranked"),
+                    is_stale=False,
+                    available_sources=(),
+                    missing_sources=(),
+                    warnings=(),
+                    errors=(),
+                    progress_message=None,
+                ),
+                list_ranked_candidates=lambda *args, **kwargs: (),
+                get_ranked_candidate=lambda *args, **kwargs: None,
+                approve_candidate=lambda *args, **kwargs: None,
+                reject_candidate=lambda *args, **kwargs: None,
+                shortlist_candidate=lambda *args, **kwargs: None,
+                mark_candidate_needs_review=lambda *args, **kwargs: None,
+                rate_candidate=lambda *args, **kwargs: None,
+                add_candidate_note=lambda *args, **kwargs: None,
+                set_candidate_tags=lambda *args, **kwargs: None,
+                adjust_candidate_bounds=lambda *args, **kwargs: None,
+                reset_candidate_review=lambda *args, **kwargs: None,
+                get_candidate_review_history=lambda *args, **kwargs: (),
+                is_clip_ranking_stale=lambda *args, **kwargs: False,
+                delete_clip_ranking=lambda *args, **kwargs: False,
+                create_clip_collection=lambda *args, **kwargs: SimpleNamespace(id="", name="", to_dict=lambda: {}),
+                add_candidate_to_collection=lambda *args, **kwargs: None,
+                remove_candidate_from_collection=lambda *args, **kwargs: False,
+                export_clip_plan=lambda *args, **kwargs: SimpleNamespace(path="", to_dict=lambda: {}),
+            )
+        self.clip_service = clip_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -976,6 +1032,24 @@ class WorkspaceViewModel:
                         InspectorItemViewModel("Fuentes faltantes", ", ".join(multimodal_report.missing_sources)),
                     ]
                 )
+        clip_report = self.get_ranking_run(video.id)
+        items.extend(
+            [
+                InspectorItemViewModel("Ranking de clips", clip_report.status.value),
+                InspectorItemViewModel("Ranking de clips stale", "Si" if clip_report.is_stale else "No"),
+            ]
+        )
+        if clip_report.run is not None:
+            items.extend(
+                [
+                    InspectorItemViewModel("Candidatos rankeados", str(clip_report.run.ranked_candidate_count)),
+                    InspectorItemViewModel("Seleccionados", str(clip_report.run.selected_count)),
+                    InspectorItemViewModel("Rechazados", str(clip_report.run.rejected_count)),
+                    InspectorItemViewModel("Revision humana", str(clip_report.run.review_count)),
+                ]
+            )
+            if clip_report.missing_sources:
+                items.append(InspectorItemViewModel("Fuentes faltantes ranking", ", ".join(clip_report.missing_sources)))
         return items
 
     def analyze_multimodal(self, video_id: str, force: bool = False, *, progress_callback=None) -> MultimodalAnalysisReport:
@@ -1008,4 +1082,97 @@ class WorkspaceViewModel:
     def export_multimodal_analysis(self, video_id: str, format_name: str) -> MultimodalAnalysisExportResult:
         result = self.multimodal_service.export_multimodal_analysis(video_id, format_name)
         self.activity_log.insert(0, f"Exportacion multimodal: {format_name}")
+        return result
+
+    def rank_clip_candidates(self, video_id: str, profile: str = "balanced", force: bool = False, *, progress_callback=None) -> ClipRankingReport:
+        report = self.clip_service.rank_clip_candidates(video_id, profile=profile, force=force, progress_callback=progress_callback)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Ranking de clips: {report.status.value}")
+        return report
+
+    def get_ranking_run(self, video_id: str) -> ClipRankingReport:
+        return self.clip_service.get_ranking_run(video_id)
+
+    def list_ranked_candidates(self, video_id: str, filters=None, sort=None):
+        return self.clip_service.list_ranked_candidates(video_id, filters=filters, sort=sort)
+
+    def get_ranked_candidate(self, candidate_id: str):
+        return self.clip_service.get_ranked_candidate(candidate_id)
+
+    def approve_candidate(self, candidate_id: str):
+        candidate = self.clip_service.approve_candidate(candidate_id)
+        self.activity_log.insert(0, f"Clip aprobado: {candidate.id}")
+        return candidate
+
+    def reject_candidate(self, candidate_id: str):
+        candidate = self.clip_service.reject_candidate(candidate_id)
+        self.activity_log.insert(0, f"Clip rechazado: {candidate.id}")
+        return candidate
+
+    def shortlist_candidate(self, candidate_id: str):
+        candidate = self.clip_service.shortlist_candidate(candidate_id)
+        self.activity_log.insert(0, f"Clip preseleccionado: {candidate.id}")
+        return candidate
+
+    def mark_candidate_needs_review(self, candidate_id: str):
+        candidate = self.clip_service.mark_candidate_needs_review(candidate_id)
+        self.activity_log.insert(0, f"Clip marcado para revision: {candidate.id}")
+        return candidate
+
+    def rate_candidate(self, candidate_id: str, rating: int):
+        candidate = self.clip_service.rate_candidate(candidate_id, rating)
+        self.activity_log.insert(0, f"Rating de clip: {candidate.id} -> {rating}")
+        return candidate
+
+    def add_candidate_note(self, candidate_id: str, note: str):
+        candidate = self.clip_service.add_candidate_note(candidate_id, note)
+        self.activity_log.insert(0, f"Nota de clip: {candidate.id}")
+        return candidate
+
+    def set_candidate_tags(self, candidate_id: str, tags: list[str]):
+        candidate = self.clip_service.set_candidate_tags(candidate_id, tags)
+        self.activity_log.insert(0, f"Tags de clip: {candidate.id}")
+        return candidate
+
+    def adjust_candidate_bounds(self, candidate_id: str, start_seconds: float, end_seconds: float):
+        candidate = self.clip_service.adjust_candidate_bounds(candidate_id, start_seconds, end_seconds)
+        self.activity_log.insert(0, f"Bordes de clip ajustados: {candidate.id}")
+        return candidate
+
+    def reset_candidate_review(self, candidate_id: str):
+        candidate = self.clip_service.reset_candidate_review(candidate_id)
+        self.activity_log.insert(0, f"Revision de clip restablecida: {candidate.id}")
+        return candidate
+
+    def get_candidate_review_history(self, candidate_id: str):
+        return self.clip_service.get_candidate_review_history(candidate_id)
+
+    def is_clip_ranking_stale(self, video_id: str) -> bool:
+        return self.clip_service.is_clip_ranking_stale(video_id)
+
+    def delete_clip_ranking(self, video_id: str) -> bool:
+        deleted = self.clip_service.delete_clip_ranking(video_id)
+        if deleted:
+            self.activity_log.insert(0, f"Ranking de clips eliminado: {video_id}")
+        return deleted
+
+    def create_clip_collection(self, video_id: str, name: str, description: str | None = None):
+        collection = self.clip_service.create_clip_collection(video_id, name, description=description)
+        self.activity_log.insert(0, f"Coleccion de clips creada: {collection.name}")
+        return collection
+
+    def add_candidate_to_collection(self, collection_id: str, candidate_id: str):
+        item = self.clip_service.add_candidate_to_collection(collection_id, candidate_id)
+        self.activity_log.insert(0, f"Clip agregado a coleccion: {candidate_id}")
+        return item
+
+    def remove_candidate_from_collection(self, collection_id: str, candidate_id: str) -> bool:
+        removed = self.clip_service.remove_candidate_from_collection(collection_id, candidate_id)
+        if removed:
+            self.activity_log.insert(0, f"Clip removido de coleccion: {candidate_id}")
+        return removed
+
+    def export_clip_plan(self, video_id: str, format_name: str) -> ClipRankingExportResult:
+        result = self.clip_service.export_clip_plan(video_id, format_name)
+        self.activity_log.insert(0, f"Exportacion de clip plan: {format_name}")
         return result

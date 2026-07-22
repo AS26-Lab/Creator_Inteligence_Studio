@@ -332,3 +332,60 @@ Campos principales:
 `multimodal_moment_candidates` conserva `candidate_index` con orden estable y FK hacia `multimodal_analyses`.
 
 La capa multimodal no reemplaza las capas previas: las consume como fuentes y puede operar con cobertura parcial. Guarda fuentes disponibles, fuentes faltantes, evidencia tecnica y candidatos heuristics sin mezclar señal observada con interpretacion narrativa.
+
+## Migration v8: Clip ranking
+
+La migracion v8 agrega:
+
+- `clip_ranking_runs`
+- `ranked_clip_candidates`
+- `clip_review_events`
+- `clip_collections`
+- `clip_collection_items`
+
+Campos principales:
+
+- `video_asset_id`
+- `multimodal_analysis_id`
+- `creator_id`
+- `project_id`
+- `status`
+- `ranker_version`
+- `configuration_fingerprint`
+- `source_fingerprint`
+- `candidate_count`
+- `ranked_candidate_count`
+- `selected_count`
+- `rejected_count`
+- `review_count`
+- `rank_position`
+- `adjusted_start_seconds`
+- `adjusted_end_seconds`
+- `duration_seconds`
+- `candidate_type`
+- `source_score`
+- `source_confidence`
+- `rank_score`
+- `quality_score`
+- `diversity_score`
+- `overlap_penalty`
+- `duration_score`
+- `opening_score`
+- `closing_score`
+- `speech_score`
+- `visual_score`
+- `acoustic_score`
+- `transition_score`
+- `novelty_score`
+- `evidence_strength_score`
+- `review_status`
+- `user_rating`
+- `user_note`
+- `tags_json`
+- `explanation_json`
+
+`ranked_clip_candidates` conserva `rank_position` con orden estable y FK hacia `clip_ranking_runs` y `multimodal_moment_candidates`.
+`clip_review_events` conserva `event_index` con orden estable y FK hacia `ranked_clip_candidates`.
+`clip_collection_items` conserva `item_index` con orden estable y FK hacia `clip_collections` y `ranked_clip_candidates`.
+
+El ranker y la revision humana no eliminan el candidato original; registran decisiones, ajustes y exportaciones como historial estructurado.
