@@ -27,6 +27,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     AcousticAnalysisView,
     CreatorsView,
     DashboardView,
+    MultimodalAnalysisView,
     ProjectsView,
     VisualAnalysisView,
     SystemView,
@@ -45,7 +46,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "system"]
+        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "system"]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -108,10 +109,12 @@ class MainWindow(QMainWindow):
             self.inspector,
             open_acoustic_callback=lambda: self.show_page("analysis"),
             open_visual_callback=lambda: self.show_page("visual"),
+            open_multimodal_callback=lambda: self.show_page("multimodal"),
         )
         self.transcription_view = TranscriptionView(workspace)
         self.acoustic_view = AcousticAnalysisView(workspace)
         self.visual_view = VisualAnalysisView(workspace)
+        self.multimodal_view = MultimodalAnalysisView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
         self.stack.addWidget(self.creators_view)
@@ -120,6 +123,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.transcription_view)
         self.stack.addWidget(self.acoustic_view)
         self.stack.addWidget(self.visual_view)
+        self.stack.addWidget(self.multimodal_view)
         self.stack.addWidget(self.system_view)
 
         central = QWidget()
@@ -174,6 +178,7 @@ class MainWindow(QMainWindow):
         self.videos_view.refresh()
         self.transcription_view.refresh()
         self.visual_view.refresh()
+        self.multimodal_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
 
@@ -258,6 +263,8 @@ class MainWindow(QMainWindow):
             self.videos_view.search_edit.setText(text)
             self.videos_view.search_edit.blockSignals(False)
             self.videos_view.refresh()
+        elif current_key == "multimodal":
+            self.multimodal_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "visual":

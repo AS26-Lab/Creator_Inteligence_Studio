@@ -56,6 +56,7 @@ flowchart TD
 - `Insight Engine`
 - `Acoustic Analysis`
 - `Visual Analysis`
+- `Multimodal Analysis`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -70,9 +71,10 @@ flowchart TD
 5. Si `ffmpeg` esta disponible, se genera una miniatura tecnica inicial en cache local.
 6. Si `ffmpeg` esta disponible y existe una inspeccion vigente, se puede preparar un audio normalizado reutilizable en cache local.
 7. Si existe transcripcion local, puede alimentar fases posteriores como analisis acustico.
-8. El cache se reutiliza si tamano, fecha de modificacion y fingerprints siguen vigentes.
-9. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion o analisis acustico.
-10. La UI solo consume resultados publicados por la capa de aplicacion.
+8. El analisis acustico puede alimentar una linea temporal multimodal junto con la transcripcion y el analisis visual.
+9. El cache se reutiliza si tamano, fecha de modificacion y fingerprints siguen vigentes.
+10. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion, analisis acustico, analisis visual o analisis multimodal.
+11. La UI solo consume resultados publicados por la capa de aplicacion.
 
 ## Jobs
 
@@ -205,6 +207,14 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - `infrastructure/visual_analysis`: muestreo de frames, metricas, deteccion de cortes, escenas, eventos y extraccion de keyframes con `ffmpeg`.
 - La capa evita interpretacion semantica y usa etiquetas tecnicas como `static`, `low_motion`, `possible_black_frame` o `transition_candidate`.
 - Los keyframes se almacenan en `cache/videos/<video-id>/visual/` y se ignoran por Git.
+
+## Multimodal analysis layer
+
+- `domain/multimodal_analysis`: entidades, errores, repositorios, value objects y reglas para alineacion temporal, scoring y candidatos tecnicos.
+- `application/services/multimodal_analysis_service.py`: orquestacion, cobertura parcial, persistencia, exportaciones y stale.
+- `infrastructure/multimodal_analysis`: alineacion de ventanas, normalizacion robusta, scoring, evidencia y fusion de candidatos.
+- La capa consume transcripcion, analisis acustico y analisis visual sin acoplar la UI a sus estructuras internas.
+- El resultado distingue entre señal observada, metrica derivada, candidato heuristico e interpretacion futura.
 
 ## Transcription Layer
 

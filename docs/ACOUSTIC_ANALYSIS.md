@@ -163,3 +163,9 @@ La vista de analisis acustico muestra:
 - No hay identificacion de personas.
 - No hay ranking narrativo.
 - Los eventos son candidatos heuristics, no certezas.
+
+## Relacion con la capa multimodal
+
+- Las ventanas, pausas y eventos acusticos sirven como una de las fuentes de la alineacion multimodal.
+- La capa multimodal conserva la evidencia acustica y la combina con transcripcion y vision sin reinterpretarla.
+- Si la capa acustica falta, la multimodal sigue operando con cobertura parcial y lo reporta como warning.

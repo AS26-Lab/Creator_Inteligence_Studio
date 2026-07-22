@@ -625,6 +625,157 @@ def migration_6(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_7(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS multimodal_analyses (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL UNIQUE,
+            transcription_id TEXT,
+            acoustic_analysis_id TEXT,
+            visual_analysis_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_analyzed',
+                    'queued',
+                    'loading_sources',
+                    'aligning_timelines',
+                    'normalizing_signals',
+                    'detecting_changes',
+                    'generating_candidates',
+                    'fusing_candidates',
+                    'saving_results',
+                    'completed',
+                    'failed',
+                    'cancelled',
+                    'stale'
+                )
+            ),
+            analyzer_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            duration_seconds REAL NOT NULL,
+            window_size_seconds REAL NOT NULL,
+            window_count INTEGER NOT NULL,
+            candidate_count INTEGER NOT NULL,
+            high_activity_candidate_count INTEGER NOT NULL,
+            transition_candidate_count INTEGER NOT NULL,
+            silence_candidate_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE SET NULL,
+            FOREIGN KEY (acoustic_analysis_id) REFERENCES acoustic_analyses(id) ON DELETE SET NULL,
+            FOREIGN KEY (visual_analysis_id) REFERENCES visual_analyses(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS multimodal_timeline_windows (
+            id TEXT PRIMARY KEY,
+            multimodal_analysis_id TEXT NOT NULL,
+            window_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            transcript_text TEXT NOT NULL,
+            word_count INTEGER NOT NULL,
+            speech_ratio REAL NOT NULL,
+            silence_ratio REAL NOT NULL,
+            speech_rate REAL,
+            acoustic_energy REAL NOT NULL,
+            acoustic_change REAL NOT NULL,
+            visual_motion REAL NOT NULL,
+            visual_change REAL NOT NULL,
+            brightness REAL NOT NULL,
+            cut_count INTEGER NOT NULL,
+            scene_index INTEGER,
+            acoustic_event_count INTEGER NOT NULL,
+            visual_event_count INTEGER NOT NULL,
+            combined_activity_score REAL NOT NULL,
+            transition_score REAL NOT NULL,
+            novelty_score REAL NOT NULL,
+            confidence REAL NOT NULL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (multimodal_analysis_id) REFERENCES multimodal_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS multimodal_moment_candidates (
+            id TEXT PRIMARY KEY,
+            multimodal_analysis_id TEXT NOT NULL,
+            candidate_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            candidate_type TEXT NOT NULL CHECK (
+                candidate_type IN (
+                    'high_combined_activity',
+                    'abrupt_multimodal_change',
+                    'speech_energy_peak',
+                    'visual_transition_with_speech',
+                    'long_silence_or_pause',
+                    'low_activity_segment',
+                    'acoustic_event_with_visual_change',
+                    'scene_opening',
+                    'scene_closing',
+                    'possible_hook_candidate',
+                    'possible_reaction_candidate',
+                    'unknown_candidate'
+                )
+            ),
+            score REAL NOT NULL,
+            confidence REAL NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            source_window_start REAL,
+            source_window_end REAL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (multimodal_analysis_id) REFERENCES multimodal_analyses(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_analyses_video_asset_id ON multimodal_analyses(video_asset_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_analyses_transcription_id ON multimodal_analyses(transcription_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_analyses_acoustic_analysis_id ON multimodal_analyses(acoustic_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_analyses_visual_analysis_id ON multimodal_analyses(visual_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_analyses_status ON multimodal_analyses(status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_timeline_windows_analysis_id ON multimodal_timeline_windows(multimodal_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_timeline_windows_window_index ON multimodal_timeline_windows(multimodal_analysis_id, window_index)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_moment_candidates_analysis_id ON multimodal_moment_candidates(multimodal_analysis_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_moment_candidates_candidate_index ON multimodal_moment_candidates(multimodal_analysis_id, candidate_index)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_multimodal_moment_candidates_type ON multimodal_moment_candidates(candidate_type)"
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -632,6 +783,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=4, name="transcriptions"),
     Migration(version=5, name="acoustic_analysis"),
     Migration(version=6, name="visual_analysis"),
+    Migration(version=7, name="multimodal_analysis"),
 )
 
 
@@ -681,6 +833,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_5(connection)
                 elif migration.version == 6:
                     migration_6(connection)
+                elif migration.version == 7:
+                    migration_7(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

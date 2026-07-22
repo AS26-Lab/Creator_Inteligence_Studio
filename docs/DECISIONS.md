@@ -26,6 +26,7 @@
 | 2026-07-22 | Transcripcion local | `faster-whisper` + `CTranslate2` sera el backend local principal de transcripcion. | Se obtiene CUDA con fallback CPU, timestamps por segmento y cache local de modelos. | Resolver la transcripcion con API externa o con un backend no optimizado para Windows/CUDA. |
 | 2026-07-22 | Analisis acustico | La primera fase de inteligencia acustica sera determinista, local y tecnica, sin inferir emociones como hechos. | Se priorizan reglas reproducibles, ventanas temporales, pausas, energia y eventos candidatos explicitos. | Clasificadores emocionales o modelos generativos en esta etapa. |
 | 2026-07-22 | Analisis visual | La primera fase de analisis visual sera tecnica, local y reproducible, centrada en cortes, escenas, keyframes y metricas de movimiento y luminancia. | Se evita interpretacion semantica y se conservan evidencias y cache en rutas locales controladas. | Reconocimiento de personas, OCR, deteccion de objetos o narrativa semantica. |
+| 2026-07-22 | Analisis multimodal | La primera capa multimodal unifica transcripcion, analisis acustico y analisis visual en ventanas sincronizadas con evidencia tecnica. | Se obtienen candidatos heuristics y scores transparentes sin convertirlos en interpretacion narrativa. | Seleccion definitiva de clips, prediccion de viralidad o LLM para etiquetado semantico. |
 
 ## Transcription Decision
 
@@ -48,3 +49,4 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - esquema final de entrenamiento local;
 - formato exacto del model registry.
 - refinamiento futuro de eventos acusticos cuando exista una segunda fase especializada.
+- refinamiento futuro de candidatos multimodales cuando exista una segunda fase de clips o edicion.

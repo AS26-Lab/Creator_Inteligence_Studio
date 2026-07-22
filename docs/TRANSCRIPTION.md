@@ -155,3 +155,9 @@ Las exportaciones se escriben en una ruta controlada por la aplicacion o en una 
 - No hay word timestamps por defecto.
 - No hay backend externo.
 - No se intentan inferir emociones como hechos dentro de la transcripcion ni del analisis acustico.
+
+## Relacion con la capa multimodal
+
+- La transcripcion alimenta la alineacion multimodal como fuente temporal primaria de texto.
+- La capa multimodal no modifica la transcripcion, solo la consume cuando existe y esta vigente.
+- Si la transcripcion falta, la linea multimodal puede operar con cobertura parcial y bajar `confidence`.

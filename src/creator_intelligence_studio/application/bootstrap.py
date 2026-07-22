@@ -28,6 +28,10 @@ from creator_intelligence_studio.application.services.visual_analysis_service im
     VisualAnalysisService,
     build_visual_analysis_service,
 )
+from creator_intelligence_studio.application.services.multimodal_analysis_service import (
+    MultimodalAnalysisService,
+    build_multimodal_analysis_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -56,6 +60,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_acoustic_anal
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_visual_analysis_repository import (
     SQLiteVisualAnalysisRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_multimodal_analysis_repository import (
+    SQLiteMultimodalAnalysisRepository,
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
@@ -90,6 +97,7 @@ class ServiceContext(BootstrapContext):
     transcription_service: TranscriptionService
     acoustic_service: AcousticAnalysisService
     visual_service: VisualAnalysisService
+    multimodal_service: MultimodalAnalysisService | None = None
 
 
 def _load_context() -> BootstrapContext:
@@ -166,6 +174,16 @@ def _load_service_context() -> ServiceContext:
         visual_repository=SQLiteVisualAnalysisRepository(database),
         logger=context.logger,
     )
+    multimodal_service = build_multimodal_analysis_service(
+        settings=context.settings,
+        paths=context.paths,
+        video_repository=video_repository,
+        transcription_repository=transcription_repository,
+        acoustic_repository=SQLiteAcousticAnalysisRepository(database),
+        visual_repository=SQLiteVisualAnalysisRepository(database),
+        multimodal_repository=SQLiteMultimodalAnalysisRepository(database),
+        logger=context.logger,
+    )
     return ServiceContext(
         settings=context.settings,
         paths=context.paths,
@@ -177,6 +195,7 @@ def _load_service_context() -> ServiceContext:
         transcription_service=transcription_service,
         acoustic_service=acoustic_service,
         visual_service=visual_service,
+        multimodal_service=multimodal_service,
     )
 
 
@@ -246,6 +265,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             transcription_service=context.transcription_service,
             acoustic_service=context.acoustic_service,
             visual_service=context.visual_service,
+            multimodal_service=context.multimodal_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

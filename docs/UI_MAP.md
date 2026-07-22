@@ -9,6 +9,7 @@ flowchart LR
     Home --> Media[Videos]
     Home --> Transcription[Transcripcion]
     Home --> Visual[Analisis visual]
+    Home --> Multimodal[Analisis multimodal]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -95,6 +96,18 @@ flowchart LR
 - exportacion JSON, CSV de timeline y CSV de escenas;
 - stale y regeneracion.
 
+### Analisis multimodal
+
+- estado del analisis y version del analizador;
+- fuentes disponibles y fuentes faltantes;
+- ventanas sincronizadas entre transcripcion, acustica y vision;
+- candidatos tecnicos con score, confidence y evidencia;
+- linea temporal unificada;
+- orden por tiempo o por score;
+- filtros por tipo de candidato;
+- exportacion JSON, CSV de timeline, CSV de candidatos y TXT tecnico;
+- stale y reanalisis.
+
 ### Sistema
 
 - diagnostico del entorno;
@@ -126,6 +139,7 @@ flowchart LR
 - sin feedback todavia;
 - sin inspeccion tecnica aun;
 - sin transcripcion aun;
+- sin analisis multimodal aun;
 - sin herramientas multimedia disponibles.
 
 ## Separacion de Script & Voice Studio

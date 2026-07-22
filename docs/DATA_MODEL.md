@@ -297,3 +297,38 @@ Campos principales:
 La vigencia del analisis visual depende del archivo fuente, la inspeccion tecnica de origen, el fingerprint de configuracion, la version del analizador y la disponibilidad de keyframes generados en cache controlada.
 
 La vigencia se define por fingerprints de entrada, configuracion, version del analizador y cambios en el audio preparado.
+
+## Migration v7: Multimodal analysis
+
+La migracion v7 agrega:
+
+- `multimodal_analyses`
+- `multimodal_timeline_windows`
+- `multimodal_moment_candidates`
+
+Campos principales:
+
+- `video_asset_id`
+- `transcription_id`
+- `acoustic_analysis_id`
+- `visual_analysis_id`
+- `status`
+- `analyzer_version`
+- `configuration_fingerprint`
+- `source_fingerprint`
+- `duration_seconds`
+- `window_size_seconds`
+- `window_count`
+- `candidate_count`
+- `high_activity_candidate_count`
+- `transition_candidate_count`
+- `silence_candidate_count`
+- `warning_code`
+- `warning_message`
+- `error_code`
+- `error_message`
+
+`multimodal_timeline_windows` conserva `window_index` con orden estable y FK hacia `multimodal_analyses`.
+`multimodal_moment_candidates` conserva `candidate_index` con orden estable y FK hacia `multimodal_analyses`.
+
+La capa multimodal no reemplaza las capas previas: las consume como fuentes y puede operar con cobertura parcial. Guarda fuentes disponibles, fuentes faltantes, evidencia tecnica y candidatos heuristics sin mezclar señal observada con interpretacion narrativa.

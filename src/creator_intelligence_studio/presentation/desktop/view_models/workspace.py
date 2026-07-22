@@ -33,14 +33,21 @@ from creator_intelligence_studio.application.services.visual_analysis_service im
     VisualAnalysisReport,
     VisualAnalysisService,
 )
+from creator_intelligence_studio.application.services.multimodal_analysis_service import (
+    MultimodalAnalysisExportResult,
+    MultimodalAnalysisReport,
+    MultimodalAnalysisService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
+from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
 from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
 from creator_intelligence_studio.domain.transcription.value_objects import (
     TranscriptionExportFormat,
     TranscriptionModelInfo,
     TranscriptionOptions,
 )
+from creator_intelligence_studio.domain.multimodal_analysis.value_objects import MultimodalAnalysisOptions
 from creator_intelligence_studio.domain.projects.entities import ProjectStatus
 from creator_intelligence_studio.domain.videos.entities import (
     VideoAsset,
@@ -203,6 +210,7 @@ class WorkspaceViewModel:
         transcription_service: TranscriptionService,
         acoustic_service: AcousticAnalysisService,
         visual_service: VisualAnalysisService,
+        multimodal_service: MultimodalAnalysisService | None = None,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -213,6 +221,42 @@ class WorkspaceViewModel:
         self.transcription_service = transcription_service
         self.acoustic_service = acoustic_service
         self.visual_service = visual_service
+        if multimodal_service is None:
+            from types import SimpleNamespace
+
+            multimodal_service = SimpleNamespace(
+                analyze_multimodal=lambda *args, **kwargs: SimpleNamespace(
+                    status=SimpleNamespace(value="not_analyzed"),
+                    is_stale=False,
+                    analysis=None,
+                    windows=(),
+                    candidates=(),
+                    available_sources=(),
+                    missing_sources=(),
+                    warnings=(),
+                    errors=(),
+                    progress_message=None,
+                ),
+                get_multimodal_analysis=lambda *args, **kwargs: SimpleNamespace(
+                    status=SimpleNamespace(value="not_analyzed"),
+                    is_stale=False,
+                    analysis=None,
+                    windows=(),
+                    candidates=(),
+                    available_sources=(),
+                    missing_sources=(),
+                    warnings=(),
+                    errors=(),
+                    progress_message=None,
+                ),
+                get_multimodal_timeline=lambda *args, **kwargs: (),
+                list_moment_candidates=lambda *args, **kwargs: (),
+                get_moment_candidate=lambda *args, **kwargs: None,
+                is_multimodal_analysis_stale=lambda *args, **kwargs: False,
+                delete_multimodal_analysis=lambda *args, **kwargs: False,
+                export_multimodal_analysis=lambda *args, **kwargs: SimpleNamespace(path="cache/multimodal/video/multimodal_analysis.json", to_dict=lambda: {}),
+            )
+        self.multimodal_service = multimodal_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -907,4 +951,61 @@ class WorkspaceViewModel:
                     InspectorItemViewModel("Congelamientos", str(visual.freeze_event_count)),
                 ]
             )
+        multimodal_report = self.get_multimodal_analysis(video.id)
+        multimodal = multimodal_report.analysis
+        items.extend(
+            [
+                InspectorItemViewModel("Analisis multimodal", multimodal_report.status.value),
+                InspectorItemViewModel("Analisis multimodal stale", "Si" if multimodal_report.is_stale else "No"),
+            ]
+        )
+        if multimodal is not None:
+            items.extend(
+                [
+                    InspectorItemViewModel("Ventanas multimodales", str(multimodal.window_count)),
+                    InspectorItemViewModel("Candidatos multimodales", str(multimodal.candidate_count)),
+                    InspectorItemViewModel("Candidatos alta actividad", str(multimodal.high_activity_candidate_count)),
+                    InspectorItemViewModel("Candidatos transicion", str(multimodal.transition_candidate_count)),
+                    InspectorItemViewModel("Candidatos baja actividad", str(multimodal.silence_candidate_count)),
+                    InspectorItemViewModel("Duracion multimodal", f"{multimodal.duration_seconds:.3f} s"),
+                ]
+            )
+            if multimodal_report.missing_sources:
+                items.extend(
+                    [
+                        InspectorItemViewModel("Fuentes faltantes", ", ".join(multimodal_report.missing_sources)),
+                    ]
+                )
         return items
+
+    def analyze_multimodal(self, video_id: str, force: bool = False, *, progress_callback=None) -> MultimodalAnalysisReport:
+        report = self.multimodal_service.analyze_multimodal(video_id, force=force, progress_callback=progress_callback)
+        self.selected_video_id = video_id
+        self.activity_log.insert(0, f"Analisis multimodal: {report.status.value}")
+        return report
+
+    def get_multimodal_analysis(self, video_id: str) -> MultimodalAnalysisReport:
+        return self.multimodal_service.get_multimodal_analysis(video_id)
+
+    def get_multimodal_timeline(self, video_id: str):
+        return self.multimodal_service.get_multimodal_timeline(video_id)
+
+    def list_moment_candidates(self, video_id: str):
+        return self.multimodal_service.list_moment_candidates(video_id)
+
+    def get_moment_candidate(self, candidate_id: str):
+        return self.multimodal_service.get_moment_candidate(candidate_id)
+
+    def is_multimodal_analysis_stale(self, video_id: str) -> bool:
+        return self.multimodal_service.is_multimodal_analysis_stale(video_id)
+
+    def delete_multimodal_analysis(self, video_id: str) -> bool:
+        deleted = self.multimodal_service.delete_multimodal_analysis(video_id)
+        if deleted:
+            self.activity_log.insert(0, f"Analisis multimodal eliminado: {video_id}")
+        return deleted
+
+    def export_multimodal_analysis(self, video_id: str, format_name: str) -> MultimodalAnalysisExportResult:
+        result = self.multimodal_service.export_multimodal_analysis(video_id, format_name)
+        self.activity_log.insert(0, f"Exportacion multimodal: {format_name}")
+        return result

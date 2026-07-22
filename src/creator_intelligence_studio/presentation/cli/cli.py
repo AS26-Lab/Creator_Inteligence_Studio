@@ -34,6 +34,15 @@ from creator_intelligence_studio.application.commands.visual_commands import (
     ShowVisualCommand,
     TimelineVisualCommand,
 )
+from creator_intelligence_studio.application.commands.multimodal_commands import (
+    AnalyzeMultimodalCommand,
+    CandidateMultimodalCommand,
+    CandidatesMultimodalCommand,
+    DeleteMultimodalCommand,
+    ExportMultimodalCommand,
+    ShowMultimodalCommand,
+    TimelineMultimodalCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -80,6 +89,11 @@ from creator_intelligence_studio.application.services.visual_analysis_service im
     VisualAnalysisReport,
     VisualAnalysisService,
 )
+from creator_intelligence_studio.application.services.multimodal_analysis_service import (
+    MultimodalAnalysisExportResult,
+    MultimodalAnalysisReport,
+    MultimodalAnalysisService,
+)
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
     MediaToolsReport,
@@ -90,6 +104,8 @@ from creator_intelligence_studio.domain.acoustic_analysis.entities import Acoust
 from creator_intelligence_studio.domain.acoustic_analysis.value_objects import AcousticAnalysisStatus
 from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
 from creator_intelligence_studio.domain.visual_analysis.value_objects import VisualAnalysisStatus
+from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
+from creator_intelligence_studio.domain.multimodal_analysis.value_objects import MultimodalAnalysisStatus
 from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionExportFormat, TranscriptionOptions
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
@@ -298,6 +314,40 @@ def build_parser() -> argparse.ArgumentParser:
     visual_delete = visual_sub.add_parser("delete", help="Eliminar el analisis visual")
     visual_delete.add_argument("--video-id", required=True)
     visual_delete.add_argument("--json", action="store_true")
+
+    multimodal_parser = subparsers.add_parser("multimodal", help="Linea temporal multimodal")
+    multimodal_sub = multimodal_parser.add_subparsers(dest="action", required=True)
+
+    multimodal_analyze = multimodal_sub.add_parser("analyze", help="Analizar multimodalmente un video")
+    multimodal_analyze.add_argument("--video-id", required=True)
+    multimodal_analyze.add_argument("--force", action="store_true")
+    multimodal_analyze.add_argument("--json", action="store_true")
+
+    multimodal_show = multimodal_sub.add_parser("show", help="Mostrar el analisis multimodal")
+    multimodal_show.add_argument("--video-id", required=True)
+    multimodal_show.add_argument("--json", action="store_true")
+
+    multimodal_timeline = multimodal_sub.add_parser("timeline", help="Mostrar la linea temporal multimodal")
+    multimodal_timeline.add_argument("--video-id", required=True)
+    multimodal_timeline.add_argument("--json", action="store_true")
+
+    multimodal_candidates = multimodal_sub.add_parser("candidates", help="Listar candidatos multimodales")
+    multimodal_candidates.add_argument("--video-id", required=True)
+    multimodal_candidates.add_argument("--json", action="store_true")
+
+    multimodal_candidate = multimodal_sub.add_parser("candidate", help="Mostrar un candidato multimodal")
+    multimodal_candidate.add_argument("--candidate-id", required=True)
+    multimodal_candidate.add_argument("--json", action="store_true")
+
+    multimodal_export = multimodal_sub.add_parser("export", help="Exportar el analisis multimodal")
+    multimodal_export.add_argument("--video-id", required=True)
+    multimodal_export.add_argument("--format", required=True, choices=["json", "timeline-csv", "candidates-csv", "txt"])
+    multimodal_export.add_argument("--output")
+    multimodal_export.add_argument("--json", action="store_true")
+
+    multimodal_delete = multimodal_sub.add_parser("delete", help="Eliminar el analisis multimodal")
+    multimodal_delete.add_argument("--video-id", required=True)
+    multimodal_delete.add_argument("--json", action="store_true")
 
     return parser
 
@@ -603,6 +653,47 @@ def _print_visual_report(report: VisualAnalysisReport, stream) -> None:
         print(f"Segmentos estaticos: {analysis.static_segment_count}", file=stream)
         print(f"Frames negros: {analysis.black_frame_event_count}", file=stream)
         print(f"Congelamientos: {analysis.freeze_event_count}", file=stream)
+    for warning in report.warnings:
+        print(f"Advertencia: {warning}", file=stream)
+    for error in report.errors:
+        print(f"Error: {error}", file=stream)
+
+
+def _print_multimodal_window(window: MultimodalTimelineWindow, stream) -> None:
+    print(
+        f"[{window.window_index}] {window.start_seconds:.3f} -> {window.end_seconds:.3f} | "
+        f"activity={window.combined_activity_score:.3f} | transition={window.transition_score:.3f} | "
+        f"novelty={window.novelty_score:.3f}",
+        file=stream,
+    )
+
+
+def _print_multimodal_candidate(candidate: MultimodalMomentCandidate, stream) -> None:
+    print(
+        f"[{candidate.candidate_index}] {candidate.candidate_type.value} "
+        f"{candidate.start_seconds:.3f} -> {candidate.end_seconds:.3f} "
+        f"(score={candidate.score:.3f}, conf={candidate.confidence:.3f})",
+        file=stream,
+    )
+    print(f"Titulo: {candidate.title}", file=stream)
+    print(f"Resumen: {candidate.summary}", file=stream)
+
+
+def _print_multimodal_report(report: MultimodalAnalysisReport, stream) -> None:
+    _print_video(report.video, stream)
+    print(f"Estado de analisis multimodal: {report.status.value}", file=stream)
+    print(f"Stale: {'si' if report.is_stale else 'no'}", file=stream)
+    print(f"Fuentes disponibles: {', '.join(report.available_sources) or 'ninguna'}", file=stream)
+    print(f"Fuentes faltantes: {', '.join(report.missing_sources) or 'ninguna'}", file=stream)
+    if report.analysis is not None:
+        analysis = report.analysis
+        print(f"Analizador: {analysis.analyzer_version}", file=stream)
+        print(f"Duracion: {analysis.duration_seconds:.3f} s", file=stream)
+        print(f"Ventanas: {analysis.window_count}", file=stream)
+        print(f"Candidatos: {analysis.candidate_count}", file=stream)
+        print(f"Alta actividad: {analysis.high_activity_candidate_count}", file=stream)
+        print(f"Transicion: {analysis.transition_candidate_count}", file=stream)
+        print(f"Baja actividad: {analysis.silence_candidate_count}", file=stream)
     for warning in report.warnings:
         print(f"Advertencia: {warning}", file=stream)
     for error in report.errors:
@@ -1021,6 +1112,71 @@ def _handle_visual(args, service: VisualAnalysisService, stdout, stderr) -> int:
     raise ValueError("Accion de analisis visual no reconocida.")
 
 
+def _handle_multimodal(args, service: MultimodalAnalysisService, stdout, stderr) -> int:
+    if args.action == "analyze":
+        command = AnalyzeMultimodalCommand(args.video_id, force=args.force)
+        report = service.analyze_multimodal(command.video_id, force=command.force)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Analisis multimodal completado", file=stdout)
+            _print_multimodal_report(report, stdout)
+        return 0 if report.status == MultimodalAnalysisStatus.COMPLETED else 1
+    if args.action == "show":
+        command = ShowMultimodalCommand(args.video_id)
+        report = service.get_multimodal_analysis(command.video_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_multimodal_report(report, stdout)
+        return 0 if report.analysis is not None else 1
+    if args.action == "timeline":
+        command = TimelineMultimodalCommand(args.video_id)
+        windows = service.get_multimodal_timeline(command.video_id)
+        if args.json:
+            print(json.dumps([window.to_dict() for window in windows], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for window in windows:
+                _print_multimodal_window(window, stdout)
+        return 0 if windows else 1
+    if args.action == "candidates":
+        command = CandidatesMultimodalCommand(args.video_id)
+        candidates = service.list_moment_candidates(command.video_id)
+        if args.json:
+            print(json.dumps([candidate.to_dict() for candidate in candidates], ensure_ascii=False, indent=2), file=stdout)
+        else:
+            for candidate in candidates:
+                _print_multimodal_candidate(candidate, stdout)
+                print("", file=stdout)
+        return 0 if candidates else 1
+    if args.action == "candidate":
+        command = CandidateMultimodalCommand(args.candidate_id)
+        candidate = service.get_moment_candidate(command.candidate_id)
+        if args.json:
+            print(json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_multimodal_candidate(candidate, stdout)
+        return 0
+    if args.action == "export":
+        command = ExportMultimodalCommand(args.video_id, args.format)
+        destination = Path(args.output) if args.output else None
+        result = service.export_multimodal_analysis(command.video_id, command.format, destination=destination)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print(f"Exportado: {result.path}", file=stdout)
+        return 0
+    if args.action == "delete":
+        command = DeleteMultimodalCommand(args.video_id)
+        deleted = service.delete_multimodal_analysis(command.video_id)
+        if args.json:
+            print(json.dumps({"video_id": command.video_id, "deleted": deleted}, ensure_ascii=False), file=stdout)
+        else:
+            print("Analisis multimodal eliminado" if deleted else "No existia analisis multimodal", file=stdout)
+        return 0
+    raise ValueError("Accion de analisis multimodal no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -1030,6 +1186,7 @@ def dispatch(
     transcription_service: TranscriptionService,
     acoustic_service: AcousticAnalysisService,
     visual_service: VisualAnalysisService,
+    multimodal_service: MultimodalAnalysisService,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -1059,6 +1216,8 @@ def dispatch(
             return _handle_acoustic(args, acoustic_service, stdout, stderr)
         if args.entity == "visual":
             return _handle_visual(args, visual_service, stdout, stderr)
+        if args.entity == "multimodal":
+            return _handle_multimodal(args, multimodal_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

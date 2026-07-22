@@ -226,6 +226,24 @@ python -m creator_intelligence_studio visual delete --video-id <video_id>
 
 Los resultados visuales se guardan en SQLite y los keyframes tecnicos se escriben en `cache/videos/<video-id>/visual/` sin tocar el video original.
 
+## Comandos de analisis multimodal
+
+```bat
+python -m creator_intelligence_studio multimodal analyze --video-id <video_id>
+python -m creator_intelligence_studio multimodal analyze --video-id <video_id> --force
+python -m creator_intelligence_studio multimodal show --video-id <video_id>
+python -m creator_intelligence_studio multimodal timeline --video-id <video_id>
+python -m creator_intelligence_studio multimodal candidates --video-id <video_id>
+python -m creator_intelligence_studio multimodal candidate --candidate-id <candidate_id>
+python -m creator_intelligence_studio multimodal export --video-id <video_id> --format json
+python -m creator_intelligence_studio multimodal export --video-id <video_id> --format timeline-csv
+python -m creator_intelligence_studio multimodal export --video-id <video_id> --format candidates-csv
+python -m creator_intelligence_studio multimodal export --video-id <video_id> --format txt
+python -m creator_intelligence_studio multimodal delete --video-id <video_id>
+```
+
+La capa multimodal une transcripcion, actividad acustica y analisis visual en ventanas sincronizadas. Sus artefactos viven en `cache/multimodal/<video-id>/` y no se suben al repositorio.
+
 ## Ejecutar pruebas
 
 ```bat
@@ -250,6 +268,8 @@ python -m unittest discover -s tests -p "test_*.py"
 - `cache/videos/<video-id>/inspection/`: resultados tecnicos de `ffprobe`.
 - `cache/videos/<video-id>/thumbnails/`: miniaturas tecnicas.
 - `cache/videos/<video-id>/audio/`: audio normalizado reutilizable.
+- `cache/videos/<video-id>/visual/`: keyframes y artefactos de analisis visual.
+- `cache/multimodal/<video-id>/`: linea temporal multimodal y exportaciones controladas.
 
 ## Script & Voice Studio
 

@@ -90,3 +90,8 @@ La CLI expone comandos para analizar, mostrar, listar timeline, listar escenas, 
 - la documentacion no debe incluir contenido privado;
 - el video original nunca se modifica.
 
+## Relacion con la capa multimodal
+
+- Las escenas, cortes, keyframes y eventos visuales sirven como fuente temporal para la capa multimodal.
+- La capa multimodal no cambia el analisis visual: solo lo alinea y lo puntua junto con otras fuentes.
+- Cuando no hay analisis visual vigente, la capa multimodal funciona con cobertura parcial y reduce la confianza.
