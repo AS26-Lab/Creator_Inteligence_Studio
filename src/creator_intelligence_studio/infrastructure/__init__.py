@@ -1,0 +1,2 @@
+"""Infraestructura de la aplicacion."""
+

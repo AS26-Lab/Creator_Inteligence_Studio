@@ -1,0 +1,2 @@
+"""Logging de la aplicacion."""
+

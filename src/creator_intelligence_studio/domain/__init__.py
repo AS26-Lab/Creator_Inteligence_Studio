@@ -1,0 +1,2 @@
+"""Dominio de la aplicacion."""
+

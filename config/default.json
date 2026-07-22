@@ -1,0 +1,13 @@
+{
+  "application_name": "Creator Intelligence Studio",
+  "environment": "development",
+  "log_level": "INFO",
+  "data_directory": "data",
+  "logs_directory": "logs",
+  "models_directory": "models",
+  "artifacts_directory": "artifacts",
+  "preferred_compute_backend": "cuda",
+  "allow_cpu_basic_mode": true,
+  "external_ai_enabled": false
+}
+
