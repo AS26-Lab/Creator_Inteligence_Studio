@@ -135,3 +135,31 @@ class BootstrapTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertIn("Creador creado correctamente", stdout.getvalue())
+
+    def test_bootstrap_gui_flag_delegates_to_gui_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            diagnostic = make_diagnostic(root)
+            service_context = bootstrap.ServiceContext(
+                settings=settings,
+                paths=paths,
+                diagnostic=diagnostic,
+                logger=logging.getLogger("test"),
+                service=MagicMock(),
+            )
+
+            with patch(
+                "creator_intelligence_studio.application.bootstrap._load_service_context",
+                return_value=service_context,
+            ), patch(
+                "creator_intelligence_studio.presentation.desktop.app.launch_gui",
+                return_value=0,
+            ) as launch_gui:
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                code = bootstrap.run(argv=["--gui"], stdout=stdout, stderr=stderr)
+
+        self.assertEqual(code, 0)
+        launch_gui.assert_called_once()

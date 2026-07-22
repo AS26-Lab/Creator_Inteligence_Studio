@@ -144,3 +144,34 @@ Los errores deben explicarse en lenguaje operativo, no como mensajes genéricos.
 - su activación no debe afectar la navegación principal;
 - sus datos, modelos y métricas deben quedar aislados.
 
+## Arquitectura de presentación
+
+- barra lateral izquierda con secciones funcionales y futuras deshabilitadas;
+- barra superior con selector de creador, selector de proyecto, búsqueda visual, estado de procesamiento, GPU e indicadores operativos;
+- área principal con `QStackedWidget`;
+- inspector contextual derecho para detalles y acciones;
+- barra inferior compacta para estado operativo.
+
+## Sistema visual
+
+- identidad fría y técnica;
+- fondo azul marino muy oscuro;
+- paneles azul grisáceo oscuro;
+- superficies secundarias grafito frío;
+- acento principal azul eléctrico o cian;
+- acento ML violeta;
+- éxito teal;
+- advertencias ámbar;
+- errores rojos;
+- texto principal blanco suave;
+- texto secundario gris azulado claro.
+
+Reglas:
+
+- densidad profesional;
+- bordes redondeados moderados;
+- separadores finos;
+- sombras sutiles;
+- tablas legibles;
+- sin estética de lujo;
+- sin imágenes decorativas.

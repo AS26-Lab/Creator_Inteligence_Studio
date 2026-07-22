@@ -4,18 +4,17 @@ Creator Intelligence Studio es una aplicación de escritorio para Windows orient
 
 ## Estado actual
 
-Este repositorio está en una etapa temprana. Ya existe una base ejecutable, diagnóstica y un primer flujo vertical funcional para creadores, proyectos y videos locales usando únicamente la biblioteca estándar de Python 3.11.
+Este repositorio está en una etapa temprana. Ya existe una base ejecutable, diagnóstica, un primer flujo vertical funcional para creadores, proyectos y videos locales, y una interfaz de escritorio funcional con PySide6.
 
 Todavía no existen:
 
-- interfaz gráfica;
 - análisis audiovisual;
 - PyTorch;
 - CUDA Toolkit;
 - FFmpeg;
 - modelos descargados;
 - conectores reales;
-- Script & Voice Studio implementado;
+- Script & Voice Studio implementado como flujo obligatorio;
 - procesamiento creativo final.
 
 ## Plataforma principal
@@ -31,8 +30,21 @@ AMD, ROCm, DirectML, Vulkan y macOS quedan fuera del MVP.
 
 - Windows 11 recomendado para el uso final, aunque este entorno de desarrollo está en Windows 10 Pro 22H2.
 - Python 3.11.9 dentro de `.venv`
+- PySide6 instalado en el entorno virtual
 - Git instalado
-- No se requieren dependencias externas en esta etapa
+- No se requieren dependencias externas adicionales en esta etapa
+
+## Arranque de la GUI
+
+```bat
+scripts\run_gui.bat
+```
+
+O directamente:
+
+```bat
+python -m creator_intelligence_studio --gui
+```
 
 ## Estado funcional actual
 
@@ -47,6 +59,7 @@ La aplicación ya permite:
 - registrar videos locales como metadatos;
 - listar y consultar videos registrados;
 - verificar si un archivo sigue disponible;
+- abrir una interfaz de escritorio funcional con navegación, inspector y diagnóstico del sistema;
 - persistir toda la información en SQLite local.
 
 ## Base local
@@ -132,7 +145,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ## Estructura principal
 
-- `docs/`: documentación maestra y diagnóstico inicial.
+- `docs/`: documentación maestra y diagnósticos.
 - `src/creator_intelligence_studio/`: paquete principal del proyecto.
 - `tests/`: pruebas unitarias.
 - `config/`: configuración por defecto.
@@ -146,7 +159,7 @@ Script & Voice Studio es un módulo opcional. No es necesario para analizar vide
 
 ## Advertencia sobre CUDA y PyTorch
 
-CUDA Toolkit y PyTorch todavía no están instalados en este repositorio. La aplicación actual solo realiza diagnóstico básico y preparación de rutas y logging.
+CUDA Toolkit y PyTorch todavía no están instalados en este repositorio. La aplicación actual solo realiza diagnóstico básico y preparación de rutas, logging e interfaz.
 
 ## Seguridad y repositorio
 

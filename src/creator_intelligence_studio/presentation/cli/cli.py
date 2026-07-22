@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Imprime el diagnostico de entorno en JSON.",
     )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Abre la interfaz de escritorio.",
+    )
 
     subparsers = parser.add_subparsers(dest="entity")
 

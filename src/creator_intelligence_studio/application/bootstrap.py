@@ -126,6 +126,11 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
     args = parse_args(argv)
 
     try:
+        if args.gui:
+            context = _load_service_context()
+            from creator_intelligence_studio.presentation.desktop.app import launch_gui
+
+            return launch_gui(context, stdout=stdout, stderr=stderr)
         if args.diagnostic_json or args.entity is None:
             context = _load_context()
             if args.diagnostic_json:

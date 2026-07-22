@@ -168,3 +168,33 @@ La caché debe invalidarse cuando cambian entradas, versiones o parámetros rele
 - incorporar entrenamiento incremental;
 - mejorar orquestación distribuida si fuera necesario.
 
+## Presentación de escritorio
+
+- `presentation/desktop` concentra la interfaz de escritorio con PySide6.
+- La navegación, las vistas y los diálogos dependen de `WorkspaceViewModel`.
+- Los widgets no acceden a SQLite directamente.
+- La lógica de negocio permanece en `domain/`, `application/` e `infrastructure/`.
+- La GUI expone un panel lateral contextual y una barra superior con selección de creador y proyecto.
+
+## Sistema visual
+
+- fondo principal: azul marino muy oscuro;
+- paneles: azul grisáceo oscuro;
+- superficies secundarias: grafito frío;
+- acento principal: azul eléctrico o cian;
+- acento de machine learning: violeta;
+- éxito: teal;
+- advertencias: ámbar;
+- errores: rojo;
+- texto principal: blanco suave;
+- texto secundario: gris azulado claro.
+
+Reglas:
+
+- bordes redondeados moderados;
+- separadores finos;
+- sombras sutiles;
+- tablas profesionales;
+- sin lujo visual;
+- sin neón excesivo;
+- sin imágenes decorativas.

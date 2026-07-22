@@ -19,6 +19,7 @@
 | 2026-07-22 | Registro de videos | El registro inicial conserva la ruta absoluta normalizada del archivo y no copia ni procesa el video. | El sistema puede verificar disponibilidad posterior sin mover el archivo original. | Copiar el archivo, generar proxies o abstraer la ruta de forma prematura. |
 | 2026-07-22 | Registro de metadatos | No se calcula hash completo durante el registro inicial. | Se mantiene el flujo liviano y se evita leer archivos grandes innecesariamente. | Hacer fingerprint completo en esta misión. |
 | 2026-07-22 | Portabilidad futura | Las rutas portables y la biblioteca administrada quedan para una fase futura. | La primera versión usa rutas absolutas normalizadas para desarrollo controlado. | Forzar una abstracción portable prematura. |
+| 2026-07-22 | Interfaz de escritorio | PySide6 será la base de la GUI del MVP y vivirá en `presentation/desktop`. | La presentación queda separada de CLI, dominio e infraestructura. | Integrar la interfaz dentro de la lógica de aplicación o depender de otra biblioteca gráfica. |
 
 ## Pendientes
 
