@@ -66,14 +66,20 @@ def build_dataset_label(
     elif review_status in {"needs_review", "unreviewed"}:
         label_source.append("review_status")
         confidence = 0.30
-    elif review_status in {"duplicate", "invalid"}:
+    elif review_status == "duplicate":
+        label_source.append("review_status")
+        label = PersonalizationLabel.EXCLUDED
+        confidence = 0.10
+    elif review_status == "invalid":
         label_source.append("review_status")
         label = PersonalizationLabel.EXCLUDED
         confidence = 0.10
 
     if rating is not None:
         label_source.append("rating")
-        if rating >= 4:
+        if review_status in {"duplicate", "invalid"}:
+            confidence = min(confidence, 0.15)
+        elif rating >= 4:
             label = PersonalizationLabel.POSITIVE
             confidence = max(confidence, 0.85 if rating == 4 else 0.95)
         elif rating <= 2:
@@ -137,7 +143,7 @@ def build_dataset_label(
         label = PersonalizationLabel.EXCLUDED if options.conflict_policy == "excluded" else PersonalizationLabel.NEUTRAL_OR_UNCERTAIN
         confidence = 0.20
 
-    if review_status in {"duplicate", "invalid"}:
+    if review_status == "invalid":
         conflict_entries.append(
             {
                 "type": "invalid_review_status",

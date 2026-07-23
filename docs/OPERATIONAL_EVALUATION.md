@@ -60,3 +60,5 @@ The operational evaluation view shows scenarios, history, stages, metrics, asser
 - A technically successful run does not prove recommendation quality.
 - No new analysis model is introduced.
 - Demo scenarios are synthetic and isolated from user-private content.
+- `excluded` dataset rows are audited separately and do not count as train/validation/test leakage.
+- The controlled binary baseline scenario does not require neutral examples to pass readiness.

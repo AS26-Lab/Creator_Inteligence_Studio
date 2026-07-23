@@ -109,7 +109,18 @@ def _build_source_payload(
                 "feature_hash": json.dumps(example.feature_vector, sort_keys=True, ensure_ascii=False, default=str),
                 "quality_flags": example.quality_flags,
             }
-            for example in sorted(assembled.examples, key=lambda item: (item.video_asset_id, item.start_seconds, item.id))
+            for example in sorted(
+                assembled.examples,
+                key=lambda item: (
+                    item.video_asset_id,
+                    item.start_seconds,
+                    item.end_seconds,
+                    item.ranked_clip_candidate_id or "",
+                    item.multimodal_candidate_id or "",
+                    item.label.value,
+                    item.split_name.value,
+                ),
+            )
         ],
         "conflicts": [
             {
@@ -412,7 +423,7 @@ class PersonalizationDatasetService:
                     feature_vector=feature_bundle.feature_vector,
                     feature_schema_version=CREATOR_FEATURE_SCHEMA_VERSION,
                     quality_flags=quality_flags,
-                    exclusion_reason="conflicto humano" if decision.label == PersonalizationLabel.EXCLUDED else None,
+                    exclusion_reason=str(quality_flags.get("review_status")) if decision.label == PersonalizationLabel.EXCLUDED else None,
                     split_name=PersonalizationSplitName.EXCLUDED if decision.label == PersonalizationLabel.EXCLUDED else PersonalizationSplitName.TRAIN,
                     sample_weight=self._sample_weight(decision.label, decision.confidence, quality_flags),
                     created_at=utc_now(),
@@ -502,7 +513,7 @@ class PersonalizationDatasetService:
     def _sample_weight(self, label: PersonalizationLabel, confidence: float, quality_flags: dict[str, object]) -> float:
         weight = 1.0
         if label == PersonalizationLabel.EXCLUDED:
-            weight = 0.1
+            weight = 0.0
         elif label == PersonalizationLabel.NEUTRAL_OR_UNCERTAIN:
             weight = 0.5
         else:

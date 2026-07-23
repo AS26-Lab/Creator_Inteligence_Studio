@@ -87,7 +87,7 @@ def create_demo_audio(destination: Path, *, text: str, duration_seconds: float =
     return destination, tuple(notes)
 
 
-def _ffmpeg_color_source(color: str, duration_seconds: float, size: str = "1280x720", rate: int = 30) -> str:
+def _ffmpeg_color_source(color: str, duration_seconds: float, size: str = "854x480", rate: int = 30) -> str:
     return f"color=c={color}:s={size}:r={rate}:d={duration_seconds}"
 
 
@@ -102,6 +102,7 @@ def create_demo_video(
     destination.parent.mkdir(parents=True, exist_ok=True)
     input_args: list[str] = []
     video_map = "0:v"
+    video_filter: str | None = None
     if style == "cut":
         input_args = [
             "-f",
@@ -119,10 +120,9 @@ def create_demo_video(
             "-f",
             "lavfi",
             "-i",
-            f"testsrc2=size=1280x720:rate=30:duration={duration_seconds}",
-            "-vf",
-            f"fade=t=in:st=0:d=0.5,fade=t=out:st={max(duration_seconds - 0.5, 0.5)}:d=0.5",
+            f"testsrc2=size=854x480:rate=30:duration={duration_seconds}",
         ]
+        video_filter = f"fade=t=in:st=0:d=0.5,fade=t=out:st={max(duration_seconds - 0.5, 0.5)}:d=0.5"
     elif style == "static":
         input_args = [
             "-f",
@@ -135,7 +135,7 @@ def create_demo_video(
             "-f",
             "lavfi",
             "-i",
-            f"testsrc2=size=1280x720:rate=30:duration={duration_seconds}",
+            f"testsrc2=size=854x480:rate=30:duration={duration_seconds}",
         ]
     audio_input_index = 2 if style == "cut" else 1
     if style == "cut":
@@ -156,6 +156,7 @@ def create_demo_video(
         video_map,
         "-map",
         f"{audio_input_index}:a",
+        *(["-vf", video_filter] if video_filter else []),
         "-c:v",
         "libx264",
         "-pix_fmt",
@@ -180,12 +181,13 @@ def create_demo_assets(
     style: str,
     narration_text: str,
     duration_seconds: float = 4.0,
+    asset_index: int = 0,
 ) -> DemoAssetBundle:
     locator = MediaToolLocator(project_root=project_root)
     ffmpeg = locator.locate("ffmpeg")
     if not ffmpeg.available or ffmpeg.path is None:
         raise RuntimeError(ffmpeg.error_message or "ffmpeg no disponible.")
-    base_dir = project_root / "temp" / "evaluations" / scenario_id / run_id
+    base_dir = project_root / "temp" / "evaluations" / scenario_id / run_id / f"asset_{asset_index + 1}"
     audio_path = base_dir / "demo_audio.wav"
     video_path = base_dir / "demo_video.mp4"
     notes: list[str] = []

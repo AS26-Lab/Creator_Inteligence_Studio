@@ -17,6 +17,7 @@ class ScenarioPlan:
     force_cpu_transcription: bool = False
     repeat_for_cache_reuse: bool = False
     simulate_failure_recovery: bool = False
+    export_report: bool = False
 
 
 def list_operational_scenarios() -> list[OperationalEvaluationScenarioDefinition]:
@@ -48,7 +49,7 @@ def list_operational_scenarios() -> list[OperationalEvaluationScenarioDefinition
             id="controlled_creator_workflow",
             version="1",
             name="Controlled creator workflow",
-            description="Creador sintético con varios videos y feedback controlado.",
+            description="Creador sintetico con varios videos y feedback controlado.",
             required_stage_names=(
                 "create_demo_creator",
                 "create_demo_project",
@@ -68,6 +69,11 @@ def list_operational_scenarios() -> list[OperationalEvaluationScenarioDefinition
                 "verify_artifact",
                 "activate_model",
                 "score_candidates",
+                "export_report",
+            ),
+            notes=(
+                "Feedback sintetico auditable con synthetic_evaluation_rule.",
+                "Escenario multivideo aislado para validacion tecnica.",
             ),
         ),
         OperationalEvaluationScenarioDefinition(
@@ -94,7 +100,7 @@ def list_operational_scenarios() -> list[OperationalEvaluationScenarioDefinition
             id="cache_reuse",
             version="1",
             name="Cache reuse",
-            description="Ejecuta dos pasadas para demostrar reutilizacion de caché.",
+            description="Ejecuta dos pasadas para demostrar reutilizacion de cachÃ©.",
             required_stage_names=(
                 "create_demo_creator",
                 "create_demo_project",
@@ -142,10 +148,12 @@ def resolve_scenario_plan(scenario_id: str) -> ScenarioPlan:
     if scenario_id == "controlled_creator_workflow":
         return ScenarioPlan(
             definition=definition,
-            video_styles=("cut", "fade"),
+            video_styles=("cut", "fade", "static", "testsrc", "cut", "fade", "static", "testsrc"),
             narration_text="Hello from Creator Intelligence Studio. This is a controlled evaluation sample.",
             duration_seconds=6.0,
             use_controlled_feedback=True,
+            force_cpu_transcription=True,
+            export_report=True,
         )
     if scenario_id == "failure_recovery":
         return ScenarioPlan(

@@ -53,6 +53,10 @@ Initial mapping:
 - neutral_or_uncertain: unreviewed, needs_review, rating 3, weak shortlist context, or conflicting feedback;
 - excluded: conflict, stale source, invalid bounds, duplicate, or leakage risk when configured to exclude.
 
+`excluded` examples remain auditable but are not counted as train, validation or test leakage.
+They can coexist with train/validation/test examples for the same video without violating split integrity when they are intentionally filtered out of training splits.
+For the controlled binary baseline scenario, neutral examples are optional and are not required for success.
+
 Label source is recorded for every example:
 
 - `review_status`
@@ -116,6 +120,9 @@ Primary split strategy:
 - keep duplicate or highly overlapping groups together via `group_key`;
 - prefer deterministic assignment with a fixed seed;
 - avoid leakage across train, validation and test.
+
+Only `train`, `validation` and `test` participate in leakage checks.
+`excluded` rows are audited separately and do not count as a split leak.
 
 When there are too few independent videos:
 

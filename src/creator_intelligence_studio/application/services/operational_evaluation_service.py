@@ -42,7 +42,7 @@ from creator_intelligence_studio.domain.operational_evaluation.value_objects imp
     OperationalEvaluationRunStatus,
     OperationalEvaluationStageStatus,
 )
-from creator_intelligence_studio.domain.personalization_data.value_objects import PersonalizationDatasetOptions
+from creator_intelligence_studio.domain.personalization_data.value_objects import PersonalizationDatasetOptions, PersonalizationSplitName
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionOptions
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.operational_evaluation.assertion_engine import (
@@ -259,6 +259,14 @@ class OperationalEvaluationService:
         metrics: list[OperationalEvaluationMetric] = []
         assertions: list[OperationalEvaluationAssertion] = []
         artifacts: list[OperationalEvaluationArtifact] = []
+        def _jsonable(value):
+            if isinstance(value, list):
+                return [_jsonable(item) for item in value]
+            if isinstance(value, dict):
+                return {key: _jsonable(item) for key, item in value.items()}
+            if hasattr(value, "to_dict"):
+                return value.to_dict()
+            return value
         try:
             result = action()
             timing = timer.finish()
@@ -266,7 +274,7 @@ class OperationalEvaluationService:
             if isinstance(result, dict) and result.get("warnings"):
                 warnings.extend([str(item) for item in result["warnings"] if item])
                 status = OperationalEvaluationStageStatus.COMPLETED_WITH_WARNINGS
-            output_summary = result if isinstance(result, dict) else {"result": str(result)}
+            output_summary = result if isinstance(result, dict) else {"result": _jsonable(result)}
         except Exception as exc:
             timing = timer.finish()
             status = OperationalEvaluationStageStatus.FAILED
@@ -456,12 +464,55 @@ class OperationalEvaluationService:
             creator = None
             project = None
             demo_bundle = None
+            demo_bundles: list[DemoAssetBundle] = []
             video_ids: list[str] = []
             video_paths: list[Path] = []
             primary_video_id: str | None = None
             model_run_id: str | None = None
             snapshot_id: str | None = None
             active_model_run_id: str | None = None
+            score_probe_candidate_id: str | None = None
+            score_probe_rank_score: float | None = None
+            controlled_feedback_rule_name = "synthetic_evaluation_rule"
+
+            def add_metric(metric_name: str, metric_value: float | None, *, metric_unit: str | None = None, stage_name_for_metric: str | None = None, details: dict[str, object] | None = None) -> None:
+                metrics.append(
+                    OperationalEvaluationMetric(
+                        id=str(uuid4()),
+                        evaluation_run_id=run.id,
+                        stage_name=stage_name_for_metric,
+                        metric_name=metric_name,
+                        metric_value=metric_value,
+                        metric_unit=metric_unit,
+                        details_json=details or {},
+                        created_at=utc_now(),
+                    )
+                )
+
+            def add_assertion(
+                stage_name_for_assertion: str | None,
+                name: str,
+                condition: bool,
+                *,
+                severity: OperationalEvaluationAssertionSeverity = OperationalEvaluationAssertionSeverity.ERROR,
+                expected: dict[str, object] | None = None,
+                actual: dict[str, object] | None = None,
+                message: str | None = None,
+            ) -> None:
+                assertions.append(
+                    self._record_assertion(
+                        run.id,
+                        stage_name=stage_name_for_assertion,
+                        assertion=assert_condition(
+                            name,
+                            condition,
+                            severity=severity,
+                            expected=expected,
+                            actual=actual,
+                            message=message,
+                        ),
+                    )
+                )
 
             def progress(stage_name: str, index: int) -> None:
                 if progress_callback is not None:
@@ -505,15 +556,21 @@ class OperationalEvaluationService:
                     if creator is None or project is None:
                         raise OperationalEvaluationStateError("Faltan creador o proyecto sinteticos.")
                     def _generate():
-                        bundle = create_demo_assets(
-                            project_root=self.paths.project_root,
-                            scenario_id=scenario_id,
-                            run_id=run.id,
-                            style=plan.video_styles[min(len(video_ids), len(plan.video_styles) - 1)],
-                            narration_text=plan.narration_text,
-                            duration_seconds=plan.duration_seconds,
-                        )
-                        return bundle
+                        bundles: list[DemoAssetBundle] = []
+                        styles = plan.video_styles or ("static",)
+                        for asset_index, style in enumerate(styles):
+                            bundles.append(
+                                create_demo_assets(
+                                    project_root=self.paths.project_root,
+                                    scenario_id=scenario_id,
+                                    run_id=run.id,
+                                    style=style,
+                                    narration_text=plan.narration_text,
+                                    duration_seconds=plan.duration_seconds,
+                                    asset_index=asset_index,
+                                )
+                            )
+                        return bundles
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
@@ -522,11 +579,17 @@ class OperationalEvaluationService:
                         action=_generate,
                         cache_status=OperationalEvaluationCacheStatus.MISS,
                     )
-                    demo_bundle = result
-                    if isinstance(demo_bundle, DemoAssetBundle):
-                        video_paths.append(demo_bundle.video_path)
-                    artifacts.append(self._manage_artifact(run_id=run.id, stage_name=stage_name, artifact_type="demo_video", path=demo_bundle.video_path))
-                    artifacts.append(self._manage_artifact(run_id=run.id, stage_name=stage_name, artifact_type="demo_audio", path=demo_bundle.audio_path))
+                    if isinstance(result, list):
+                        demo_bundles = [bundle for bundle in result if isinstance(bundle, DemoAssetBundle)]
+                    elif isinstance(result, DemoAssetBundle):
+                        demo_bundles = [result]
+                    else:
+                        demo_bundles = []
+                    for bundle in demo_bundles:
+                        video_paths.append(bundle.video_path)
+                        artifacts.append(self._manage_artifact(run_id=run.id, stage_name=stage_name, artifact_type="demo_video", path=bundle.video_path))
+                        artifacts.append(self._manage_artifact(run_id=run.id, stage_name=stage_name, artifact_type="demo_audio", path=bundle.audio_path))
+                    demo_bundle = demo_bundles[0] if demo_bundles else None
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -575,8 +638,18 @@ class OperationalEvaluationService:
                         action=_inspect,
                         cache_status=OperationalEvaluationCacheStatus.MISS,
                     )
+                    if isinstance(result, list):
+                        add_metric("inspected_video_count", float(len(result)), stage_name_for_metric=stage_name)
                     for report in result or []:
-                        assertions.append(self._record_assertion(run.id, stage_name=stage_name, assertion=assert_condition("video_registered", report.inspection is not None, expected={"status": "completed"}, actual={"status": report.status.value}, message="Inspeccion completada.")))
+                        add_assertion(
+                            stage_name,
+                            "analysis_source_completed",
+                            report.inspection is not None and report.status.value == "completed",
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"status": "completed"},
+                            actual={"status": report.status.value, "video_id": getattr(getattr(report, "video", None), "id", None)},
+                            message="Inspeccion completada.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -627,29 +700,48 @@ class OperationalEvaluationService:
                     errors.extend(e)
                     continue
                 if stage_name in {"transcribe", "transcribe_cached", "transcribe_cpu"}:
-                    if primary_video_id is None:
+                    if not video_ids:
+                        raise OperationalEvaluationStateError("No existen videos registrados.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id] if primary_video_id is not None else []
+                    if not target_video_ids:
                         raise OperationalEvaluationStateError("No existe video principal.")
                     options = TranscriptionOptions(
                         profile="balanced",
                         model_name="small",
-                        device="cpu" if stage_name == "transcribe_cpu" else "auto",
-                        compute_type="int8" if stage_name == "transcribe_cpu" else None,
+                        device="cpu" if (stage_name == "transcribe_cpu" or plan.force_cpu_transcription) else "auto",
+                        compute_type="int8" if (stage_name == "transcribe_cpu" or plan.force_cpu_transcription) else None,
                         language="en",
                         beam_size=5,
                         vad_filter=False,
                         word_timestamps=False,
                     )
                     def _transcribe():
-                        return self.transcription_service.transcribe_video(primary_video_id, options)
+                        return [self.transcription_service.transcribe_video(video_id, options) for video_id in target_video_ids]
                     cache_status = OperationalEvaluationCacheStatus.HIT if stage_name == "transcribe_cached" else OperationalEvaluationCacheStatus.MISS
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id, "options": options.to_dict()},
+                        input_summary_json={"video_ids": target_video_ids, "options": options.to_dict()},
                         action=_transcribe,
                         cache_status=cache_status,
                     )
+                    if isinstance(result, list):
+                        add_metric("transcribed_video_count", float(len(result)), stage_name_for_metric=stage_name)
+                    for report in result or []:
+                        add_assertion(
+                            stage_name,
+                            "transcription_result_available",
+                            getattr(report, "transcription", None) is not None and getattr(report, "backend", None) is not None and getattr(report, "model_status", None) is not None,
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"backend": "available", "model_status": "available"},
+                            actual={
+                                "video_id": getattr(getattr(report, "video", None), "id", None),
+                                "backend": report.backend.to_dict() if getattr(report, "backend", None) else None,
+                                "model_status": report.model_status.to_dict() if getattr(report, "model_status", None) else None,
+                            },
+                            message="La transcripcion produjo resultado auditable.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -672,83 +764,237 @@ class OperationalEvaluationService:
                     errors.extend(e)
                     continue
                 if stage_name == "analyze_acoustics":
-                    if primary_video_id is None:
+                    if not video_ids:
+                        raise OperationalEvaluationStateError("No existen videos registrados.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id] if primary_video_id is not None else []
+                    if not target_video_ids:
                         raise OperationalEvaluationStateError("No existe video principal.")
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id},
-                        action=lambda: self.acoustic_service.analyze_acoustics(primary_video_id, force=force),
+                        input_summary_json={"video_ids": target_video_ids},
+                        action=lambda: [self.acoustic_service.analyze_acoustics(video_id, force=force) for video_id in target_video_ids],
                     )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
                     continue
                 if stage_name == "analyze_visuals":
-                    if primary_video_id is None:
+                    if not video_ids:
+                        raise OperationalEvaluationStateError("No existen videos registrados.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id] if primary_video_id is not None else []
+                    if not target_video_ids:
                         raise OperationalEvaluationStateError("No existe video principal.")
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id},
-                        action=lambda: self.visual_service.analyze_visuals(primary_video_id, force=force),
+                        input_summary_json={"video_ids": target_video_ids},
+                        action=lambda: [self.visual_service.analyze_visuals(video_id, force=force) for video_id in target_video_ids],
                     )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
                     continue
                 if stage_name == "analyze_multimodal":
-                    if primary_video_id is None:
+                    if not video_ids:
+                        raise OperationalEvaluationStateError("No existen videos registrados.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id] if primary_video_id is not None else []
+                    if not target_video_ids:
                         raise OperationalEvaluationStateError("No existe video principal.")
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id},
-                        action=lambda: self.multimodal_service.analyze_multimodal(primary_video_id, force=force),
+                        input_summary_json={"video_ids": target_video_ids},
+                        action=lambda: [self.multimodal_service.analyze_multimodal(video_id, force=force) for video_id in target_video_ids],
                     )
+                    if isinstance(result, list):
+                        add_metric("multimodal_video_count", float(len(result)), stage_name_for_metric=stage_name)
+                    for report in result or []:
+                        add_assertion(
+                            stage_name,
+                            "multimodal_candidates_generated",
+                            getattr(report, "analysis", None) is not None and len(getattr(report, "candidates", ())) > 0,
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"candidates": ">0"},
+                            actual={"video_id": getattr(getattr(report, "video", None), "id", None), "candidates": len(getattr(report, "candidates", ()))},
+                            message="Los candidatos multimodales quedaron disponibles.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
                     continue
                 if stage_name == "rank_clips":
-                    if primary_video_id is None:
+                    if not video_ids:
+                        raise OperationalEvaluationStateError("No existen videos registrados.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id] if primary_video_id is not None else []
+                    if not target_video_ids:
                         raise OperationalEvaluationStateError("No existe video principal.")
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id},
-                        action=lambda: self.clip_service.rank_clip_candidates(primary_video_id, profile="balanced", force=force),
+                        input_summary_json={"video_ids": target_video_ids},
+                        action=lambda: [self.clip_service.rank_clip_candidates(video_id, profile="balanced", force=force) for video_id in target_video_ids],
                     )
+                    if isinstance(result, list):
+                        add_metric("ranked_video_count", float(len(result)), stage_name_for_metric=stage_name)
+                        add_metric(
+                            "ranked_candidate_count",
+                            float(sum(len(report.candidates) for report in result if getattr(report, "candidates", None) is not None)),
+                            stage_name_for_metric=stage_name,
+                        )
+                        add_assertion(
+                            stage_name,
+                            "ranking_generated",
+                            all(getattr(report, "run", None) is not None for report in result),
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"ranked_videos": len(target_video_ids)},
+                            actual={"ranked_reports": len(result)},
+                            message="Se genero ranking para los videos demo.",
+                        )
+                    if primary_video_id is not None:
+                        ranked_candidates = self.clip_service.list_ranked_candidates(primary_video_id)
+                        if ranked_candidates:
+                            score_probe_candidate_id = ranked_candidates[0].id
+                            score_probe_rank_score = ranked_candidates[0].rank_score
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
                     continue
                 if stage_name == "apply_controlled_feedback":
                     def _feedback():
-                        ranking = self.clip_service.get_ranking_run(primary_video_id)
-                        if ranking is None:
-                            return {"warnings": ["No hay ranking para feedback controlado."]}
-                        candidates = self.clip_service.list_ranked_candidates(primary_video_id)
+                        target_video_ids = video_ids if plan.use_controlled_feedback else ([primary_video_id] if primary_video_id is not None else [])
+                        if not target_video_ids:
+                            return {"warnings": ["No hay videos para feedback controlado."], "rule_name": controlled_feedback_rule_name}
                         actions = []
-                        for candidate_index, candidate in enumerate(candidates[:3]):
-                            if candidate_index == 0:
-                                actions.append(self.clip_service.approve_candidate(candidate.id).to_dict())
-                            elif candidate_index == 1:
-                                actions.append(self.clip_service.reject_candidate(candidate.id).to_dict())
-                            else:
-                                actions.append(self.clip_service.shortlist_candidate(candidate.id).to_dict())
-                        return {"actions": actions, "warnings": []}
+                        collections = []
+                        for video_index, video_id in enumerate(target_video_ids):
+                            ranking = self.clip_service.get_ranking_run(video_id)
+                            if ranking.run is None:
+                                continue
+                            candidates = self.clip_service.list_ranked_candidates(video_id)
+                            if not candidates:
+                                continue
+                            collection = self.clip_service.create_clip_collection(
+                                video_id,
+                                name=f"Demo collection {video_index + 1}",
+                                description="Coleccion sintetica controlada.",
+                            )
+                            collections.append(collection.to_dict())
+                            positive_video = video_index % 2 == 0
+                            neutral_video = False
+                            for candidate_index, candidate in enumerate(candidates[:4]):
+                                if candidate.review_status.value in {"duplicate", "invalid"}:
+                                    self.clip_service.set_candidate_tags(candidate.id, ["duplicate", "synthetic"])
+                                    self.clip_service.add_candidate_note(candidate.id, "Synthetic duplicate left excluded for leakage control.")
+                                    continue
+                                if candidate_index == 0:
+                                    if neutral_video:
+                                        updated = self.clip_service.shortlist_candidate(candidate.id)
+                                        if video_index % 4 == 2:
+                                            self.clip_service.rate_candidate(candidate.id, 3)
+                                            self.clip_service.set_candidate_tags(candidate.id, ["shortlist", "borderline", "synthetic"])
+                                            self.clip_service.add_candidate_note(candidate.id, "Synthetic neutral shortlist decision.")
+                                        else:
+                                            updated = self.clip_service.mark_candidate_needs_review(candidate.id)
+                                            self.clip_service.rate_candidate(candidate.id, 3)
+                                            self.clip_service.set_candidate_tags(candidate.id, ["needs_review", "borderline", "synthetic"])
+                                            self.clip_service.add_candidate_note(candidate.id, "Synthetic neutral review decision.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "neutral", "rating": 3})
+                                        break
+                                    elif positive_video:
+                                        updated = self.clip_service.approve_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 5)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["approved", "highlight", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic positive decision.")
+                                    else:
+                                        updated = self.clip_service.reject_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 1)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["rejected", "low_energy", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic negative decision.")
+                                    self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                    actions.append({"candidate_id": updated.id, "action": "approve" if positive_video else "reject", "rating": 5 if positive_video else 1})
+                                elif candidate_index == 1:
+                                    if positive_video:
+                                        updated = self.clip_service.shortlist_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 4)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["shortlist", "borderline", "synthetic"])
+                                        if candidate.duration_seconds > 0.4:
+                                            delta = min(0.2, max(candidate.duration_seconds * 0.1, 0.05))
+                                            start_seconds = max(0.0, candidate.adjusted_start_seconds + delta)
+                                            end_seconds = candidate.adjusted_end_seconds - delta
+                                            if end_seconds > start_seconds:
+                                                self.clip_service.adjust_candidate_bounds(candidate.id, start_seconds, end_seconds)
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic shortlist with manual bounds adjustment.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "shortlist", "rating": 4})
+                                    else:
+                                        updated = self.clip_service.reject_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 2)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["rejected", "low_energy", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic negative decision.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "reject", "rating": 2})
+                                elif candidate_index == 2:
+                                    if positive_video:
+                                        updated = self.clip_service.shortlist_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 4)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["shortlist", "borderline", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic shortlist with manual bounds adjustment.")
+                                        if candidate.duration_seconds > 0.4:
+                                            delta = min(0.2, max(candidate.duration_seconds * 0.1, 0.05))
+                                            start_seconds = max(0.0, candidate.adjusted_start_seconds + delta)
+                                            end_seconds = candidate.adjusted_end_seconds - delta
+                                            if end_seconds > start_seconds:
+                                                self.clip_service.adjust_candidate_bounds(candidate.id, start_seconds, end_seconds)
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "shortlist", "rating": 4})
+                                    else:
+                                        updated = self.clip_service.reject_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 1)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["rejected", "low_energy", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic negative decision.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "reject", "rating": 1})
+                                else:
+                                    if positive_video:
+                                        updated = self.clip_service.shortlist_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 4)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["shortlist", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic positive fallback decision.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "shortlist", "rating": 4})
+                                    else:
+                                        updated = self.clip_service.reject_candidate(candidate.id)
+                                        self.clip_service.rate_candidate(candidate.id, 1)
+                                        self.clip_service.set_candidate_tags(candidate.id, ["rejected", "synthetic"])
+                                        self.clip_service.add_candidate_note(candidate.id, "Synthetic negative fallback decision.")
+                                        self.clip_service.add_candidate_to_collection(collection.id, candidate.id)
+                                        actions.append({"candidate_id": updated.id, "action": "reject", "rating": 1})
+                        return {"actions": actions, "collections": collections, "rule_name": controlled_feedback_rule_name, "warnings": []}
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"video_id": primary_video_id},
+                        input_summary_json={"video_ids": video_ids, "rule_name": controlled_feedback_rule_name},
                         action=_feedback,
                     )
+                    if isinstance(result, dict):
+                        add_metric("feedback_action_count", float(len(result.get("actions", []))), stage_name_for_metric=stage_name)
+                        add_metric("feedback_collection_count", float(len(result.get("collections", []))), stage_name_for_metric=stage_name)
+                        add_assertion(
+                            stage_name,
+                            "feedback_rule_is_synthetic_evaluation_rule",
+                            result.get("rule_name") == controlled_feedback_rule_name,
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"rule_name": controlled_feedback_rule_name},
+                            actual={"rule_name": result.get("rule_name")},
+                            message="La regla sintetica de feedback quedo auditada.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -795,6 +1041,21 @@ class OperationalEvaluationService:
                     )
                     if result is not None and getattr(result, "training_run", None) is not None:
                         model_run_id = result.training_run.id
+                        add_assertion(
+                            stage_name,
+                            "training_run_completed",
+                            getattr(result.training_run, "status", None) is not None
+                            and result.training_run.status.value in {"completed", "completed_with_warnings"},
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"training_run_status": ["completed", "completed_with_warnings"]},
+                            actual={
+                                "training_run_status": getattr(result.training_run.status, "value", None),
+                                "outcome_status": result.outcome_status,
+                            },
+                            message="El training baseline completo correctamente.",
+                        )
+                        add_metric("baseline_metric_count", float(len(result.metrics)), stage_name_for_metric=stage_name)
+                        add_metric("baseline_summary_count", float(len(result.baseline_summary)), stage_name_for_metric=stage_name)
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -811,6 +1072,15 @@ class OperationalEvaluationService:
                     )
                     if result is not None and getattr(result, "registry_entry", None) is not None:
                         active_model_run_id = result.registry_entry.training_run_id
+                        add_assertion(
+                            stage_name,
+                            "model_candidate_before_activation",
+                            getattr(result.registry_entry, "status", None) is not None and result.registry_entry.status.value == "candidate",
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"status": "candidate"},
+                            actual={"status": getattr(result.registry_entry.status, "value", None)},
+                            message="El modelo queda como candidate antes de activar.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -825,6 +1095,16 @@ class OperationalEvaluationService:
                         input_summary_json={"training_run_id": model_run_id},
                         action=lambda: self.model_service.activate_model(model_run_id),
                     )
+                    if result is not None and getattr(result, "registry_entry", None) is not None:
+                        add_assertion(
+                            stage_name,
+                            "model_active_after_activate",
+                            getattr(result.registry_entry, "is_active", False) is True,
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"is_active": True},
+                            actual={"is_active": getattr(result.registry_entry, "is_active", None), "status": getattr(result.registry_entry.status, "value", None)},
+                            message="El modelo quedo activo tras la activacion explicita.",
+                        )
                     stages.append(stage)
                     warnings.extend(w)
                     errors.extend(e)
@@ -832,12 +1112,58 @@ class OperationalEvaluationService:
                 if stage_name == "score_candidates":
                     if creator is None or primary_video_id is None:
                         raise OperationalEvaluationStateError("Faltan creador o video principal.")
+                    target_video_ids = video_ids if plan.use_controlled_feedback else [primary_video_id]
+                    if score_probe_candidate_id is None:
+                        ranked_candidates = self.clip_service.list_ranked_candidates(primary_video_id)
+                        if ranked_candidates:
+                            score_probe_candidate_id = ranked_candidates[0].id
+                            score_probe_rank_score = ranked_candidates[0].rank_score
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,
                         stage_name=stage_name,
-                        input_summary_json={"creator_id": creator.id, "video_id": primary_video_id},
-                        action=lambda: self.model_service.score_candidates_for_video(creator.id, primary_video_id),
+                        input_summary_json={"creator_id": creator.id, "video_ids": target_video_ids},
+                        action=lambda: [self.model_service.score_candidates_for_video(creator.id, video_id) for video_id in target_video_ids],
+                    )
+                    flattened_scores = []
+                    for item in result or []:
+                        if isinstance(item, list):
+                            flattened_scores.extend(item)
+                        elif item is not None:
+                            flattened_scores.append(item)
+                    if flattened_scores:
+                        add_metric("personalized_score_count", float(len(flattened_scores)), stage_name_for_metric=stage_name, details={"video_ids": target_video_ids})
+                        add_assertion(
+                            stage_name,
+                            "personalized_score_generated",
+                            len(flattened_scores) > 0,
+                            severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                            expected={"min_scores": 1},
+                            actual={"scores": len(flattened_scores)},
+                            message="Se genero scoring personalizado.",
+                        )
+                        if score_probe_candidate_id is not None and score_probe_rank_score is not None:
+                            probe = self.clip_service.get_ranked_candidate(score_probe_candidate_id)
+                            add_assertion(
+                                stage_name,
+                                "rank_score_intact",
+                                abs(probe.rank_score - score_probe_rank_score) < 1e-9,
+                                severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                                expected={"rank_score": score_probe_rank_score},
+                                actual={"rank_score": probe.rank_score},
+                                message="El personalized scoring no modifico rank_score.",
+                            )
+                    stages.append(stage)
+                    warnings.extend(w)
+                    errors.extend(e)
+                    continue
+                if stage_name == "export_report":
+                    stage, m, a, art, w, e, result = self._stage(
+                        run_id=run.id,
+                        stage_index=index,
+                        stage_name=stage_name,
+                        input_summary_json={"run_id": run.id, "format": "json"},
+                        action=lambda: {"requested": True, "run_id": run.id, "format": "json"},
                     )
                     stages.append(stage)
                     warnings.extend(w)
@@ -888,6 +1214,202 @@ class OperationalEvaluationService:
                 warnings.append("Segunda pasada del escenario cache_reuse realizada como reutilizacion de caché.")
             if scenario_id == "failure_recovery":
                 warnings.append("Escenario de recuperacion ejecutado con etapa de reintento simulada.")
+            if creator is not None:
+                add_assertion(
+                    "create_demo_creator",
+                    "demo_creator_isolated",
+                    str(getattr(creator, "slug", "")).startswith("demo-"),
+                    severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                    expected={"creator_slug_prefix": "demo-"},
+                    actual={"creator_id": getattr(creator, "id", None), "slug": getattr(creator, "slug", None)},
+                    message="El creador demo quedo aislado por slug sintetico.",
+                )
+                if project is not None:
+                    add_assertion(
+                        "create_demo_project",
+                        "demo_project_isolated",
+                        getattr(project, "creator_id", None) == creator.id,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"creator_id": creator.id},
+                        actual={"project_creator_id": getattr(project, "creator_id", None), "project_id": getattr(project, "id", None)},
+                        message="El proyecto demo pertenece al creador demo.",
+                    )
+            if video_ids:
+                add_assertion(
+                    "register_video",
+                    "several_videos_generated",
+                    len(video_ids) >= 3 if plan.use_controlled_feedback else len(video_ids) >= 1,
+                    severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                    expected={"min_videos": 3 if plan.use_controlled_feedback else 1},
+                    actual={"video_count": len(video_ids)},
+                    message="Se generaron varios videos demo aislados.",
+                )
+                add_assertion(
+                    "register_video",
+                    "assets_outside_git",
+                    all(str(path).startswith(str(self.paths.project_root / "temp" / "evaluations")) for path in video_paths),
+                    severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                    expected={"managed_root": str(self.paths.project_root / "temp" / "evaluations")},
+                    actual={"video_paths": [str(path) for path in video_paths]},
+                    message="Los assets demo quedaron fuera del arbol rastreado por Git.",
+                )
+            if snapshot_id is not None:
+                dataset_report = self.personalization_service.get_dataset_snapshot(snapshot_id)
+                readiness_report = self.personalization_service.get_creator_readiness(creator.id if creator else dataset_report.creator.id)
+                snapshot = dataset_report.snapshot
+                if snapshot is not None:
+                    by_video: dict[str, set[str]] = {}
+                    for example in dataset_report.examples:
+                        by_video.setdefault(example.video_asset_id, set()).add(example.split_name.value)
+                    add_metric("dataset_example_count", float(snapshot.example_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("dataset_positive_count", float(snapshot.positive_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("dataset_negative_count", float(snapshot.negative_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("dataset_neutral_count", float(snapshot.neutral_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("dataset_excluded_count", float(snapshot.excluded_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("dataset_conflict_count", float(snapshot.conflict_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("train_count", float(snapshot.train_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("validation_count", float(snapshot.validation_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("test_count", float(snapshot.test_count), stage_name_for_metric="build_personalization_dataset")
+                    add_metric("readiness_score", float(snapshot.readiness_score), stage_name_for_metric="evaluate_readiness")
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "dataset_snapshot_completed",
+                        snapshot.status.value in {"completed", "completed_with_warnings"},
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"status": ["completed", "completed_with_warnings"]},
+                        actual={"status": snapshot.status.value},
+                        message="El snapshot de dataset quedo completado.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "feedback_has_positive_and_negative",
+                        snapshot.positive_count > 0 and snapshot.negative_count > 0,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"positive": ">0", "negative": ">0"},
+                        actual={"positive": snapshot.positive_count, "negative": snapshot.negative_count},
+                        message="El dataset contiene clases positivas y negativas.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "dataset_has_neutral_examples",
+                        snapshot.neutral_count >= 0,
+                        severity=OperationalEvaluationAssertionSeverity.WARNING,
+                        expected={"neutral": ">=0"},
+                        actual={"neutral": snapshot.neutral_count},
+                        message="Los ejemplos neutrales no son requisito del baseline binario controlado.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "zero_blocking_conflicts",
+                        snapshot.conflict_count == 0,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"conflict_count": 0},
+                        actual={"conflict_count": snapshot.conflict_count},
+                        message="No quedaron conflictos bloqueantes en el dataset sintetico.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "readiness_at_least_baseline",
+                        readiness_report.readiness_status.value in {"ready_for_baseline", "ready_for_evaluation", "ready_for_personalized_training"},
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"minimum_readiness": "ready_for_baseline"},
+                        actual={"readiness_status": readiness_report.readiness_status.value, "readiness_score": readiness_report.readiness_score},
+                        message="El dataset alcanzó readiness suficiente para baseline.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "split_by_video_respected",
+                        all(
+                            len(
+                                {
+                                    split_name
+                                    for split_name in splits
+                                    if split_name
+                                    in {
+                                        PersonalizationSplitName.TRAIN.value,
+                                        PersonalizationSplitName.VALIDATION.value,
+                                        PersonalizationSplitName.TEST.value,
+                                    }
+                                }
+                            )
+                            <= 1
+                            for splits in by_video.values()
+                        ),
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"one_split_per_video": True},
+                        actual={
+                            "video_split_map": {
+                                video_id: sorted(
+                                    split_name
+                                    for split_name in splits
+                                    if split_name
+                                    in {
+                                        PersonalizationSplitName.TRAIN.value,
+                                        PersonalizationSplitName.VALIDATION.value,
+                                        PersonalizationSplitName.TEST.value,
+                                    }
+                                )
+                                for video_id, splits in by_video.items()
+                            }
+                        },
+                        message="El split se mantiene por video sin leakage entre train, validation y test.",
+                    )
+                    add_assertion(
+                        "build_personalization_dataset",
+                        "train_contains_both_classes",
+                        snapshot.train_count > 0 and snapshot.positive_count > 0 and snapshot.negative_count > 0,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"train_count": ">0", "positive_count": ">0", "negative_count": ">0"},
+                        actual={"train_count": snapshot.train_count, "positive_count": snapshot.positive_count, "negative_count": snapshot.negative_count},
+                        message="El split train contiene clases positivas y negativas.",
+                    )
+            if model_run_id is not None:
+                training_run = self.model_service.get_training_run(model_run_id)
+                if training_run is not None:
+                    add_assertion(
+                        "train_baseline",
+                        "training_run_completed_or_warned",
+                        training_run.status.value in {"completed", "completed_with_warnings"},
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"status": ["completed", "completed_with_warnings"]},
+                        actual={"status": training_run.status.value},
+                        message="El training run quedo completado o completado con warnings.",
+                    )
+            if active_model_run_id is not None:
+                active_report = self.model_service.get_active_creator_model(creator.id if creator else "", project_id=project.id if project else None)
+                if active_report is not None:
+                    add_assertion(
+                        "activate_model",
+                        "active_model_present",
+                        active_report.registry_entry.is_active,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"is_active": True},
+                        actual={"training_run_id": active_report.registry_entry.training_run_id, "is_active": active_report.registry_entry.is_active},
+                        message="Existe un unico modelo activo para el creador/proyecto demo.",
+                    )
+                    add_assertion(
+                        "activate_model",
+                        "artifact_verified",
+                        active_report.artifact_verified,
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"artifact_verified": True},
+                        actual={"artifact_verified": active_report.artifact_verified, "training_run_id": active_report.registry_entry.training_run_id},
+                        message="El artefacto activo quedo verificado.",
+                    )
+            if stage_defs:
+                add_metric("planned_stage_count", float(len(stage_defs)), stage_name_for_metric=None)
+                add_metric("completed_stage_count", float(sum(1 for stage in stages if stage.status in {OperationalEvaluationStageStatus.COMPLETED, OperationalEvaluationStageStatus.COMPLETED_WITH_WARNINGS, OperationalEvaluationStageStatus.CACHED})), stage_name_for_metric=None)
+                add_metric("warning_count", float(len(warnings)), stage_name_for_metric=None)
+                add_metric("assertion_count", float(len(assertions)), stage_name_for_metric=None)
+                if stages:
+                    slowest_stage = max((stage for stage in stages if stage.duration_seconds is not None), key=lambda item: item.duration_seconds or 0.0)
+                    add_metric("slowest_stage_duration_seconds", float(slowest_stage.duration_seconds or 0.0), stage_name_for_metric=slowest_stage.stage_name, details={"slowest_stage": slowest_stage.stage_name})
+                if len(video_ids) > 0:
+                    total_stage_duration = sum(float(stage.duration_seconds or 0.0) for stage in stages)
+                    add_metric("time_per_video_seconds", total_stage_duration / len(video_ids), stage_name_for_metric=None)
+            critical_failures = [item for item in assertions if item.severity == OperationalEvaluationAssertionSeverity.CRITICAL and item.status != "passed"]
+            if critical_failures:
+                errors.extend([f"{failure.assertion_name}: {failure.message}" for failure in critical_failures])
             resources_after = sample_resources(self.paths.project_root)
             resources_json["after"] = resources_after.to_dict()
             resources_json["diff"] = {
@@ -912,6 +1434,32 @@ class OperationalEvaluationService:
                 errors=errors,
                 final_result=OperationalEvaluationFinalResult.PASSED_WITH_WARNINGS if warnings else OperationalEvaluationFinalResult.PASSED,
             )
+            if plan.export_report:
+                exported_path = self.export(run.id, "json")
+                export_assertion = self._record_assertion(
+                    run.id,
+                    stage_name="export_report",
+                    assertion=assert_condition(
+                        "export_created",
+                        exported_path.exists(),
+                        severity=OperationalEvaluationAssertionSeverity.CRITICAL,
+                        expected={"exists": True},
+                        actual={"path": str(exported_path), "exists": exported_path.exists()},
+                        message="Se exporto el reporte de evaluacion.",
+                    ),
+                )
+                assertions.append(export_assertion)
+                artifacts.append(self._manage_artifact(run_id=run.id, stage_name="export_report", artifact_type="evaluation_report", path=exported_path))
+                run = self._update_run_totals(
+                    run,
+                    stages=stages,
+                    metrics=metrics,
+                    assertions=assertions,
+                    artifacts=artifacts,
+                    warnings=warnings,
+                    errors=errors,
+                    final_result=OperationalEvaluationFinalResult.PASSED_WITH_WARNINGS if warnings else OperationalEvaluationFinalResult.PASSED,
+                )
             scenario = self._scenario_definitions[scenario_id]
             report = OperationalEvaluationReport(
                 run=run,

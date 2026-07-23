@@ -14,11 +14,13 @@ from PySide6.QtWidgets import QApplication
 from creator_intelligence_studio.application.services.catalog_service import build_catalog_service
 from creator_intelligence_studio.application.services.clip_ranking_service import build_clip_ranking_service
 from creator_intelligence_studio.application.services.personalization_dataset_service import build_personalization_dataset_service
+from creator_intelligence_studio.domain.personalization_data.entities import CreatorDatasetConflict, CreatorDatasetExample
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.value_objects import MultimodalAnalysisStatus, MultimodalCandidateType
-from creator_intelligence_studio.domain.personalization_data.value_objects import PersonalizationLabel
+from creator_intelligence_studio.domain.personalization_data.value_objects import PersonalizationDatasetOptions, PersonalizationLabel, PersonalizationReadinessStatus, PersonalizationDatasetStatus, PersonalizationSplitName
 from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
+from creator_intelligence_studio.infrastructure.personalization_data.label_builder import build_dataset_label
 from creator_intelligence_studio.infrastructure.persistence.database import build_database
 from creator_intelligence_studio.infrastructure.persistence.migrations import run_migrations
 from creator_intelligence_studio.infrastructure.persistence.sqlite_clip_ranking_repository import SQLiteClipRankingRepository
@@ -496,3 +498,139 @@ class PersonalizationDataTests(unittest.TestCase):
             self.assertGreater(view.snapshots_table.rowCount(), 0)
             self.assertGreater(view.examples_table.rowCount(), 0)
             self.assertIn("Readiness", view.readiness_label.text())
+
+    def test_duplicate_label_is_excluded_without_conflict(self) -> None:
+        candidate = SimpleNamespace(
+            id="cand-dup",
+            review_status=SimpleNamespace(value="duplicate"),
+            user_rating=None,
+            tags=(),
+            adjusted_start_seconds=0.0,
+            adjusted_end_seconds=1.0,
+            original_start_seconds=0.0,
+            original_end_seconds=1.0,
+        )
+        decision = build_dataset_label(
+            ranked_candidate=candidate,
+            review_events=[],
+            collection_items=[],
+            options=PersonalizationDatasetOptions(),
+        )
+        self.assertEqual(decision.label, PersonalizationLabel.EXCLUDED)
+        self.assertFalse(decision.conflict_entries)
+        self.assertFalse(decision.quality_flags["is_conflicted"])
+        self.assertTrue(decision.quality_flags["is_excluded"])
+
+    def test_duplicate_with_coherent_feedback_remains_excluded(self) -> None:
+        candidate = SimpleNamespace(
+            id="cand-dup",
+            review_status=SimpleNamespace(value="duplicate"),
+            user_rating=3,
+            tags=("synthetic",),
+            adjusted_start_seconds=0.0,
+            adjusted_end_seconds=1.0,
+            original_start_seconds=0.0,
+            original_end_seconds=1.0,
+        )
+        review_event = SimpleNamespace(
+            new_status=SimpleNamespace(value="duplicate"),
+            to_dict=lambda: {"new_status": "duplicate"},
+        )
+        collection_items = [
+            SimpleNamespace(id="item-1", collection_id="collection-1", ranked_clip_candidate_id="cand-dup", item_index=0, custom_title=None, custom_note=None)
+        ]
+        decision = build_dataset_label(
+            ranked_candidate=candidate,
+            review_events=[review_event],
+            collection_items=collection_items,
+            options=PersonalizationDatasetOptions(),
+        )
+        self.assertEqual(decision.label, PersonalizationLabel.EXCLUDED)
+        self.assertFalse(decision.conflict_entries)
+        self.assertTrue(decision.quality_flags["is_excluded"])
+
+    def test_duplicate_with_opposite_feedback_is_conflicted(self) -> None:
+        candidate = SimpleNamespace(
+            id="cand-dup",
+            review_status=SimpleNamespace(value="duplicate"),
+            user_rating=None,
+            tags=("synthetic",),
+            adjusted_start_seconds=0.0,
+            adjusted_end_seconds=1.0,
+            original_start_seconds=0.0,
+            original_end_seconds=1.0,
+        )
+        approved_event = SimpleNamespace(new_status=SimpleNamespace(value="approved"), to_dict=lambda: {"new_status": "approved"})
+        rejected_event = SimpleNamespace(new_status=SimpleNamespace(value="rejected"), to_dict=lambda: {"new_status": "rejected"})
+        decision = build_dataset_label(
+            ranked_candidate=candidate,
+            review_events=[approved_event, rejected_event],
+            collection_items=[],
+            options=PersonalizationDatasetOptions(),
+        )
+        self.assertTrue(any(entry["type"] == "history_conflict" for entry in decision.conflict_entries))
+        self.assertTrue(decision.quality_flags["is_conflicted"])
+
+    def test_pairwise_opposite_labels_same_video_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings, paths, database, catalog, creator, project, video, transcription, report, clip_service, personalization_service = build_environment(root)
+            now = datetime.now(timezone.utc)
+            positive = CreatorDatasetExample(
+                id="example-positive",
+                snapshot_id="snapshot-1",
+                creator_id=creator.id,
+                video_asset_id=video.id,
+                ranking_run_id="ranking-1",
+                ranked_clip_candidate_id="cand-positive",
+                multimodal_candidate_id="mm-positive",
+                group_key="group-1",
+                start_seconds=0.0,
+                end_seconds=1.0,
+                duration_seconds=1.0,
+                label=PersonalizationLabel.POSITIVE,
+                label_source=("review_status",),
+                label_confidence=1.0,
+                human_review_status="approved",
+                human_rating=5,
+                human_tags=("approved",),
+                feature_vector={"feature": 1},
+                feature_schema_version="1",
+                quality_flags={"is_conflicted": False, "is_excluded": False, "missing_feature_count": 0, "feature_count": 1},
+                exclusion_reason=None,
+                split_name=PersonalizationSplitName.TRAIN,
+                sample_weight=1.0,
+                created_at=now,
+            )
+            negative = CreatorDatasetExample(
+                id="example-negative",
+                snapshot_id="snapshot-1",
+                creator_id=creator.id,
+                video_asset_id=video.id,
+                ranking_run_id="ranking-1",
+                ranked_clip_candidate_id="cand-negative",
+                multimodal_candidate_id="mm-negative",
+                group_key="group-1",
+                start_seconds=0.1,
+                end_seconds=1.1,
+                duration_seconds=1.0,
+                label=PersonalizationLabel.NEGATIVE,
+                label_source=("review_status",),
+                label_confidence=1.0,
+                human_review_status="rejected",
+                human_rating=1,
+                human_tags=("rejected",),
+                feature_vector={"feature": 1},
+                feature_schema_version="1",
+                quality_flags={"is_conflicted": False, "is_excluded": False, "missing_feature_count": 0, "feature_count": 1},
+                exclusion_reason=None,
+                split_name=PersonalizationSplitName.TRAIN,
+                sample_weight=1.0,
+                created_at=now,
+            )
+            conflicts: list[CreatorDatasetConflict] = []
+            examples = [positive, negative]
+            personalization_service._add_pairwise_conflicts(examples, conflicts)
+            self.assertEqual(len(conflicts), 1)
+            self.assertTrue(examples[0].quality_flags["pairwise_conflict"])
+            self.assertTrue(examples[1].quality_flags["pairwise_conflict"])
