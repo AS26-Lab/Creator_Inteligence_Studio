@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -70,6 +71,24 @@ from creator_intelligence_studio.application.commands.personalization_commands i
     ListCreatorDatasetsCommand,
     ShowCreatorDatasetCommand,
 )
+from creator_intelligence_studio.application.commands.model_commands import (
+    ActivatePersonalizationModelCommand,
+    ComparePersonalizationModelRunsCommand,
+    DeletePersonalizationModelArtifactCommand,
+    DeactivatePersonalizationModelCommand,
+    ExplainPersonalizedScoreCommand,
+    ListPersonalizationModelRunsCommand,
+    PersonalizationModelMetricsCommand,
+    PersonalizationModelPredictionsCommand,
+    RetirePersonalizationModelCommand,
+    ScoreCandidateForCreatorCommand,
+    ScoreVideoForCreatorCommand,
+    ShowPersonalizationModelRunCommand,
+    TrainPersonalizationModelCommand,
+    ValidatePersonalizationSnapshotCommand,
+    VerifyPersonalizationModelCommand,
+    ActivePersonalizationModelCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -132,6 +151,13 @@ from creator_intelligence_studio.application.services.personalization_dataset_se
     PersonalizationDatasetExportResult,
     PersonalizationDatasetReport,
     PersonalizationDatasetService,
+)
+from creator_intelligence_studio.application.services.personalization_training_service import (
+    PersonalizationActiveModelReport,
+    PersonalizedScoreReport,
+    PersonalizationTrainingReport,
+    PersonalizationTrainingService,
+    TrainingValidationReport,
 )
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
@@ -537,6 +563,80 @@ def build_parser() -> argparse.ArgumentParser:
     personalization_export.add_argument("--include-sensitive", action="store_true")
     personalization_export.add_argument("--json", action="store_true")
 
+    models_parser = subparsers.add_parser("models", help="Modelos personalizados por creador")
+    models_sub = models_parser.add_subparsers(dest="action", required=True)
+
+    models_validate = models_sub.add_parser("validate", help="Validar un snapshot para entrenamiento")
+    models_validate.add_argument("--snapshot-id", required=True)
+    models_validate.add_argument("--json", action="store_true")
+
+    models_train = models_sub.add_parser("train", help="Entrenar el baseline personalizado")
+    models_train.add_argument("--snapshot-id", required=True)
+    models_train.add_argument("--force", action="store_true")
+    models_train.add_argument("--json", action="store_true")
+
+    models_show = models_sub.add_parser("show", help="Mostrar un training run")
+    models_show.add_argument("--run-id", required=True)
+    models_show.add_argument("--json", action="store_true")
+
+    models_list = models_sub.add_parser("list", help="Listar training runs")
+    models_list.add_argument("--creator-id", required=True)
+    models_list.add_argument("--json", action="store_true")
+
+    models_metrics = models_sub.add_parser("metrics", help="Mostrar metrics")
+    models_metrics.add_argument("--run-id", required=True)
+    models_metrics.add_argument("--json", action="store_true")
+
+    models_predictions = models_sub.add_parser("predictions", help="Listar predicciones")
+    models_predictions.add_argument("--run-id", required=True)
+    models_predictions.add_argument("--split")
+    models_predictions.add_argument("--json", action="store_true")
+
+    models_compare = models_sub.add_parser("compare", help="Comparar training runs")
+    models_compare.add_argument("--baseline-run", required=True)
+    models_compare.add_argument("--candidate-run", required=True)
+    models_compare.add_argument("--json", action="store_true")
+
+    models_activate = models_sub.add_parser("activate", help="Activar un modelo")
+    models_activate.add_argument("--run-id", required=True)
+    models_activate.add_argument("--json", action="store_true")
+
+    models_deactivate = models_sub.add_parser("deactivate", help="Desactivar un modelo")
+    models_deactivate.add_argument("--run-id", required=True)
+    models_deactivate.add_argument("--json", action="store_true")
+
+    models_retire = models_sub.add_parser("retire", help="Retirar un modelo")
+    models_retire.add_argument("--run-id", required=True)
+    models_retire.add_argument("--json", action="store_true")
+
+    models_active = models_sub.add_parser("active", help="Mostrar el modelo activo")
+    models_active.add_argument("--creator-id", required=True)
+    models_active.add_argument("--project-id")
+    models_active.add_argument("--json", action="store_true")
+
+    models_verify = models_sub.add_parser("verify", help="Verificar artefacto")
+    models_verify.add_argument("--run-id", required=True)
+    models_verify.add_argument("--json", action="store_true")
+
+    models_delete_artifact = models_sub.add_parser("delete-artifact", help="Eliminar artefacto local")
+    models_delete_artifact.add_argument("--run-id", required=True)
+    models_delete_artifact.add_argument("--json", action="store_true")
+
+    models_score_candidate = models_sub.add_parser("score-candidate", help="Puntuar un candidato")
+    models_score_candidate.add_argument("--creator-id", required=True)
+    models_score_candidate.add_argument("--candidate-id", required=True)
+    models_score_candidate.add_argument("--json", action="store_true")
+
+    models_score_video = models_sub.add_parser("score-video", help="Puntuar todos los candidatos de un video")
+    models_score_video.add_argument("--creator-id", required=True)
+    models_score_video.add_argument("--video-id", required=True)
+    models_score_video.add_argument("--json", action="store_true")
+
+    models_explain = models_sub.add_parser("explain", help="Explicar una puntuacion personalizada")
+    models_explain.add_argument("--creator-id", required=True)
+    models_explain.add_argument("--candidate-id", required=True)
+    models_explain.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -940,6 +1040,26 @@ def _print_personalization_readiness(report: CreatorReadinessReport, stream) -> 
 
 
 def _print_personalization_comparison(report: DatasetSnapshotComparison, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_model_validation(report: TrainingValidationReport, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_model_training_report(report: PersonalizationTrainingReport, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_model_active_report(report: PersonalizationActiveModelReport, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_model_scores(scores, stream) -> None:
+    print(json.dumps([score.to_dict() for score in scores], ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_model_score(report: PersonalizedScoreReport, stream) -> None:
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
 
 
@@ -1639,6 +1759,118 @@ def _handle_personalization(args, service: PersonalizationDatasetService, stdout
     raise ValueError("Accion de personalizacion no reconocida.")
 
 
+def _handle_models(args, service: PersonalizationTrainingService, stdout, stderr) -> int:
+    if args.action == "validate":
+        command = ValidatePersonalizationSnapshotCommand(args.snapshot_id)
+        report = service.validate_training_snapshot(command.snapshot_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_validation(report, stdout)
+        return 0 if report.eligible else 1
+    if args.action == "train":
+        command = TrainPersonalizationModelCommand(args.snapshot_id, force=args.force)
+        report = service.train_personalization_baseline(command.snapshot_id, force=command.force)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_training_report(report, stdout)
+        return 0
+    if args.action == "show":
+        command = ShowPersonalizationModelRunCommand(args.run_id)
+        run = service.get_training_run(command.run_id)
+        if run is None:
+            print("Training run no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "list":
+        command = ListPersonalizationModelRunsCommand(args.creator_id)
+        runs = service.list_creator_training_runs(command.creator_id)
+        print(json.dumps([run.to_dict() for run in runs], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "metrics":
+        command = PersonalizationModelMetricsCommand(args.run_id)
+        metrics = service.get_training_metrics(command.run_id)
+        if args.json:
+            print(json.dumps([metric.to_dict() for metric in metrics], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            for metric in metrics:
+                print(json.dumps(metric.to_dict(), ensure_ascii=False, default=_json_default), file=stdout)
+        return 0
+    if args.action == "predictions":
+        command = PersonalizationModelPredictionsCommand(args.run_id, split=args.split)
+        predictions = service.list_training_predictions(command.run_id, split=command.split)
+        if args.json:
+            print(json.dumps([prediction.to_dict() for prediction in predictions], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_scores(predictions, stdout)
+        return 0
+    if args.action == "compare":
+        command = ComparePersonalizationModelRunsCommand(args.baseline_run, args.candidate_run)
+        report = service.compare_training_runs(command.baseline_run_id, command.candidate_run_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "activate":
+        command = ActivatePersonalizationModelCommand(args.run_id)
+        entry = service.activate_model(command.run_id)
+        print(json.dumps(entry.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "deactivate":
+        command = DeactivatePersonalizationModelCommand(args.run_id)
+        entry = service.deactivate_model(command.run_id)
+        print(json.dumps(entry.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout) if entry else print("Modelo no encontrado.", file=stderr)
+        return 0 if entry else 1
+    if args.action == "retire":
+        command = RetirePersonalizationModelCommand(args.run_id)
+        entry = service.retire_model(command.run_id)
+        print(json.dumps(entry.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout) if entry else print("Modelo no encontrado.", file=stderr)
+        return 0 if entry else 1
+    if args.action == "active":
+        command = ActivePersonalizationModelCommand(args.creator_id, project_id=args.project_id)
+        report = service.get_active_creator_model(command.creator_id, project_id=command.project_id)
+        if report is None:
+            print("No existe modelo activo.", file=stderr)
+            return 1
+        _print_model_active_report(report, stdout)
+        return 0
+    if args.action == "verify":
+        command = VerifyPersonalizationModelCommand(args.run_id)
+        report = service.verify_model_artifact(command.run_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_active_report(report, stdout)
+        return 0 if report.artifact_verified else 1
+    if args.action == "delete-artifact":
+        command = DeletePersonalizationModelArtifactCommand(args.run_id)
+        deleted = service.delete_model_artifact(command.run_id)
+        print(json.dumps({"run_id": command.run_id, "deleted": deleted}, ensure_ascii=False, indent=2), file=stdout)
+        return 0 if deleted else 1
+    if args.action == "score-candidate":
+        command = ScoreCandidateForCreatorCommand(args.creator_id, args.candidate_id)
+        report = service.score_candidate_for_creator(command.creator_id, command.candidate_id)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_score(report, stdout)
+        return 0
+    if args.action == "score-video":
+        command = ScoreVideoForCreatorCommand(args.creator_id, args.video_id)
+        scores = service.score_candidates_for_video(command.creator_id, command.video_id)
+        if args.json:
+            print(json.dumps([score.to_dict() for score in scores], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_model_scores(scores, stdout)
+        return 0
+    if args.action == "explain":
+        command = ExplainPersonalizedScoreCommand(args.creator_id, args.candidate_id)
+        explanation = service.explain_personalized_score(command.creator_id, command.candidate_id)
+        print(json.dumps(explanation, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de modelos no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -1652,10 +1884,14 @@ def dispatch(
     clip_service: ClipRankingService,
     personalization_service: PersonalizationDatasetService | None = None,
     diagnostic: EnvironmentDiagnostic,
-    stdout,
-    stderr,
+    stdout=None,
+    stderr=None,
+    model_service: PersonalizationTrainingService | None = None,
 ) -> int:
     """Ejecuta el comando solicitado."""
+
+    stdout = sys.stdout if stdout is None else stdout
+    stderr = sys.stderr if stderr is None else stderr
 
     try:
         if args.diagnostic_json:
@@ -1688,6 +1924,10 @@ def dispatch(
             if personalization_service is None:
                 raise DomainError("El servicio de personalizacion no esta disponible.")
             return _handle_personalization(args, personalization_service, stdout, stderr)
+        if args.entity == "models":
+            if model_service is None:
+                raise DomainError("El servicio de modelos personalizados no esta disponible.")
+            return _handle_models(args, model_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

@@ -455,3 +455,37 @@ Campos principales:
 `creator_dataset_snapshots` conserva una version inmutable por creador y, cuando aplica, por proyecto. `creator_dataset_examples` conserva un ejemplo reproducible por fila con split, label y features con nombre estable. `creator_dataset_conflicts` registra conflictos y resoluciones sin borrar evidencia. `creator_dataset_quality_reports` conserva la evaluacion de calidad y readiness. `creator_feature_schemas` versiona el esquema de features para comparar snapshots futuros.
 
 La capa de personalizacion mantiene aislamiento por creador, evita fuga de informacion entre train, validation y test, y no convierte el feedback en entrenamiento automatico. Las exportaciones por defecto no incluyen texto completo ni notas privadas.
+
+## Migration v10
+
+La migracion v10 agrega:
+
+- `personalization_training_runs`
+- `personalization_model_metrics`
+- `personalization_model_predictions`
+- `personalization_model_registry`
+- `personalization_model_comparisons`
+
+Estos objetos registran:
+
+- entrenamiento baseline por creador;
+- metricas por split;
+- predicciones para auditoria;
+- activacion, desactivacion y retiro del modelo;
+- comparacion contra baselines y otras corridas.
+
+## Personalization models
+
+La capa de modelos personalizada usa artefactos locales en `models/personalization/<creator-id>/<training-run-id>/` y no carga artefactos arbitrarios.
+
+Los registros conservan:
+
+- feature_schema_version;
+- label_schema_version;
+- configuration_fingerprint;
+- source_fingerprint;
+- decision_threshold;
+- metricas y predicciones por split;
+- estado del modelo registrado.
+
+No se deben mezclar creadores ni usar datos de otro creador como entrenamiento.

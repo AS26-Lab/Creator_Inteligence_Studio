@@ -151,3 +151,5 @@ The clip ranking layer feeds creator-isolated dataset snapshots for future train
 - human feedback is preserved as history;
 - dataset export uses stable candidate identifiers, labels and feature schemas;
 - no training happens inside the ranking layer.
+
+The ranking layer also provides the source candidates for creator-specific model training. The model layer stays separate, local and auditable, and it does not feed predictions back into the ranking scores.

@@ -30,6 +30,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     DashboardView,
     MultimodalAnalysisView,
     PersonalizationDataView,
+    PersonalizationModelsView,
     ProjectsView,
     VisualAnalysisView,
     SystemView,
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "personalization", "system"]
+        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "personalization", "models", "system"]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -120,6 +121,7 @@ class MainWindow(QMainWindow):
         self.multimodal_view = MultimodalAnalysisView(workspace)
         self.clip_ranking_view = ClipRankingView(workspace)
         self.personalization_view = PersonalizationDataView(workspace)
+        self.personalization_models_view = PersonalizationModelsView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
         self.stack.addWidget(self.creators_view)
@@ -131,6 +133,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.multimodal_view)
         self.stack.addWidget(self.clip_ranking_view)
         self.stack.addWidget(self.personalization_view)
+        self.stack.addWidget(self.personalization_models_view)
         self.stack.addWidget(self.system_view)
 
         central = QWidget()
@@ -188,6 +191,7 @@ class MainWindow(QMainWindow):
         self.multimodal_view.refresh()
         self.clip_ranking_view.refresh()
         self.personalization_view.refresh()
+        self.personalization_models_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
 

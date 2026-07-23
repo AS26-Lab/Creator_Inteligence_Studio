@@ -8,6 +8,7 @@ from .clip_ranking_view import ClipRankingView
 from .dashboard_view import DashboardView
 from .multimodal_analysis_view import MultimodalAnalysisView
 from .personalization_data_view import PersonalizationDataView
+from .personalization_models_view import PersonalizationModelsView
 from .projects_view import ProjectsView
 from .visual_analysis_view import VisualAnalysisView
 from .system_view import SystemView
@@ -21,6 +22,7 @@ __all__ = [
     "DashboardView",
     "MultimodalAnalysisView",
     "PersonalizationDataView",
+    "PersonalizationModelsView",
     "ProjectsView",
     "VisualAnalysisView",
     "SystemView",

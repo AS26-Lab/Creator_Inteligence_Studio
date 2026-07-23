@@ -33,6 +33,6 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("audience", "Audiencia", enabled=False, badge="Proximamente"),
         NavigationItem("trends", "Tendencias", enabled=False, badge="Proximamente"),
         NavigationItem("script_voice", "Script & Voice", enabled=False, badge="Proximamente"),
-        NavigationItem("models", "Modelos", enabled=False, badge="Proximamente"),
+        NavigationItem("models", "Modelos"),
         NavigationItem("system", "Sistema"),
     ]

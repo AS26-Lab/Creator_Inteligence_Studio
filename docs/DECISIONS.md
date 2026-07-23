@@ -53,3 +53,4 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - refinamiento futuro de eventos acusticos cuando exista una segunda fase especializada.
 - refinamiento futuro de candidatos multimodales cuando exista una segunda fase de clips o edicion.
 - refinamiento futuro de datos de personalizacion cuando exista una fase explicita de entrenamiento por creador.
+- estrategia futura de personalizacion mas avanzada por creador.

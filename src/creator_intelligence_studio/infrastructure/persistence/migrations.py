@@ -1151,6 +1151,153 @@ def migration_9(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_10(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS personalization_training_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            snapshot_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'queued',
+                    'validating_dataset',
+                    'preparing_features',
+                    'training',
+                    'evaluating',
+                    'saving_artifact',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'cancelled',
+                    'blocked'
+                )
+            ),
+            model_family TEXT NOT NULL,
+            model_version TEXT NOT NULL,
+            trainer_version TEXT NOT NULL,
+            feature_schema_version TEXT NOT NULL,
+            label_schema_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            train_count INTEGER NOT NULL,
+            validation_count INTEGER NOT NULL,
+            test_count INTEGER NOT NULL,
+            positive_count INTEGER NOT NULL,
+            negative_count INTEGER NOT NULL,
+            excluded_count INTEGER NOT NULL,
+            random_seed INTEGER NOT NULL,
+            decision_threshold REAL NOT NULL,
+            artifact_path TEXT,
+            artifact_fingerprint TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (snapshot_id) REFERENCES creator_dataset_snapshots(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS personalization_model_metrics (
+            id TEXT PRIMARY KEY,
+            training_run_id TEXT NOT NULL,
+            split_name TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            metric_value REAL,
+            support INTEGER,
+            details_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (training_run_id) REFERENCES personalization_training_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS personalization_model_predictions (
+            id TEXT PRIMARY KEY,
+            training_run_id TEXT NOT NULL,
+            dataset_example_id TEXT NOT NULL,
+            split_name TEXT NOT NULL,
+            true_label TEXT,
+            predicted_label TEXT NOT NULL,
+            positive_score REAL NOT NULL,
+            decision_threshold REAL NOT NULL,
+            is_correct INTEGER,
+            explanation_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (training_run_id) REFERENCES personalization_training_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS personalization_model_registry (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            training_run_id TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'candidate',
+                    'active',
+                    'inactive',
+                    'retired',
+                    'invalid',
+                    'artifact_missing',
+                    'incompatible'
+                )
+            ),
+            is_active INTEGER NOT NULL,
+            activated_at TEXT,
+            retired_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (training_run_id) REFERENCES personalization_training_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS personalization_model_comparisons (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            baseline_run_id TEXT NOT NULL,
+            candidate_run_id TEXT NOT NULL,
+            comparison_status TEXT NOT NULL,
+            primary_metric TEXT NOT NULL,
+            baseline_value REAL,
+            candidate_value REAL,
+            difference REAL,
+            warnings_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_training_runs_creator_id ON personalization_training_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_training_runs_snapshot_id ON personalization_training_runs(snapshot_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_training_runs_status ON personalization_training_runs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_metrics_run_id ON personalization_model_metrics(training_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_metrics_split ON personalization_model_metrics(training_run_id, split_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_predictions_run_id ON personalization_model_predictions(training_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_predictions_split ON personalization_model_predictions(training_run_id, split_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_registry_creator_id ON personalization_model_registry(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_registry_active ON personalization_model_registry(creator_id, project_id, is_active)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_comparisons_creator_id ON personalization_model_comparisons(creator_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -1161,6 +1308,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=7, name="multimodal_analysis"),
     Migration(version=8, name="clip_ranking"),
     Migration(version=9, name="personalization_data"),
+    Migration(version=10, name="personalization_models"),
 )
 
 
@@ -1216,6 +1364,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_8(connection)
                 elif migration.version == 9:
                     migration_9(connection)
+                elif migration.version == 10:
+                    migration_10(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

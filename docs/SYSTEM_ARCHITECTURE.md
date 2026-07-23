@@ -276,3 +276,12 @@ Reglas:
 - sin lujo visual;
 - sin neon excesivo;
 - sin imagenes decorativas.
+
+## Personalization Models
+
+- `domain/personalization_models`: entidades, errores, repositorios, value objects y reglas del baseline local.
+- `application/services/personalization_training_service.py`: validacion del snapshot, entrenamiento, evaluacion, activacion y scoring separado.
+- `infrastructure/personalization_models`: pipeline de features, entrenamiento de regresion logistica, evaluacion, comparadores, explicaciones y artefactos.
+- `infrastructure/persistence/sqlite_personalization_model_repository.py`: persistencia local del registro de modelos, metricas, predicciones y comparaciones.
+- Los artefactos se cargan solo desde el almacen local administrado por la aplicacion.
+- joblib se usa solo para artefactos locales de confianza.

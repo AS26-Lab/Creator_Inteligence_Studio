@@ -50,6 +50,13 @@ from creator_intelligence_studio.application.services.personalization_dataset_se
     PersonalizationDatasetReport,
     PersonalizationDatasetService,
 )
+from creator_intelligence_studio.application.services.personalization_training_service import (
+    PersonalizationActiveModelReport,
+    PersonalizedScoreReport,
+    PersonalizationTrainingReport,
+    PersonalizationTrainingService,
+    TrainingValidationReport,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
@@ -228,6 +235,7 @@ class WorkspaceViewModel:
         settings: AppSettings,
         paths: ProjectPaths,
         personalization_service: PersonalizationDatasetService | None = None,
+        model_service: PersonalizationTrainingService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -322,6 +330,7 @@ class WorkspaceViewModel:
             )
         self.clip_service = clip_service
         self.personalization_service = personalization_service
+        self.model_service = model_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -1274,3 +1283,89 @@ class WorkspaceViewModel:
         if self.personalization_service is None:
             raise RuntimeError("El servicio de personalizacion no esta disponible.")
         return self.personalization_service.is_dataset_stale(snapshot_id)
+
+    def validate_training_snapshot(self, snapshot_id: str) -> TrainingValidationReport:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.validate_training_snapshot(snapshot_id)
+
+    def train_personalization_baseline(self, snapshot_id: str, force: bool = False, *, progress_callback=None) -> PersonalizationTrainingReport:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        report = self.model_service.train_personalization_baseline(
+            snapshot_id,
+            force=force,
+            progress_callback=progress_callback,
+        )
+        self.activity_log.insert(0, f"Modelo personalizado: {report.outcome_status}")
+        return report
+
+    def get_training_run(self, training_run_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.get_training_run(training_run_id)
+
+    def list_creator_training_runs(self, creator_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.list_creator_training_runs(creator_id)
+
+    def get_training_metrics(self, training_run_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.get_training_metrics(training_run_id)
+
+    def list_training_predictions(self, training_run_id: str, split: str | None = None):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.list_training_predictions(training_run_id, split=split)
+
+    def compare_training_runs(self, baseline_run_id: str, candidate_run_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.compare_training_runs(baseline_run_id, candidate_run_id)
+
+    def activate_model(self, training_run_id: str) -> PersonalizationActiveModelReport:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.activate_model(training_run_id)
+
+    def deactivate_model(self, training_run_id: str) -> PersonalizationActiveModelReport | None:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.deactivate_model(training_run_id)
+
+    def retire_model(self, training_run_id: str) -> PersonalizationActiveModelReport | None:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.retire_model(training_run_id)
+
+    def get_active_creator_model(self, creator_id: str, project_id: str | None = None) -> PersonalizationActiveModelReport | None:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.get_active_creator_model(creator_id, project_id=project_id)
+
+    def verify_model_artifact(self, training_run_id: str) -> PersonalizationActiveModelReport:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.verify_model_artifact(training_run_id)
+
+    def delete_model_artifact(self, training_run_id: str) -> bool:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.delete_model_artifact(training_run_id)
+
+    def score_candidate_for_creator(self, creator_id: str, candidate_id: str) -> PersonalizedScoreReport:
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.score_candidate_for_creator(creator_id, candidate_id)
+
+    def score_candidates_for_video(self, creator_id: str, video_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.score_candidates_for_video(creator_id, video_id)
+
+    def explain_personalized_score(self, creator_id: str, candidate_id: str):
+        if self.model_service is None:
+            raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
+        return self.model_service.explain_personalized_score(creator_id, candidate_id)

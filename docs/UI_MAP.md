@@ -194,3 +194,15 @@ flowchart LR
 - errores rojos;
 - texto principal blanco suave;
 - texto secundario gris azulado claro.
+
+### Modelos personalizados
+
+- validar snapshot antes de entrenar;
+- baseline logistico interpretable;
+- metricas por split;
+- comparacion con baselines;
+- activacion explicita del modelo;
+- desactivacion y retiro;
+- explicaciones y scoring separado;
+- sin autoentrenamiento en segundo plano;
+- sin reemplazar el ranking de clips.

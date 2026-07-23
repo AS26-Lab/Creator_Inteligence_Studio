@@ -342,3 +342,17 @@ No subas videos, modelos, datos privados, credenciales ni la base SQLite al repo
 ## Borrado manual de una base de desarrollo
 
 Si necesitas reiniciar los datos de desarrollo, borra manualmente `data/creator_intelligence_studio.db` solo cuando estes seguro de que no necesitas conservar la informacion. No hay borrado automatico en la aplicacion.
+
+## Baseline de modelos personalizados
+
+La primera version de modelos personalizados por creador ya queda soportada localmente con:
+
+- regresion logistica interpretable;
+- baselines comparativos locales;
+- artefactos versionados por creador y por training run;
+- activacion y retiro explicitos;
+- scoring separado del ranking de clips;
+- seguridad local de carga de artefactos;
+- aislamiento de datos por creador.
+
+No predice viralidad y no mezcla datos entre creadores.

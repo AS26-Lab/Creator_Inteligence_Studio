@@ -227,3 +227,11 @@ Text content and private notes are not shown by default.
 - No personalization weights adjusted by learning yet.
 - No recommendation of clip performance.
 
+## Handoff to personalization models
+
+- the dataset snapshot is the input to local model training;
+- only completed or completed_with_warnings snapshots are eligible;
+- train, validation and test splits are reused as stored;
+- labels remain human-derived and traceable;
+- the model layer must not rewrite labels or feedback history;
+- feature schema compatibility is required before training.

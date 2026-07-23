@@ -31,6 +31,8 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         visual_service=context.visual_service,
         multimodal_service=context.multimodal_service,
         clip_service=context.clip_service,
+        personalization_service=context.personalization_service,
+        model_service=context.model_service,
         diagnostic=context.diagnostic,
         settings=context.settings,
         paths=context.paths,
