@@ -184,6 +184,18 @@ Los artefactos minimos contemplados son:
 - no modifica IDs existentes;
 - mantiene indices utiles por `video_asset_id`, `source_inspection_id` y `status`.
 
+## Migracion v12: Clip rendering
+
+La migracion v12 agrega:
+
+- `clip_render_jobs`
+- `clip_render_artifacts`
+- `clip_render_events`
+- `clip_render_batches`
+- `clip_render_batch_items`
+
+Estos registros conservan la trazabilidad de la salida local, su verificacion y el historial de batch sin tocar el archivo fuente.
+
 ## Pendientes
 
 - formato fisico final de persistencia para artefactos grandes;

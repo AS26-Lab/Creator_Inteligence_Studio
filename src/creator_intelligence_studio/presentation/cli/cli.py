@@ -59,6 +59,22 @@ from creator_intelligence_studio.application.commands.clip_commands import (
     ShowClipRankingCommand,
     TagsClipCandidateCommand,
 )
+from creator_intelligence_studio.application.commands.render_commands import (
+    CancelRenderBatchCommand,
+    CancelRenderCommand,
+    DeleteRenderArtifactCommand,
+    ExportRenderPlanCommand,
+    ListCandidateRendersCommand,
+    RenderCapabilitiesCommand,
+    RenderCandidateCommand,
+    RenderCollectionCommand,
+    RenderProfilesCommand,
+    RetryRenderBatchCommand,
+    RetryRenderCommand,
+    ShowRenderBatchCommand,
+    ShowRenderJobCommand,
+    VerifyRenderCommand,
+)
 from creator_intelligence_studio.application.commands.personalization_commands import (
     ArchiveDatasetSnapshotCommand,
     BuildCreatorDatasetCommand,
@@ -153,6 +169,11 @@ from creator_intelligence_studio.application.services.clip_ranking_service impor
     ClipRankingExportResult,
     ClipRankingReport,
     ClipRankingService,
+)
+from creator_intelligence_studio.application.services.clip_rendering_service import (
+    ClipRenderBatchReport,
+    ClipRenderOperationReport,
+    ClipRenderService,
 )
 from creator_intelligence_studio.application.services.personalization_dataset_service import (
     CreatorReadinessReport,
@@ -529,6 +550,76 @@ def build_parser() -> argparse.ArgumentParser:
     clips_remove_from_collection.add_argument("--collection-id", required=True)
     clips_remove_from_collection.add_argument("--candidate-id", required=True)
     clips_remove_from_collection.add_argument("--json", action="store_true")
+
+    render_parser = subparsers.add_parser("render", help="Render local de clips")
+    render_sub = render_parser.add_subparsers(dest="action", required=True)
+
+    render_capabilities = render_sub.add_parser("capabilities", help="Mostrar capacidades de FFmpeg")
+    render_capabilities.add_argument("--json", action="store_true")
+
+    render_profiles = render_sub.add_parser("profiles", help="Listar perfiles de render")
+    render_profiles.add_argument("--json", action="store_true")
+
+    render_candidate = render_sub.add_parser("candidate", help="Renderizar un candidato")
+    render_candidate.add_argument("--candidate-id", required=True)
+    render_candidate.add_argument("--profile", default="balanced")
+    render_candidate.add_argument("--output")
+    render_candidate.add_argument("--explicit", action="store_true")
+    render_candidate.add_argument("--allow-stale", action="store_true")
+    render_candidate.add_argument("--allow-overwrite", action="store_true")
+    render_candidate.add_argument("--custom-name")
+    render_candidate.add_argument("--json", action="store_true")
+
+    render_show = render_sub.add_parser("show", help="Mostrar un job de render")
+    render_show.add_argument("--job-id", required=True)
+    render_show.add_argument("--json", action="store_true")
+
+    render_list = render_sub.add_parser("list", help="Listar renders de un candidato")
+    render_list.add_argument("--candidate-id", required=True)
+    render_list.add_argument("--json", action="store_true")
+
+    render_verify = render_sub.add_parser("verify", help="Verificar un render")
+    render_verify.add_argument("--job-id", required=True)
+    render_verify.add_argument("--json", action="store_true")
+
+    render_cancel = render_sub.add_parser("cancel", help="Cancelar un render")
+    render_cancel.add_argument("--job-id", required=True)
+    render_cancel.add_argument("--json", action="store_true")
+
+    render_retry = render_sub.add_parser("retry", help="Reintentar un render")
+    render_retry.add_argument("--job-id", required=True)
+    render_retry.add_argument("--json", action="store_true")
+
+    render_delete = render_sub.add_parser("delete-artifact", help="Eliminar artefacto de render")
+    render_delete.add_argument("--job-id", required=True)
+    render_delete.add_argument("--json", action="store_true")
+
+    render_collection = render_sub.add_parser("collection", help="Renderizar una coleccion")
+    render_collection.add_argument("--collection-id", required=True)
+    render_collection.add_argument("--profile", default="balanced")
+    render_collection.add_argument("--output-root")
+    render_collection.add_argument("--explicit", action="store_true")
+    render_collection.add_argument("--allow-stale", action="store_true")
+    render_collection.add_argument("--continue-on-failure", action="store_true")
+    render_collection.add_argument("--json", action="store_true")
+
+    render_batch_show = render_sub.add_parser("batch-show", help="Mostrar un lote de renders")
+    render_batch_show.add_argument("--batch-id", required=True)
+    render_batch_show.add_argument("--json", action="store_true")
+
+    render_batch_cancel = render_sub.add_parser("batch-cancel", help="Cancelar un lote de renders")
+    render_batch_cancel.add_argument("--batch-id", required=True)
+    render_batch_cancel.add_argument("--json", action="store_true")
+
+    render_batch_retry = render_sub.add_parser("batch-retry", help="Reintentar un lote de renders")
+    render_batch_retry.add_argument("--batch-id", required=True)
+    render_batch_retry.add_argument("--json", action="store_true")
+
+    render_export_plan = render_sub.add_parser("export-plan", help="Exportar el plan tecnico de render")
+    render_export_plan.add_argument("--job-id", required=True)
+    render_export_plan.add_argument("--format", default="json")
+    render_export_plan.add_argument("--output")
+    render_export_plan.add_argument("--json", action="store_true")
 
     personalization_parser = subparsers.add_parser("personalization", help="Preparacion de datos por creador")
     personalization_sub = personalization_parser.add_subparsers(dest="action", required=True)
@@ -1750,6 +1841,124 @@ def _handle_clips(args, service: ClipRankingService, stdout, stderr) -> int:
     raise ValueError("Accion de ranking de clips no reconocida.")
 
 
+def _handle_render(args, service: ClipRenderService, stdout, stderr) -> int:
+    if args.action == "capabilities":
+        command = RenderCapabilitiesCommand()
+        report = service.render_capabilities()
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if report.available else 1
+    if args.action == "profiles":
+        command = RenderProfilesCommand()
+        profiles = service.render_profiles()
+        print(json.dumps([profile for profile in profiles], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "candidate":
+        command = RenderCandidateCommand(
+            candidate_id=args.candidate_id,
+            profile=args.profile,
+            output=args.output,
+            explicit=args.explicit,
+            allow_stale=args.allow_stale,
+            allow_overwrite=args.allow_overwrite,
+            custom_name=args.custom_name,
+        )
+        report = service.render_candidate(
+            command.candidate_id,
+            profile=command.profile,
+            output=command.output,
+            explicit=command.explicit,
+            allow_stale=command.allow_stale,
+            allow_overwrite=command.allow_overwrite,
+            custom_name=command.custom_name,
+        )
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "show":
+        command = ShowRenderJobCommand(args.job_id)
+        job = service.get_render_job(command.job_id)
+        if job is None:
+            print("Job de render no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(job.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "list":
+        command = ListCandidateRendersCommand(args.candidate_id)
+        jobs = service.list_candidate_renders(command.candidate_id)
+        print(json.dumps([job.to_dict() for job in jobs], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "verify":
+        command = VerifyRenderCommand(args.job_id)
+        report = service.verify_render(command.job_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if report.verification.verified else 1
+    if args.action == "cancel":
+        command = CancelRenderCommand(args.job_id)
+        job = service.cancel_render(command.job_id)
+        if job is None:
+            print("Job de render no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(job.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "retry":
+        command = RetryRenderCommand(args.job_id)
+        report = service.retry_render(command.job_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delete-artifact":
+        command = DeleteRenderArtifactCommand(args.job_id)
+        deleted = service.delete_render_artifact(command.job_id)
+        print(json.dumps({"job_id": command.job_id, "deleted": deleted}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if deleted else 1
+    if args.action == "collection":
+        command = RenderCollectionCommand(
+            collection_id=args.collection_id,
+            profile=args.profile,
+            output_root=args.output_root,
+            explicit=args.explicit,
+            allow_stale=args.allow_stale,
+            continue_on_failure=args.continue_on_failure,
+        )
+        report = service.render_collection(
+            command.collection_id,
+            profile=command.profile,
+            output_root=command.output_root,
+            explicit=command.explicit,
+            allow_stale=command.allow_stale,
+            continue_on_failure=command.continue_on_failure,
+        )
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "batch-show":
+        command = ShowRenderBatchCommand(args.batch_id)
+        batch = service.get_render_batch(command.batch_id)
+        if batch is None:
+            print("Batch de render no encontrado.", file=stderr)
+            return 1
+        items = service.list_batch_items(command.batch_id)
+        payload = {"batch": batch.to_dict(), "items": [item.to_dict() for item in items]}
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "batch-cancel":
+        command = CancelRenderBatchCommand(args.batch_id)
+        batch = service.cancel_render_batch(command.batch_id)
+        if batch is None:
+            print("Batch de render no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(batch.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "batch-retry":
+        command = RetryRenderBatchCommand(args.batch_id)
+        report = service.retry_render_batch(command.batch_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export-plan":
+        command = ExportRenderPlanCommand(args.job_id, format=args.format, output=args.output)
+        path = service.export_render_plan(command.job_id, destination=command.output)
+        print(json.dumps({"job_id": command.job_id, "format": command.format, "path": str(path)}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de render no reconocida.")
+
+
 def _handle_personalization(args, service: PersonalizationDatasetService, stdout, stderr) -> int:
     if args.action == "build":
         command = BuildCreatorDatasetCommand(args.creator_id, project_id=args.project_id, force=args.force)
@@ -2039,6 +2248,7 @@ def dispatch(
     visual_service: VisualAnalysisService,
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
+    render_service: ClipRenderService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
     diagnostic: EnvironmentDiagnostic,
     stdout=None,
@@ -2078,6 +2288,10 @@ def dispatch(
             return _handle_multimodal(args, multimodal_service, stdout, stderr)
         if args.entity == "clips":
             return _handle_clips(args, clip_service, stdout, stderr)
+        if args.entity == "render":
+            if render_service is None:
+                raise DomainError("El servicio de render no esta disponible.")
+            return _handle_render(args, render_service, stdout, stderr)
         if args.entity == "personalization":
             if personalization_service is None:
                 raise DomainError("El servicio de personalizacion no esta disponible.")

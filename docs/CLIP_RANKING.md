@@ -107,6 +107,9 @@ Rejected candidates are preserved.
 Collections store human-selected sets of ranked candidates for later export or editing.
 They are local and deterministic.
 
+Approved or shortlisted candidates can be passed to the local render layer for FFmpeg output.
+Rendering consumes the reviewed candidate; it does not change the rank score or the underlying review history.
+
 ## Stale
 
 A ranking becomes stale when any of these change:
@@ -157,3 +160,5 @@ The ranking layer also provides the source candidates for creator-specific model
 ## Operational evaluation
 
 Operational evaluation scenarios may traverse clip ranking as part of a controlled demo run. The harness records technical outcomes and cache behavior, but it does not change ranking formulas or auto-promote clips.
+
+The render layer is separate from ranking: it is a follow-up local output step for approved or explicitly selected clips, not a quality signal for the ranker.

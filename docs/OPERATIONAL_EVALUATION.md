@@ -24,6 +24,7 @@ Operational evaluation runs controlled demo scenarios across the real services, 
 ## Stage coverage
 
 The orchestrator reuses existing services for media inspection, audio preparation, transcription, acoustic analysis, visual analysis, multimodal analysis, clip ranking, controlled feedback, dataset snapshots, readiness checks, baseline training, verification, activation, and personalized scoring.
+When a scenario includes clip rendering, it treats rendering as a local output step after review and verification, not as a ranking or training signal.
 
 The controlled creator workflow also validates:
 

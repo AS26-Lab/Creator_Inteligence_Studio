@@ -115,7 +115,10 @@ class TaskCenterView(QWidget):
         task = self._selected_task()
         if task is None:
             return
-        self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        if task.title == "Render de clip":
+            self.workspace.cancel_render(task.task_id)
+        else:
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         self.refresh()
 
     def _retry_task(self) -> None:
@@ -124,5 +127,8 @@ class TaskCenterView(QWidget):
             return
         if task.video_id:
             self.workspace.select_video(task.video_id)
+        if task.title == "Render de clip":
+            self.workspace.retry_render(task.task_id)
+            self.refresh()
+            return
         QMessageBox.information(self, "Task Center", "Abre el workflow del video para reintentar la etapa.")
-

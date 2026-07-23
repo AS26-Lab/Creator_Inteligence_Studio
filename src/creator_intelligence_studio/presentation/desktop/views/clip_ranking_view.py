@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QProgressBar,
+    QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -55,6 +56,72 @@ class ClipRankingThread(QThread):
         self.result_ready.emit(report)
 
 
+class RenderClipThread(QThread):
+    """Ejecuta un render de clip o coleccion sin bloquear la GUI."""
+
+    result_ready = Signal(object)
+    error_ready = Signal(str)
+    progress_ready = Signal(str, float)
+
+    def __init__(
+        self,
+        workspace: WorkspaceViewModel,
+        *,
+        candidate_id: str | None = None,
+        collection_id: str | None = None,
+        profile: str = "balanced",
+        output: str | None = None,
+        output_root: str | None = None,
+        explicit: bool = False,
+        allow_stale: bool = False,
+        allow_overwrite: bool = False,
+        custom_name: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.workspace = workspace
+        self.candidate_id = candidate_id
+        self.collection_id = collection_id
+        self.profile = profile
+        self.output = output
+        self.output_root = output_root
+        self.explicit = explicit
+        self.allow_stale = allow_stale
+        self.allow_overwrite = allow_overwrite
+        self.custom_name = custom_name
+
+    def run(self) -> None:  # pragma: no cover - flujo Qt
+        try:
+            if self.collection_id is not None:
+                report = self.workspace.render_collection(
+                    self.collection_id,
+                    profile=self.profile,
+                    output_root=self.output_root,
+                    explicit=self.explicit,
+                    allow_stale=self.allow_stale,
+                )
+            elif self.candidate_id is not None:
+                report = self.workspace.render_candidate(
+                    self.candidate_id,
+                    profile=self.profile,
+                    output=self.output,
+                    output_root_override=self.output_root,
+                    explicit=self.explicit,
+                    allow_stale=self.allow_stale,
+                    allow_overwrite=self.allow_overwrite,
+                    custom_name=self.custom_name,
+                    progress_callback=lambda phase, ratio, _payload: self.progress_ready.emit(phase, float(ratio or 0.0)),
+                )
+            else:
+                raise ValueError("Render sin destino.")
+        except DomainError as exc:
+            self.error_ready.emit(str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - defensa general
+            self.error_ready.emit(str(exc))
+            return
+        self.result_ready.emit(report)
+
+
 class ClipRankingView(QWidget):
     """Vista tecnica para ranking y revision humana de clips."""
 
@@ -62,6 +129,7 @@ class ClipRankingView(QWidget):
         super().__init__(parent)
         self.workspace = workspace
         self._thread: ClipRankingThread | None = None
+        self._render_thread: RenderClipThread | None = None
 
         self.status_label = QLabel("Sin ranking")
         self.status_label.setObjectName("MutedLabel")
@@ -79,6 +147,12 @@ class ClipRankingView(QWidget):
 
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(["balanced", "speech-focused", "visual-focused", "high-energy", "story-beats"])
+        self.render_profile_combo = QComboBox()
+        self.render_profile_combo.addItems(["balanced", "source_quality", "compact", "draft"])
+        self.render_name_edit = QLineEdit()
+        self.render_name_edit.setPlaceholderText("Nombre de salida opcional")
+        self.render_folder_edit = QLineEdit()
+        self.render_folder_edit.setPlaceholderText("Carpeta de salida opcional")
         self.review_filter_combo = QComboBox()
         self.review_filter_combo.addItems(["Todas", "unreviewed", "shortlisted", "approved", "rejected", "needs_review", "duplicate", "invalid", "exported"])
         self.sort_combo = QComboBox()
@@ -90,6 +164,8 @@ class ClipRankingView(QWidget):
         self.export_csv_button = QPushButton("Exportar CSV")
         self.export_edl_button = QPushButton("Exportar EDL")
         self.delete_button = QPushButton("Eliminar ranking")
+        self.render_button = QPushButton("Renderizar clip")
+        self.render_collection_button = QPushButton("Renderizar colección")
 
         self.approve_button = QPushButton("Aprobar")
         self.reject_button = QPushButton("Rechazar")
@@ -121,6 +197,18 @@ class ClipRankingView(QWidget):
             top.addWidget(widget)
         top.addStretch(1)
 
+        render_row = QHBoxLayout()
+        render_row.addWidget(QLabel("Render"))
+        render_row.addWidget(QLabel("Perfil"))
+        render_row.addWidget(self.render_profile_combo)
+        render_row.addWidget(QLabel("Nombre"))
+        render_row.addWidget(self.render_name_edit)
+        render_row.addWidget(QLabel("Carpeta"))
+        render_row.addWidget(self.render_folder_edit)
+        render_row.addWidget(self.render_button)
+        render_row.addWidget(self.render_collection_button)
+        render_row.addStretch(1)
+
         actions = QHBoxLayout()
         for widget in (
             self.approve_button,
@@ -145,6 +233,7 @@ class ClipRankingView(QWidget):
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addLayout(top)
+        layout.addLayout(render_row)
         layout.addLayout(actions)
         layout.addWidget(self.status_label)
         layout.addWidget(self.stale_label)
@@ -162,6 +251,8 @@ class ClipRankingView(QWidget):
         self.export_csv_button.clicked.connect(lambda: self._export("csv"))
         self.export_edl_button.clicked.connect(lambda: self._export("edl"))
         self.delete_button.clicked.connect(self._delete)
+        self.render_button.clicked.connect(self._render_candidate)
+        self.render_collection_button.clicked.connect(self._render_collection)
         self.approve_button.clicked.connect(self._approve)
         self.reject_button.clicked.connect(self._reject)
         self.shortlist_button.clicked.connect(self._shortlist)
@@ -313,6 +404,12 @@ class ClipRankingView(QWidget):
         self.progress_bar.setValue(value)
         self.progress_label.setText(f"{value}%")
 
+    def _render_progress(self, phase: str, ratio: float) -> None:
+        self.phase_label.setText(f"Render: {phase}")
+        value = max(0, min(100, int(ratio * 100)))
+        self.progress_bar.setValue(value)
+        self.progress_label.setText(f"{value}%")
+
     def _export(self, format_name: str) -> None:
         video_id = self._selected_video_id()
         if video_id is None:
@@ -333,6 +430,77 @@ class ClipRankingView(QWidget):
             self.refresh()
         else:
             QMessageBox.information(self, "Clip ranking", "No existia ranking.")
+
+    def _render_candidate(self) -> None:
+        candidate = self._current_candidate()
+        if candidate is None:
+            return
+        if self._render_thread is not None and self._render_thread.isRunning():
+            return
+        profile = self.render_profile_combo.currentText()
+        custom_name = self.render_name_edit.text().strip() or None
+        output_root = self.render_folder_edit.text().strip() or None
+        self.phase_label.setText("Renderizando")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self._render_thread = RenderClipThread(
+            self.workspace,
+            candidate_id=candidate.id,
+            profile=profile,
+            explicit=candidate.review_status.value == "needs_review",
+            output_root=output_root,
+            custom_name=custom_name,
+        )
+        self._render_thread.result_ready.connect(self._render_finished)
+        self._render_thread.error_ready.connect(self._render_failed)
+        self._render_thread.progress_ready.connect(self._render_progress)
+        self._render_thread.finished.connect(self._render_thread.deleteLater)
+        self._render_thread.start()
+
+    def _render_collection(self) -> None:
+        video_id = self._selected_video_id()
+        if video_id is None:
+            QMessageBox.information(self, "Clip ranking", "Selecciona un video primero.")
+            return
+        collections = self.workspace.list_clip_collections(video_id)
+        if not collections:
+            QMessageBox.information(self, "Clip ranking", "No hay colecciones para este video.")
+            return
+        selected, ok = QInputDialog.getItem(self, "Coleccion", "Selecciona una coleccion:", [collection.name for collection in collections], editable=False)
+        if not ok or not selected:
+            return
+        collection = next((item for item in collections if item.name == selected), None)
+        if collection is None:
+            return
+        if self._render_thread is not None and self._render_thread.isRunning():
+            return
+        profile = self.render_profile_combo.currentText()
+        output_root = self.render_folder_edit.text().strip() or None
+        self.phase_label.setText("Renderizando coleccion")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self._render_thread = RenderClipThread(
+            self.workspace,
+            collection_id=collection.id,
+            profile=profile,
+            output_root=output_root,
+            custom_name=self.render_name_edit.text().strip() or None,
+            explicit=True,
+        )
+        self._render_thread.result_ready.connect(self._render_finished)
+        self._render_thread.error_ready.connect(self._render_failed)
+        self._render_thread.progress_ready.connect(self._render_progress)
+        self._render_thread.finished.connect(self._render_thread.deleteLater)
+        self._render_thread.start()
+
+    def _render_finished(self, report) -> None:
+        QMessageBox.information(self, "Clip ranking", "Render completado.")
+        self.detail.setPlainText(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        self.refresh()
+
+    def _render_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Clip ranking", message)
+        self.phase_label.setText("Error render")
 
     def _approve(self) -> None:
         candidate = self._current_candidate()

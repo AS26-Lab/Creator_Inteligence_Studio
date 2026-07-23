@@ -157,6 +157,8 @@ flowchart LR
 - rating humano, notas y tags;
 - historial de cambios;
 - colecciones locales de clips;
+- render local de clips aprobados o seleccionados desde el candidato o la coleccion;
+- historial de renders y acceso al output verificado desde Task Center;
 - exportacion JSON, CSV y EDL tecnico;
 - stale y recalculo sin perder feedback humano.
 
@@ -202,6 +204,7 @@ flowchart LR
 - sin inspeccion tecnica aun;
 - sin transcripcion aun;
 - sin analisis multimodal aun;
+- sin clips aprobados aun;
 - sin herramientas multimedia disponibles.
 
 ## Separacion de Script & Voice Studio

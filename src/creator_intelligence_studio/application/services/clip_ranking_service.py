@@ -845,6 +845,15 @@ class ClipRankingService:
     def remove_candidate_from_collection(self, collection_id: str, candidate_id: str) -> bool:
         return self.clip_repository.remove_collection_item(collection_id, candidate_id)
 
+    def get_clip_collection(self, collection_id: str) -> ClipCollection | None:
+        return self.clip_repository.get_collection_by_id(collection_id)
+
+    def list_clip_collections(self, video_asset_id: str) -> list[ClipCollection]:
+        return self.clip_repository.list_collections(video_asset_id)
+
+    def list_clip_collection_items(self, collection_id: str) -> list[ClipCollectionItem]:
+        return self.clip_repository.list_collection_items(collection_id)
+
     def export_clip_plan(self, video_id: str, format: str, *, destination: Path | None = None) -> ClipRankingExportResult:
         report = self.get_ranking_run(video_id)
         if report.run is None:

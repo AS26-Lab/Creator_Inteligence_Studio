@@ -44,6 +44,11 @@ from creator_intelligence_studio.application.services.clip_ranking_service impor
     ClipRankingReport,
     ClipRankingService,
 )
+from creator_intelligence_studio.application.services.clip_rendering_service import (
+    ClipRenderBatchReport,
+    ClipRenderOperationReport,
+    ClipRenderService,
+)
 from creator_intelligence_studio.application.services.personalization_dataset_service import (
     CreatorReadinessReport,
     DatasetSnapshotComparison,
@@ -231,6 +236,17 @@ def _audio_text(value: int | None, unit: str) -> str:
     return f"{value} {unit}"
 
 
+class _RenderCancellationToken:
+    def __init__(self) -> None:
+        self._cancelled = False
+
+    def cancelled(self) -> bool:
+        return self._cancelled
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+
 class WorkspaceViewModel:
     """Coordina datos, selecciones y transformaciones de presentacion."""
 
@@ -245,6 +261,7 @@ class WorkspaceViewModel:
         visual_service: VisualAnalysisService,
         multimodal_service: MultimodalAnalysisService | None = None,
         clip_service: ClipRankingService | None = None,
+        render_service: ClipRenderService | None = None,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -344,6 +361,34 @@ class WorkspaceViewModel:
                 export_clip_plan=lambda *args, **kwargs: SimpleNamespace(path="", to_dict=lambda: {}),
             )
         self.clip_service = clip_service
+        if render_service is None:
+            from types import SimpleNamespace
+
+            render_service = SimpleNamespace(
+                render_capabilities=lambda: SimpleNamespace(available=False, to_dict=lambda: {"available": False}),
+                render_profiles=lambda: (),
+                render_candidate=lambda *args, **kwargs: SimpleNamespace(job=SimpleNamespace(to_dict=lambda: {}), plan=SimpleNamespace(to_dict=lambda: {}), verification=None, artifact=None, reused_output=False, warnings=(), errors=(), to_dict=lambda: {}),
+                get_render_job=lambda *args, **kwargs: None,
+                list_render_jobs=lambda *args, **kwargs: (),
+                list_candidate_renders=lambda *args, **kwargs: (),
+                list_collection_renders=lambda *args, **kwargs: (),
+                list_video_renders=lambda *args, **kwargs: (),
+                list_render_batches_for_collection=lambda *args, **kwargs: (),
+                list_render_batches_for_video=lambda *args, **kwargs: (),
+                get_render_batch=lambda *args, **kwargs: None,
+                list_batch_items=lambda *args, **kwargs: (),
+                verify_render=lambda *args, **kwargs: SimpleNamespace(to_dict=lambda: {}),
+                delete_render_artifact=lambda *args, **kwargs: False,
+                reveal_render_output=lambda *args, **kwargs: None,
+                cancel_render=lambda *args, **kwargs: None,
+                cancel_render_batch=lambda *args, **kwargs: None,
+                retry_render=lambda *args, **kwargs: SimpleNamespace(to_dict=lambda: {}),
+                retry_render_batch=lambda *args, **kwargs: SimpleNamespace(batch=SimpleNamespace(to_dict=lambda: {}), jobs=(), warnings=(), errors=(), to_dict=lambda: {}),
+                render_collection=lambda *args, **kwargs: SimpleNamespace(batch=SimpleNamespace(to_dict=lambda: {}), jobs=(), warnings=(), errors=(), to_dict=lambda: {}),
+                create_render_job=lambda *args, **kwargs: SimpleNamespace(to_dict=lambda: {}),
+                export_render_plan=lambda *args, **kwargs: Path(""),
+            )
+        self.render_service = render_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -352,6 +397,7 @@ class WorkspaceViewModel:
         self.paths = paths
         self.ui_state_store = WorkspaceUiStateStore(paths.data_directory / "workspace_ui_state.json")
         self.ui_state = self.ui_state_store.load()
+        self._active_render_tokens: dict[str, _RenderCancellationToken] = {}
         self.selected_creator_id: str | None = self.ui_state.active_creator_id
         self.selected_project_id: str | None = self.ui_state.active_project_id
         self.selected_video_id: str | None = None
@@ -815,7 +861,39 @@ class WorkspaceViewModel:
         )
 
     def background_tasks(self) -> list[BackgroundTaskRecord]:
-        return list(self.ui_state.tasks)
+        tasks = list(self.ui_state.tasks)
+        if self.render_service is not None:
+            try:
+                render_jobs = self.render_service.list_render_jobs()
+            except Exception:
+                render_jobs = []
+            for job in render_jobs:
+                try:
+                    video = self.service.get_video(job.video_asset_id)
+                    video_title = video.title if video else job.video_asset_id
+                except Exception:
+                    video_title = job.video_asset_id
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=job.id,
+                        title="Render de clip",
+                        status=job.status.value,
+                        stage_name=job.status.value,
+                        video_id=job.video_asset_id,
+                        video_title=video_title,
+                        action_id=job.ranked_clip_candidate_id,
+                        progress_percent=job.progress_percent,
+                        message=job.warning_message or job.error_message or job.status.value,
+                        error=job.error_message,
+                        cancellable=job.status.value in {"queued", "validating", "preparing", "rendering", "verifying"},
+                        created_at=to_iso_z(job.created_at),
+                        updated_at=to_iso_z(job.updated_at),
+                        interrupted_at=to_iso_z(job.cancelled_at) if job.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(job.completed_at),
+                        payload=job.to_dict(),
+                    )
+                )
+        return sorted(tasks, key=lambda item: item.updated_at, reverse=True)
 
     def _update_tasks(self, tasks: tuple[BackgroundTaskRecord, ...]) -> None:
         self.ui_state = self.ui_state_store.update(self.ui_state, tasks=tasks)
@@ -1450,6 +1528,163 @@ class WorkspaceViewModel:
         result = self.clip_service.export_clip_plan(video_id, format_name)
         self.activity_log.insert(0, f"Exportacion de clip plan: {format_name}")
         return result
+
+    def render_capabilities(self):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.render_capabilities()
+
+    def render_profiles(self):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.render_profiles()
+
+    def create_render_job(self, candidate_id: str, *, profile: str = "balanced", output: str | None = None, output_root_override: str | None = None, explicit: bool = False, allow_stale: bool = False, allow_overwrite: bool = False, custom_name: str | None = None, collection_id: str | None = None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.create_render_job(
+            candidate_id,
+            profile=profile,
+            output=output,
+            output_root_override=output_root_override,
+            explicit=explicit,
+            allow_stale=allow_stale,
+            allow_overwrite=allow_overwrite,
+            custom_name=custom_name,
+            collection_id=collection_id,
+        )
+
+    def render_candidate(self, candidate_id: str, *, profile: str = "balanced", output: str | None = None, output_root_override: str | None = None, explicit: bool = False, allow_stale: bool = False, allow_overwrite: bool = False, custom_name: str | None = None, collection_id: str | None = None, progress_callback=None, cancellation_token=None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        token = cancellation_token
+        token_key = candidate_id
+        own_token = False
+        if token is None:
+            token = _RenderCancellationToken()
+            own_token = True
+        self._active_render_tokens[token_key] = token
+        try:
+            report = self.render_service.render_candidate(
+                candidate_id,
+                profile=profile,
+                output=output,
+                output_root_override=output_root_override,
+                explicit=explicit,
+                allow_stale=allow_stale,
+                allow_overwrite=allow_overwrite,
+                custom_name=custom_name,
+                collection_id=collection_id,
+                progress_callback=progress_callback,
+                cancellation_token=token,
+            )
+        finally:
+            current_token = self._active_render_tokens.get(token_key)
+            if current_token is token:
+                self._active_render_tokens.pop(token_key, None)
+        self.activity_log.insert(0, f"Render de clip: {report.job.status.value}")
+        return report
+
+    def get_render_job(self, job_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.get_render_job(job_id)
+
+    def list_render_jobs(self):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_render_jobs()
+
+    def list_candidate_renders(self, candidate_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_candidate_renders(candidate_id)
+
+    def list_collection_renders(self, collection_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_collection_renders(collection_id)
+
+    def list_clip_collections(self, video_id: str):
+        return self.clip_service.list_clip_collections(video_id)
+
+    def get_clip_collection(self, collection_id: str):
+        return self.clip_service.get_clip_collection(collection_id)
+
+    def list_render_batches_for_collection(self, collection_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_render_batches_for_collection(collection_id)
+
+    def get_render_batch(self, batch_id: str):
+        if self.render_service is None:
+            return None
+        return self.render_service.get_render_batch(batch_id)
+
+    def list_batch_items(self, batch_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_batch_items(batch_id)
+
+    def render_collection(self, collection_id: str, *, profile: str = "balanced", output_root: str | None = None, explicit: bool = False, allow_stale: bool = False, continue_on_failure: bool = False):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        report = self.render_service.render_collection(
+            collection_id,
+            profile=profile,
+            output_root=output_root,
+            explicit=explicit,
+            allow_stale=allow_stale,
+            continue_on_failure=continue_on_failure,
+        )
+        self.activity_log.insert(0, f"Render de coleccion: {report.batch.status.value}")
+        return report
+
+    def verify_render(self, job_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.verify_render(job_id)
+
+    def cancel_render(self, job_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        job = self.render_service.get_render_job(job_id)
+        if job is not None and job.ranked_clip_candidate_id is not None:
+            token = self._active_render_tokens.get(job.ranked_clip_candidate_id)
+            if token is not None:
+                token.cancel()
+                self._active_render_tokens.pop(job.ranked_clip_candidate_id, None)
+        return self.render_service.cancel_render(job_id)
+
+    def cancel_render_batch(self, batch_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.cancel_render_batch(batch_id)
+
+    def retry_render(self, job_id: str, *, progress_callback=None, cancellation_token=None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.retry_render(job_id, progress_callback=progress_callback, cancellation_token=cancellation_token)
+
+    def retry_render_batch(self, batch_id: str, *, progress_callback=None, cancellation_token=None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.retry_render_batch(batch_id, progress_callback=progress_callback, cancellation_token=cancellation_token)
+
+    def delete_render_artifact(self, job_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.delete_render_artifact(job_id)
+
+    def reveal_render_output(self, job_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.reveal_render_output(job_id)
+
+    def export_render_plan(self, job_id: str, destination: str | None = None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.export_render_plan(job_id, destination=destination)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

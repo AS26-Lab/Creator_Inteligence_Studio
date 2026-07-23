@@ -329,9 +329,9 @@ class VideoPipelineService:
         elif stages[6].status in {"pending", "available"}:
             recommended_action = "Generar candidatos"
         else:
-            recommended_action = "Revisar clips"
+            render_recommended = bool(ranking and ranking.run and ranking.run.selected_count > 0)
+            recommended_action = "Renderizar clips aprobados" if render_recommended else "Revisar clips"
             if self.personalization_service is not None:
-                creator_id = video.project_id
                 try:
                     project = self.catalog_service.get_project(video.project_id)
                     readiness = self.personalization_service.get_creator_readiness(project.creator_id)
@@ -344,7 +344,7 @@ class VideoPipelineService:
                     elif readiness.readiness_status in {
                         PersonalizationReadinessStatus.COLLECTING_FEEDBACK,
                         PersonalizationReadinessStatus.LIMITED,
-                    }:
+                    } and not render_recommended:
                         recommended_action = "Continua revisando candidatos para personalizar"
                     if readiness.recommendations:
                         warnings.extend(readiness.recommendations)

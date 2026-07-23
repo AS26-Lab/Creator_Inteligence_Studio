@@ -77,6 +77,7 @@ La aplicacion ya permite:
 - generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
 - construir una linea temporal multimodal con candidatos tecnicos sincronizados;
 - rankear candidatos de clip con revision humana, feedback e historial local;
+- renderizar localmente clips aprobados o colecciones con FFmpeg, con salida verificada y historial persistente;
 - preparar datasets de personalizacion por creador a partir del feedback humano;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
@@ -97,6 +98,7 @@ La GUI incluye un flujo guiado para operar sin conocer IDs internos ni comandos 
 La accion recomendada depende del estado real del video y no ejecuta tareas costosas automaticamente sin confirmacion.
 
 La guia detallada del flujo esta en [`docs/PRODUCT_UX_WORKFLOW.md`](docs/PRODUCT_UX_WORKFLOW.md).
+La primera version de render local esta documentada en [`docs/CLIP_RENDERING.md`](docs/CLIP_RENDERING.md).
 
 ## Base local
 

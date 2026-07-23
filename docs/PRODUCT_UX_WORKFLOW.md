@@ -25,7 +25,8 @@ The UX exposes:
 6. Run the next recommended step
 7. Review clips
 8. Provide feedback
-9. Monitor personalization
+9. Render approved clips when desired
+10. Monitor personalization
 10. Reopen the app and continue
 
 ## Pipeline status
@@ -42,6 +43,8 @@ It shows:
 - stage-by-stage summaries.
 
 The aggregated status does not duplicate core analysis logic.
+
+Rendering is optional and local. It becomes available after review when a clip is approved or explicitly selected, but it does not replace the personalization workflow.
 
 ## Task Center
 

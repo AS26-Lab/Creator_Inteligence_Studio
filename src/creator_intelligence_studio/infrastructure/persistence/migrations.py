@@ -1450,6 +1450,159 @@ def migration_11(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_artifacts_run_id ON operational_evaluation_artifacts(evaluation_run_id)")
 
 
+def migration_12(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_render_jobs (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL,
+            ranked_clip_candidate_id TEXT,
+            collection_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'queued',
+                    'validating',
+                    'preparing',
+                    'rendering',
+                    'verifying',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'cancelled',
+                    'interrupted',
+                    'stale',
+                    'source_missing',
+                    'invalid_bounds',
+                    'output_exists'
+                )
+            ),
+            render_profile TEXT NOT NULL,
+            source_path_snapshot TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            duration_seconds REAL NOT NULL,
+            output_path TEXT NOT NULL,
+            output_container TEXT NOT NULL,
+            video_codec TEXT NOT NULL,
+            audio_codec TEXT NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            frame_rate REAL,
+            audio_sample_rate INTEGER,
+            configuration_fingerprint TEXT NOT NULL,
+            renderer_version TEXT NOT NULL,
+            progress_percent REAL NOT NULL DEFAULT 0,
+            started_at TEXT,
+            completed_at TEXT,
+            cancelled_at TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_render_artifacts (
+            id TEXT PRIMARY KEY,
+            render_job_id TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            managed_path TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            size_bytes INTEGER,
+            duration_seconds REAL,
+            video_codec TEXT,
+            audio_codec TEXT,
+            width INTEGER,
+            height INTEGER,
+            frame_rate REAL,
+            audio_sample_rate INTEGER,
+            verified INTEGER NOT NULL DEFAULT 0,
+            verification_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(render_job_id, artifact_type),
+            FOREIGN KEY (render_job_id) REFERENCES clip_render_jobs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_render_events (
+            id TEXT PRIMARY KEY,
+            render_job_id TEXT NOT NULL,
+            event_index INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            progress_percent REAL NOT NULL,
+            message TEXT NOT NULL,
+            details_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (render_job_id) REFERENCES clip_render_jobs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_render_batches (
+            id TEXT PRIMARY KEY,
+            collection_id TEXT,
+            video_asset_id TEXT,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'queued',
+                    'running',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'cancelled',
+                    'interrupted'
+                )
+            ),
+            job_count INTEGER NOT NULL DEFAULT 0,
+            completed_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            cancelled_count INTEGER NOT NULL DEFAULT 0,
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clip_render_batch_items (
+            id TEXT PRIMARY KEY,
+            batch_id TEXT NOT NULL,
+            render_job_id TEXT NOT NULL,
+            item_index INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(batch_id, render_job_id),
+            FOREIGN KEY (batch_id) REFERENCES clip_render_batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (render_job_id) REFERENCES clip_render_jobs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_jobs_video_asset_id ON clip_render_jobs(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_jobs_candidate_id ON clip_render_jobs(ranked_clip_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_jobs_collection_id ON clip_render_jobs(collection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_jobs_status ON clip_render_jobs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_artifacts_render_job_id ON clip_render_artifacts(render_job_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_events_render_job_id ON clip_render_events(render_job_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_events_job_index ON clip_render_events(render_job_id, event_index)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batches_collection_id ON clip_render_batches(collection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batches_video_asset_id ON clip_render_batches(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batches_status ON clip_render_batches(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batch_items_batch_id ON clip_render_batch_items(batch_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batch_items_job_id ON clip_render_batch_items(render_job_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -1462,6 +1615,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=9, name="personalization_data"),
     Migration(version=10, name="personalization_models"),
     Migration(version=11, name="operational_evaluation"),
+    Migration(version=12, name="clip_rendering"),
 )
 
 
@@ -1521,6 +1675,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_10(connection)
                 elif migration.version == 11:
                     migration_11(connection)
+                elif migration.version == 12:
+                    migration_12(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

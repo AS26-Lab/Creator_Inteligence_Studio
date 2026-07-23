@@ -54,6 +54,7 @@ flowchart TD
 - `Audio Preparation`
 - `Artifact Store`
 - `Job Orchestrator`
+- `Clip Render Store`
 - `Analysis Pipeline`
 - `Workflow Shell`
 - `Insight Engine`
@@ -61,6 +62,7 @@ flowchart TD
 - `Visual Analysis`
 - `Multimodal Analysis`
 - `Clip Ranking`
+- `Clip Rendering`
 - `Personalization Data`
 - `Model Registry`
 - `Connector Layer`
@@ -80,6 +82,7 @@ flowchart TD
 9. El cache se reutiliza si tamano, fecha de modificacion y fingerprints siguen vigentes.
 10. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion, analisis acustico, analisis visual o analisis multimodal.
 11. La UI solo consume resultados publicados por la capa de aplicacion.
+12. Los clips aprobados pueden renderizarse localmente sin modificar el archivo fuente; la verificacion de salida guarda metadatos tecnicos y el Task Center conserva el historial.
 
 ## Workflow shell de escritorio
 
@@ -87,6 +90,7 @@ flowchart TD
 - `presentation/desktop/ui_state.py` persiste la seleccion activa, la pagina actual, preferencias iniciales y tareas de fondo.
 - `presentation/desktop/views/workflow_view.py` presenta la accion recomendada, el progreso y las etapas del pipeline.
 - `presentation/desktop/views/task_center_view.py` expone tareas persistidas e interrupciones visibles al usuario.
+- `presentation/desktop/views/clip_ranking_view.py` expone el flujo de render local y de colecciones sobre candidatos aprobados.
 - `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
 - `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
 

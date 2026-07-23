@@ -32,6 +32,7 @@
 | 2026-07-23 | Personalization data | La preparacion de datos por creador sera local, reproducible y aislada por creador, construida a partir de feedback humano y features derivadas. | Se obtienen snapshots versionados, splits deterministas, quality reports y readiness sin entrenar modelos. | Mezclar creadores, inferir labels desde scores automaticos o arrancar entrenamiento en esta fase. |
 | 2026-07-23 | UX de workflow | La primera experiencia integrada debe mostrar la accion recomendada por video, tareas persistidas, onboarding reabrible y preferencias iniciales sin exponer IDs internos. | La GUI orienta Home, Videos, Workflow y Task Center alrededor del estado real del pipeline. | Forzar al usuario a navegar por servicios tecnicos o depender solo de CLI. |
 | 2026-07-23 | Persistencia de interfaz | La seleccion de creador, proyecto, pagina, preferencias y tareas de fondo se persistiran de forma local y reversible. | La reapertura mantiene contexto operativo sin guardar secretos ni mover datos automaticamente. | Reiniciar siempre desde cero o mezclar contexto sin persistencia. |
+| 2026-07-23 | Render local de clips | El render inicial de clips sera local, reproducible y verificable con FFmpeg, usando perfiles transparentes y temporal administrado `.part.mp4`. | Se conserva el video fuente, el historial de renders y la verificacion tecnica del output. | Editores completos, subida automatica o render distribuido como primer paso. |
 
 ## Transcription Decision
 

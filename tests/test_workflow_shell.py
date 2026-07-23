@@ -250,7 +250,7 @@ def make_workspace(root: Path) -> WorkspaceViewModel:
             self.calls.append("ranking")
             state.ranked = True
             candidate = SimpleNamespace(id="cand-1", multimodal_candidate_id="cand-1", review_status=SimpleNamespace(value="unreviewed"), user_rating=None, tags=(), adjusted_start_seconds=0.0, adjusted_end_seconds=1.0, original_start_seconds=0.0, original_end_seconds=1.0)
-            return SimpleNamespace(video=SimpleNamespace(id=video_id), multimodal_report=MultimodalService().get_multimodal_analysis(video_id), run=SimpleNamespace(id="run-1", completed_at=None, ranked_candidate_count=1, selected_count=0, rejected_count=0, review_count=0), candidates=(candidate,), status=SimpleNamespace(value="completed"), is_stale=False, available_sources=("transcription", "acoustic", "visual"), missing_sources=(), warnings=(), errors=(), progress_message=None)
+            return SimpleNamespace(video=SimpleNamespace(id=video_id), multimodal_report=MultimodalService().get_multimodal_analysis(video_id), run=SimpleNamespace(id="run-1", completed_at=None, ranked_candidate_count=1, selected_count=1, rejected_count=0, review_count=0), candidates=(candidate,), status=SimpleNamespace(value="completed"), is_stale=False, available_sources=("transcription", "acoustic", "visual"), missing_sources=(), warnings=(), errors=(), progress_message=None)
 
         def get_ranking_run(self, video_id: str):
             if state.ranked:
@@ -351,6 +351,8 @@ class WorkflowShellTests(unittest.TestCase):
             results = workspace.run_pipeline_until_ranking(workspace.selected_video_id)
             self.assertGreaterEqual(len(results), 1)
             self.assertEqual(results[-1].stage_name, "ranking")
+            status = workspace.video_pipeline_status(workspace.selected_video_id)
+            self.assertEqual(status.recommended_action, "Renderizar clips aprobados")
 
     def test_background_tasks_and_task_center(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -385,4 +387,3 @@ class WorkflowShellTests(unittest.TestCase):
             view.refresh()
             self.assertGreaterEqual(view.stage_table.rowCount(), 1)
             self.assertIn("Inspeccion", view.stage_table.item(0, 0).text())
-
