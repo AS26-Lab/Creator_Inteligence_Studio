@@ -58,6 +58,18 @@ from creator_intelligence_studio.application.commands.clip_commands import (
     ShowClipRankingCommand,
     TagsClipCandidateCommand,
 )
+from creator_intelligence_studio.application.commands.personalization_commands import (
+    ArchiveDatasetSnapshotCommand,
+    BuildCreatorDatasetCommand,
+    CompareDatasetSnapshotsCommand,
+    CreatorReadinessCommand,
+    DatasetExamplesCommand,
+    DatasetQualityCommand,
+    ExportDatasetCommand,
+    LatestCreatorDatasetCommand,
+    ListCreatorDatasetsCommand,
+    ShowCreatorDatasetCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -114,6 +126,13 @@ from creator_intelligence_studio.application.services.clip_ranking_service impor
     ClipRankingReport,
     ClipRankingService,
 )
+from creator_intelligence_studio.application.services.personalization_dataset_service import (
+    CreatorReadinessReport,
+    DatasetSnapshotComparison,
+    PersonalizationDatasetExportResult,
+    PersonalizationDatasetReport,
+    PersonalizationDatasetService,
+)
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
     MediaToolsReport,
@@ -129,6 +148,18 @@ from creator_intelligence_studio.domain.multimodal_analysis.value_objects import
 from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionExportFormat, TranscriptionOptions
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
+
+
+def _json_default(value):
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if hasattr(value, "value"):
+        return value.value
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    return str(value)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -456,6 +487,55 @@ def build_parser() -> argparse.ArgumentParser:
     clips_remove_from_collection.add_argument("--collection-id", required=True)
     clips_remove_from_collection.add_argument("--candidate-id", required=True)
     clips_remove_from_collection.add_argument("--json", action="store_true")
+
+    personalization_parser = subparsers.add_parser("personalization", help="Preparacion de datos por creador")
+    personalization_sub = personalization_parser.add_subparsers(dest="action", required=True)
+
+    personalization_build = personalization_sub.add_parser("build", help="Construir un snapshot")
+    personalization_build.add_argument("--creator-id", required=True)
+    personalization_build.add_argument("--project-id")
+    personalization_build.add_argument("--force", action="store_true")
+    personalization_build.add_argument("--json", action="store_true")
+
+    personalization_show = personalization_sub.add_parser("show", help="Mostrar un snapshot")
+    personalization_show.add_argument("--snapshot-id", required=True)
+    personalization_show.add_argument("--json", action="store_true")
+
+    personalization_latest = personalization_sub.add_parser("latest", help="Mostrar el snapshot mas reciente")
+    personalization_latest.add_argument("--creator-id", required=True)
+    personalization_latest.add_argument("--json", action="store_true")
+
+    personalization_list = personalization_sub.add_parser("list", help="Listar snapshots")
+    personalization_list.add_argument("--creator-id", required=True)
+    personalization_list.add_argument("--json", action="store_true")
+
+    personalization_examples = personalization_sub.add_parser("examples", help="Listar ejemplos")
+    personalization_examples.add_argument("--snapshot-id", required=True)
+    personalization_examples.add_argument("--json", action="store_true")
+
+    personalization_quality = personalization_sub.add_parser("quality", help="Mostrar quality report")
+    personalization_quality.add_argument("--snapshot-id", required=True)
+    personalization_quality.add_argument("--json", action="store_true")
+
+    personalization_readiness = personalization_sub.add_parser("readiness", help="Mostrar readiness del creador")
+    personalization_readiness.add_argument("--creator-id", required=True)
+    personalization_readiness.add_argument("--json", action="store_true")
+
+    personalization_compare = personalization_sub.add_parser("compare", help="Comparar snapshots")
+    personalization_compare.add_argument("--snapshot-a", required=True)
+    personalization_compare.add_argument("--snapshot-b", required=True)
+    personalization_compare.add_argument("--json", action="store_true")
+
+    personalization_archive = personalization_sub.add_parser("archive", help="Archivar snapshot")
+    personalization_archive.add_argument("--snapshot-id", required=True)
+    personalization_archive.add_argument("--json", action="store_true")
+
+    personalization_export = personalization_sub.add_parser("export", help="Exportar snapshot")
+    personalization_export.add_argument("--snapshot-id", required=True)
+    personalization_export.add_argument("--format", required=True, choices=["json", "csv", "jsonl"])
+    personalization_export.add_argument("--output")
+    personalization_export.add_argument("--include-sensitive", action="store_true")
+    personalization_export.add_argument("--json", action="store_true")
 
     return parser
 
@@ -841,6 +921,26 @@ def _print_clip_report(report: ClipRankingReport, stream) -> None:
         print(f"Advertencia: {warning}", file=stream)
     for error in report.errors:
         print(f"Error: {error}", file=stream)
+
+
+def _print_personalization_snapshot(report: PersonalizationDatasetReport, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_personalization_examples(examples, stream) -> None:
+    print(json.dumps([example.to_dict() for example in examples], ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_personalization_quality(report, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_personalization_readiness(report: CreatorReadinessReport, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
+
+
+def _print_personalization_comparison(report: DatasetSnapshotComparison, stream) -> None:
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stream)
 
 
 def _audio_stream_summary(report: PreparedAudioReport) -> str:
@@ -1462,6 +1562,83 @@ def _handle_clips(args, service: ClipRankingService, stdout, stderr) -> int:
     raise ValueError("Accion de ranking de clips no reconocida.")
 
 
+def _handle_personalization(args, service: PersonalizationDatasetService, stdout, stderr) -> int:
+    if args.action == "build":
+        command = BuildCreatorDatasetCommand(args.creator_id, project_id=args.project_id, force=args.force)
+        report = service.build_creator_dataset(command.creator_id, project_id=command.project_id, force=command.force)
+        if args.json:
+            _print_personalization_snapshot(report, stdout)
+        else:
+            print("Dataset de personalizacion construido", file=stdout)
+            _print_personalization_snapshot(report, stdout)
+        return 0
+    if args.action == "show":
+        command = ShowCreatorDatasetCommand(args.snapshot_id)
+        report = service.get_dataset_snapshot(command.snapshot_id)
+        if args.json:
+            _print_personalization_snapshot(report, stdout)
+        else:
+            _print_personalization_snapshot(report, stdout)
+        return 0
+    if args.action == "latest":
+        command = LatestCreatorDatasetCommand(args.creator_id)
+        report = service.get_latest_creator_dataset(command.creator_id)
+        if args.json:
+            _print_personalization_snapshot(report, stdout)
+        else:
+            print("Snapshot mas reciente", file=stdout)
+            _print_personalization_snapshot(report, stdout)
+        return 0
+    if args.action == "list":
+        command = ListCreatorDatasetsCommand(args.creator_id)
+        snapshots = service.list_creator_datasets(command.creator_id)
+        if args.json:
+            print(json.dumps([snapshot.to_dict() for snapshot in snapshots], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            for snapshot in snapshots:
+                print(json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "examples":
+        command = DatasetExamplesCommand(args.snapshot_id)
+        examples = service.list_dataset_examples(command.snapshot_id)
+        _print_personalization_examples(examples, stdout)
+        return 0
+    if args.action == "quality":
+        command = DatasetQualityCommand(args.snapshot_id)
+        report = service.get_dataset_quality_report(command.snapshot_id)
+        _print_personalization_quality(report, stdout)
+        return 0
+    if args.action == "readiness":
+        command = CreatorReadinessCommand(args.creator_id)
+        report = service.get_creator_readiness(command.creator_id)
+        _print_personalization_readiness(report, stdout)
+        return 0
+    if args.action == "compare":
+        command = CompareDatasetSnapshotsCommand(args.snapshot_a, args.snapshot_b)
+        report = service.compare_dataset_snapshots(command.snapshot_a_id, command.snapshot_b_id)
+        _print_personalization_comparison(report, stdout)
+        return 0
+    if args.action == "archive":
+        command = ArchiveDatasetSnapshotCommand(args.snapshot_id)
+        snapshot = service.archive_dataset_snapshot(command.snapshot_id)
+        if args.json:
+            print(json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print("Snapshot archivado", file=stdout)
+            print(json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export":
+        command = ExportDatasetCommand(args.snapshot_id, args.format)
+        destination = Path(args.output) if args.output else None
+        result = service.export_dataset(command.snapshot_id, command.format, include_sensitive=args.include_sensitive, destination=destination)
+        if args.json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(f"Exportado: {result.path}", file=stdout)
+        return 0
+    raise ValueError("Accion de personalizacion no reconocida.")
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -1473,6 +1650,7 @@ def dispatch(
     visual_service: VisualAnalysisService,
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
+    personalization_service: PersonalizationDatasetService | None = None,
     diagnostic: EnvironmentDiagnostic,
     stdout,
     stderr,
@@ -1506,6 +1684,10 @@ def dispatch(
             return _handle_multimodal(args, multimodal_service, stdout, stderr)
         if args.entity == "clips":
             return _handle_clips(args, clip_service, stdout, stderr)
+        if args.entity == "personalization":
+            if personalization_service is None:
+                raise DomainError("El servicio de personalizacion no esta disponible.")
+            return _handle_personalization(args, personalization_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

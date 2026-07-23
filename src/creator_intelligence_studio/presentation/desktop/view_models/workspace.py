@@ -43,6 +43,13 @@ from creator_intelligence_studio.application.services.clip_ranking_service impor
     ClipRankingReport,
     ClipRankingService,
 )
+from creator_intelligence_studio.application.services.personalization_dataset_service import (
+    CreatorReadinessReport,
+    DatasetSnapshotComparison,
+    PersonalizationDatasetExportResult,
+    PersonalizationDatasetReport,
+    PersonalizationDatasetService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
@@ -220,6 +227,7 @@ class WorkspaceViewModel:
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
+        personalization_service: PersonalizationDatasetService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -313,6 +321,7 @@ class WorkspaceViewModel:
                 export_clip_plan=lambda *args, **kwargs: SimpleNamespace(path="", to_dict=lambda: {}),
             )
         self.clip_service = clip_service
+        self.personalization_service = personalization_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -794,18 +803,27 @@ class WorkspaceViewModel:
     def creator_inspector_items(self, creator) -> list[InspectorItemViewModel]:
         if creator is None:
             return []
-        return [
+        items = [
             InspectorItemViewModel("ID", creator.id),
             InspectorItemViewModel("Nombre", creator.display_name),
             InspectorItemViewModel("Slug", creator.slug),
             InspectorItemViewModel("Estado", _creator_status_label(creator.status)),
             InspectorItemViewModel("Descripcion", creator.description or "Sin descripcion"),
         ]
+        if self.personalization_service is not None:
+            readiness = self.get_creator_readiness(creator.id)
+            items.extend(
+                [
+                    InspectorItemViewModel("Dataset personalizacion", readiness.readiness_status.value),
+                    InspectorItemViewModel("Dataset readiness", f"{readiness.readiness_score:.3f}"),
+                ]
+            )
+        return items
 
     def project_inspector_items(self, project) -> list[InspectorItemViewModel]:
         if project is None:
             return []
-        return [
+        items = [
             InspectorItemViewModel("ID", project.id),
             InspectorItemViewModel("Creador", project.creator_id),
             InspectorItemViewModel("Nombre", project.name),
@@ -813,6 +831,15 @@ class WorkspaceViewModel:
             InspectorItemViewModel("Estado", _project_status_label(project.status)),
             InspectorItemViewModel("Descripcion", project.description or "Sin descripcion"),
         ]
+        if self.personalization_service is not None:
+            readiness = self.get_creator_readiness(project.creator_id)
+            items.extend(
+                [
+                    InspectorItemViewModel("Dataset personalizacion", readiness.readiness_status.value),
+                    InspectorItemViewModel("Dataset readiness", f"{readiness.readiness_score:.3f}"),
+                ]
+            )
+        return items
 
     def video_inspector_items(
         self,
@@ -1176,3 +1203,74 @@ class WorkspaceViewModel:
         result = self.clip_service.export_clip_plan(video_id, format_name)
         self.activity_log.insert(0, f"Exportacion de clip plan: {format_name}")
         return result
+
+    def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        report = self.personalization_service.build_creator_dataset(
+            creator_id,
+            project_id=project_id,
+            force=force,
+            progress_callback=progress_callback,
+        )
+        self.activity_log.insert(0, f"Dataset de personalizacion: {report.status.value}")
+        return report
+
+    def get_dataset_snapshot(self, snapshot_id: str) -> PersonalizationDatasetReport:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.get_dataset_snapshot(snapshot_id)
+
+    def get_latest_creator_dataset(self, creator_id: str) -> PersonalizationDatasetReport:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.get_latest_creator_dataset(creator_id)
+
+    def list_creator_datasets(self, creator_id: str):
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.list_creator_datasets(creator_id)
+
+    def list_dataset_examples(self, snapshot_id: str, filters=None):
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.list_dataset_examples(snapshot_id, filters=filters)
+
+    def get_dataset_example(self, example_id: str):
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.get_dataset_example(example_id)
+
+    def get_dataset_quality_report(self, snapshot_id: str):
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.get_dataset_quality_report(snapshot_id)
+
+    def get_creator_readiness(self, creator_id: str) -> CreatorReadinessReport:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.get_creator_readiness(creator_id)
+
+    def compare_dataset_snapshots(self, snapshot_a_id: str, snapshot_b_id: str) -> DatasetSnapshotComparison:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.compare_dataset_snapshots(snapshot_a_id, snapshot_b_id)
+
+    def archive_dataset_snapshot(self, snapshot_id: str):
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        snapshot = self.personalization_service.archive_dataset_snapshot(snapshot_id)
+        self.activity_log.insert(0, f"Dataset archivado: {snapshot.id}")
+        return snapshot
+
+    def export_dataset(self, snapshot_id: str, format_name: str, *, include_sensitive: bool = False) -> PersonalizationDatasetExportResult:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        result = self.personalization_service.export_dataset(snapshot_id, format_name, include_sensitive=include_sensitive)
+        self.activity_log.insert(0, f"Exportacion de dataset: {format_name}")
+        return result
+
+    def is_dataset_stale(self, snapshot_id: str) -> bool:
+        if self.personalization_service is None:
+            raise RuntimeError("El servicio de personalizacion no esta disponible.")
+        return self.personalization_service.is_dataset_stale(snapshot_id)

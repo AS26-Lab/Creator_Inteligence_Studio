@@ -389,3 +389,69 @@ Campos principales:
 `clip_collection_items` conserva `item_index` con orden estable y FK hacia `clip_collections` y `ranked_clip_candidates`.
 
 El ranker y la revision humana no eliminan el candidato original; registran decisiones, ajustes y exportaciones como historial estructurado.
+
+## Migration v9: Personalization data
+
+La migracion v9 agrega:
+
+- `creator_dataset_snapshots`
+- `creator_dataset_examples`
+- `creator_dataset_conflicts`
+- `creator_dataset_quality_reports`
+- `creator_feature_schemas`
+
+Campos principales:
+
+- `creator_id`
+- `project_id`
+- `name`
+- `status`
+- `dataset_version`
+- `feature_schema_version`
+- `label_schema_version`
+- `source_fingerprint`
+- `configuration_fingerprint`
+- `example_count`
+- `positive_count`
+- `negative_count`
+- `neutral_count`
+- `excluded_count`
+- `conflict_count`
+- `train_count`
+- `validation_count`
+- `test_count`
+- `readiness_status`
+- `readiness_score`
+- `ranking_run_id`
+- `ranked_clip_candidate_id`
+- `multimodal_candidate_id`
+- `group_key`
+- `label`
+- `label_source`
+- `label_confidence`
+- `human_review_status`
+- `human_rating`
+- `human_tags_json`
+- `feature_vector_json`
+- `feature_schema_version`
+- `quality_flags_json`
+- `exclusion_reason`
+- `split_name`
+- `sample_weight`
+- `conflict_type`
+- `candidate_a_id`
+- `candidate_b_id`
+- `duplicate_ratio`
+- `overlap_ratio`
+- `missing_feature_ratio`
+- `class_balance_score`
+- `creator_coverage_score`
+- `temporal_coverage_score`
+- `source_diversity_score`
+- `label_consistency_score`
+- `leakage_risk_score`
+- `recommendations_json`
+
+`creator_dataset_snapshots` conserva una version inmutable por creador y, cuando aplica, por proyecto. `creator_dataset_examples` conserva un ejemplo reproducible por fila con split, label y features con nombre estable. `creator_dataset_conflicts` registra conflictos y resoluciones sin borrar evidencia. `creator_dataset_quality_reports` conserva la evaluacion de calidad y readiness. `creator_feature_schemas` versiona el esquema de features para comparar snapshots futuros.
+
+La capa de personalizacion mantiene aislamiento por creador, evita fuga de informacion entre train, validation y test, y no convierte el feedback en entrenamiento automatico. Las exportaciones por defecto no incluyen texto completo ni notas privadas.

@@ -77,6 +77,7 @@ La aplicacion ya permite:
 - generar una miniatura tecnica inicial en cache local cuando `ffmpeg` esta disponible;
 - construir una linea temporal multimodal con candidatos tecnicos sincronizados;
 - rankear candidatos de clip con revision humana, feedback e historial local;
+- preparar datasets de personalizacion por creador a partir del feedback humano;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -275,6 +276,26 @@ python -m creator_intelligence_studio clips delete --video-id <video_id>
 
 Los planes de clips se escriben en `cache/clips/<video-id>/exports/` salvo que el usuario elija otra ruta.
 
+## Comandos de datos de personalizacion
+
+```bat
+python -m creator_intelligence_studio personalization build --creator-id <creator_id>
+python -m creator_intelligence_studio personalization build --creator-id <creator_id> --project-id <project_id>
+python -m creator_intelligence_studio personalization show --snapshot-id <snapshot_id>
+python -m creator_intelligence_studio personalization latest --creator-id <creator_id>
+python -m creator_intelligence_studio personalization list --creator-id <creator_id>
+python -m creator_intelligence_studio personalization examples --snapshot-id <snapshot_id>
+python -m creator_intelligence_studio personalization quality --snapshot-id <snapshot_id>
+python -m creator_intelligence_studio personalization readiness --creator-id <creator_id>
+python -m creator_intelligence_studio personalization compare --snapshot-a <snapshot_id> --snapshot-b <snapshot_id>
+python -m creator_intelligence_studio personalization archive --snapshot-id <snapshot_id>
+python -m creator_intelligence_studio personalization export --snapshot-id <snapshot_id> --format json
+python -m creator_intelligence_studio personalization export --snapshot-id <snapshot_id> --format csv
+python -m creator_intelligence_studio personalization export --snapshot-id <snapshot_id> --format jsonl
+```
+
+Los datasets de personalizacion son locales, versionados e inmutables una vez completados. Se construyen a partir de feedback humano, candidatos de clip y features reproducibles por creador. Por defecto no incluyen texto completo ni notas privadas en las exportaciones de ML.
+
 ## Ejecutar pruebas
 
 ```bat
@@ -302,6 +323,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - `cache/videos/<video-id>/visual/`: keyframes y artefactos de analisis visual.
 - `cache/multimodal/<video-id>/`: linea temporal multimodal y exportaciones controladas.
 - `cache/clips/<video-id>/exports/`: planes de clip y exportaciones controladas.
+- `cache/personalization/<creator-id>/`: snapshots de dataset, reportes y exportaciones controladas.
 
 ## Script & Voice Studio
 

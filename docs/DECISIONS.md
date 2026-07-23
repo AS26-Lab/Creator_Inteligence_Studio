@@ -28,6 +28,7 @@
 | 2026-07-22 | Analisis visual | La primera fase de analisis visual sera tecnica, local y reproducible, centrada en cortes, escenas, keyframes y metricas de movimiento y luminancia. | Se evita interpretacion semantica y se conservan evidencias y cache en rutas locales controladas. | Reconocimiento de personas, OCR, deteccion de objetos o narrativa semantica. |
 | 2026-07-22 | Analisis multimodal | La primera capa multimodal unifica transcripcion, analisis acustico y analisis visual en ventanas sincronizadas con evidencia tecnica. | Se obtienen candidatos heuristics y scores transparentes sin convertirlos en interpretacion narrativa. | Seleccion definitiva de clips, prediccion de viralidad o LLM para etiquetado semantico. |
 | 2026-07-22 | Clip ranking | El ranking inicial de clips sera determinista, reproducible y editable por humanos, separado del score multimodal original. | Se conservan historial, tags, rating, notas, ajustes de bordes y colecciones sin reemplazar la evidencia tecnica. | Machine learning entrenado, prediccion de viralidad o edicion automatica. |
+| 2026-07-23 | Personalization data | La preparacion de datos por creador sera local, reproducible y aislada por creador, construida a partir de feedback humano y features derivadas. | Se obtienen snapshots versionados, splits deterministas, quality reports y readiness sin entrenar modelos. | Mezclar creadores, inferir labels desde scores automaticos o arrancar entrenamiento en esta fase. |
 
 ## Transcription Decision
 
@@ -51,3 +52,4 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - formato exacto del model registry.
 - refinamiento futuro de eventos acusticos cuando exista una segunda fase especializada.
 - refinamiento futuro de candidatos multimodales cuando exista una segunda fase de clips o edicion.
+- refinamiento futuro de datos de personalizacion cuando exista una fase explicita de entrenamiento por creador.

@@ -139,6 +139,15 @@ Exports are local and controlled by the user.
 ## Limitations
 
 - No machine learning ranker yet.
-- No per-creator personalization yet.
+- No per-creator training yet.
 - No automatic clip rendering yet.
 - No platform analytics yet.
+
+## Downstream personalization data
+
+The clip ranking layer feeds creator-isolated dataset snapshots for future training preparation.
+
+- ranking outputs remain heuristic and explainable;
+- human feedback is preserved as history;
+- dataset export uses stable candidate identifiers, labels and feature schemas;
+- no training happens inside the ranking layer.

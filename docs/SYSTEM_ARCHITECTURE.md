@@ -58,6 +58,7 @@ flowchart TD
 - `Visual Analysis`
 - `Multimodal Analysis`
 - `Clip Ranking`
+- `Personalization Data`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -225,6 +226,15 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - La capa consume candidatos multimodales ya calculados y no reinterpreta la evidencia base.
 - La revision humana se conserva como historial; el ranking es separable del score multimodal original.
 - Las exportaciones de plan de clips son locales y no renderizan video.
+
+## Personalization data layer
+
+- `domain/personalization_data`: entidades, errores, repositorios, value objects y reglas para snapshots reproducibles por creador.
+- `application/services/personalization_dataset_service.py`: orquestacion de labels, features, quality, readiness, comparacion, archivado y exportaciones.
+- `infrastructure/personalization_data`: extraccion de features, construccion de labels, analisis de calidad, estrategia de splits, snapshots, readiness y exportacion.
+- La capa recibe feedback humano, candidatos de clip y features derivadas sin entrenar modelos.
+- Cada snapshot es inmutable una vez completado y mantiene aislamiento por creador.
+- Las exportaciones por defecto omiten texto completo y notas privadas.
 
 ## Transcription Layer
 

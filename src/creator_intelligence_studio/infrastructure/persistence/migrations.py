@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
 
 from creator_intelligence_studio.infrastructure.persistence.database import DatabaseError
+from creator_intelligence_studio.infrastructure.personalization_data.feature_extractor import (
+    CREATOR_FEATURE_DEFINITIONS,
+    CREATOR_FEATURE_NAMES,
+    CREATOR_FEATURE_SCHEMA_DESCRIPTION,
+    CREATOR_FEATURE_SCHEMA_NAME,
+    CREATOR_FEATURE_SCHEMA_VERSION,
+)
 
 
 class MigrationError(DatabaseError):
@@ -942,6 +950,207 @@ def migration_8(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_collection_items_candidate_id ON clip_collection_items(ranked_clip_candidate_id)")
 
 
+def migration_9(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_dataset_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'building',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'stale',
+                    'archived'
+                )
+            ),
+            dataset_version TEXT NOT NULL,
+            feature_schema_version TEXT NOT NULL,
+            label_schema_version TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            example_count INTEGER NOT NULL,
+            positive_count INTEGER NOT NULL,
+            negative_count INTEGER NOT NULL,
+            neutral_count INTEGER NOT NULL,
+            excluded_count INTEGER NOT NULL,
+            conflict_count INTEGER NOT NULL,
+            train_count INTEGER NOT NULL,
+            validation_count INTEGER NOT NULL,
+            test_count INTEGER NOT NULL,
+            readiness_status TEXT NOT NULL CHECK (
+                readiness_status IN (
+                    'not_ready',
+                    'collecting_feedback',
+                    'limited',
+                    'ready_for_baseline',
+                    'ready_for_evaluation',
+                    'ready_for_personalized_training',
+                    'blocked_by_quality',
+                    'blocked_by_conflicts'
+                )
+            ),
+            readiness_score REAL NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_dataset_examples (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            video_asset_id TEXT NOT NULL,
+            ranking_run_id TEXT,
+            ranked_clip_candidate_id TEXT,
+            multimodal_candidate_id TEXT,
+            group_key TEXT NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            duration_seconds REAL NOT NULL,
+            label TEXT NOT NULL CHECK (
+                label IN ('positive', 'negative', 'neutral_or_uncertain', 'excluded')
+            ),
+            label_source_json TEXT NOT NULL,
+            label_confidence REAL NOT NULL,
+            human_review_status TEXT,
+            human_rating INTEGER,
+            human_tags_json TEXT NOT NULL,
+            feature_vector_json TEXT NOT NULL,
+            feature_schema_version TEXT NOT NULL,
+            quality_flags_json TEXT NOT NULL,
+            exclusion_reason TEXT,
+            split_name TEXT NOT NULL CHECK (split_name IN ('train', 'validation', 'test', 'excluded')),
+            sample_weight REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (snapshot_id) REFERENCES creator_dataset_snapshots(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE RESTRICT,
+            FOREIGN KEY (ranking_run_id) REFERENCES clip_ranking_runs(id) ON DELETE SET NULL,
+            FOREIGN KEY (ranked_clip_candidate_id) REFERENCES ranked_clip_candidates(id) ON DELETE SET NULL,
+            FOREIGN KEY (multimodal_candidate_id) REFERENCES multimodal_moment_candidates(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_dataset_conflicts (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            conflict_type TEXT NOT NULL,
+            candidate_a_id TEXT,
+            candidate_b_id TEXT,
+            description TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            resolution_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            resolved_at TEXT,
+            FOREIGN KEY (snapshot_id) REFERENCES creator_dataset_snapshots(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_dataset_quality_reports (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL UNIQUE,
+            report_version TEXT NOT NULL,
+            duplicate_ratio REAL NOT NULL,
+            overlap_ratio REAL NOT NULL,
+            missing_feature_ratio REAL NOT NULL,
+            class_balance_score REAL NOT NULL,
+            creator_coverage_score REAL NOT NULL,
+            temporal_coverage_score REAL NOT NULL,
+            source_diversity_score REAL NOT NULL,
+            label_consistency_score REAL NOT NULL,
+            leakage_risk_score REAL NOT NULL,
+            readiness_score REAL NOT NULL,
+            readiness_status TEXT NOT NULL CHECK (
+                readiness_status IN (
+                    'not_ready',
+                    'collecting_feedback',
+                    'limited',
+                    'ready_for_baseline',
+                    'ready_for_evaluation',
+                    'ready_for_personalized_training',
+                    'blocked_by_quality',
+                    'blocked_by_conflicts'
+                )
+            ),
+            recommendations_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (snapshot_id) REFERENCES creator_dataset_snapshots(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_feature_schemas (
+            id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT,
+            feature_names_json TEXT NOT NULL,
+            feature_definitions_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_snapshots_creator_id ON creator_dataset_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_snapshots_project_id ON creator_dataset_snapshots(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_snapshots_status ON creator_dataset_snapshots(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_snapshots_readiness_status ON creator_dataset_snapshots(readiness_status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_snapshot_id ON creator_dataset_examples(snapshot_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_creator_id ON creator_dataset_examples(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_video_asset_id ON creator_dataset_examples(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_group_key ON creator_dataset_examples(group_key)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_label ON creator_dataset_examples(label)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_examples_split_name ON creator_dataset_examples(split_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_conflicts_snapshot_id ON creator_dataset_conflicts(snapshot_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_conflicts_creator_id ON creator_dataset_conflicts(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_conflicts_type ON creator_dataset_conflicts(conflict_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_dataset_quality_reports_snapshot_id ON creator_dataset_quality_reports(snapshot_id)")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO creator_feature_schemas (
+            id, schema_version, name, description, feature_names_json, feature_definitions_json, created_at
+        ) VALUES (
+            'creator-feature-schema-1',
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
+        )
+        """,
+        (
+            CREATOR_FEATURE_SCHEMA_VERSION,
+            CREATOR_FEATURE_SCHEMA_NAME,
+            CREATOR_FEATURE_SCHEMA_DESCRIPTION,
+            json.dumps(list(CREATOR_FEATURE_NAMES), ensure_ascii=False, sort_keys=True),
+            json.dumps(CREATOR_FEATURE_DEFINITIONS, ensure_ascii=False, sort_keys=True, default=str),
+            _utc_now(),
+        ),
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -951,6 +1160,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=6, name="visual_analysis"),
     Migration(version=7, name="multimodal_analysis"),
     Migration(version=8, name="clip_ranking"),
+    Migration(version=9, name="personalization_data"),
 )
 
 
@@ -1004,6 +1214,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_7(connection)
                 elif migration.version == 8:
                     migration_8(connection)
+                elif migration.version == 9:
+                    migration_9(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

@@ -11,6 +11,7 @@ flowchart LR
     Home --> Visual[Analisis visual]
     Home --> Multimodal[Analisis multimodal]
     Home --> Clips[Clips]
+    Home --> Personalization[Datos de personalizacion]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -121,6 +122,16 @@ flowchart LR
 - colecciones locales de clips;
 - exportacion JSON, CSV y EDL tecnico;
 - stale y recalculo sin perder feedback humano.
+
+### Datos de personalizacion
+
+- snapshots por creador y, cuando aplica, por proyecto;
+- ejemplo de dataset con label, split, peso y flags de calidad;
+- reporte de calidad y readiness;
+- comparacion entre snapshots;
+- archivado y exportacion JSON, CSV y JSONL;
+- aislamiento por creador;
+- sin mostrar texto completo ni notas privadas por defecto.
 
 ### Sistema
 
