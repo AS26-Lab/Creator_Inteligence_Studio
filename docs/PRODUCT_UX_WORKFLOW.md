@@ -26,8 +26,9 @@ The UX exposes:
 7. Review clips
 8. Provide feedback
 9. Render approved clips when desired
-10. Monitor personalization
-10. Reopen the app and continue
+10. Prepare subtitles when useful
+11. Monitor personalization
+12. Reopen the app and continue
 
 ## Pipeline status
 
@@ -45,6 +46,7 @@ It shows:
 The aggregated status does not duplicate core analysis logic.
 
 Rendering is optional and local. It becomes available after review when a clip is approved or explicitly selected, but it does not replace the personalization workflow.
+Subtitle preparation is also optional. It can follow a transcription or a clip review, but it does not change the source transcription and it is not required for ranking, personalization, or rendering without subtitles.
 
 ## Task Center
 
@@ -85,6 +87,7 @@ The initial UX preferences are local and reversible:
 ## Limitations
 
 - This workflow does not render clips.
+- This workflow does not burn subtitles into clips yet.
 - This workflow does not auto-train a model.
 - A successful run proves technical coherence, not predictive or commercial quality.
 - Existing data is not moved automatically when a new folder preference is selected.

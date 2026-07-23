@@ -196,6 +196,66 @@ La migracion v12 agrega:
 
 Estos registros conservan la trazabilidad de la salida local, su verificacion y el historial de batch sin tocar el archivo fuente.
 
+## Migration v13: Subtitles
+
+La migracion v13 agrega:
+
+- `subtitle_tracks`
+- `subtitle_cues`
+- `subtitle_edit_events`
+- `subtitle_exports`
+
+Campos principales:
+
+- `video_asset_id`
+- `transcription_id`
+- `ranked_clip_candidate_id`
+- `render_job_id`
+- `language`
+- `name`
+- `status`
+- `source_type`
+- `track_version`
+- `configuration_fingerprint`
+- `source_fingerprint`
+- `source_start_seconds`
+- `source_end_seconds`
+- `cue_count`
+- `total_text_length`
+- `is_default`
+- `is_locked`
+- `warning_code`
+- `warning_message`
+- `error_code`
+- `error_message`
+- `completed_at`
+- `cue_index`
+- `start_seconds`
+- `end_seconds`
+- `text`
+- `original_text`
+- `source_segment_ids_json`
+- `speaker_label`
+- `line_count`
+- `character_count`
+- `characters_per_second`
+- `words_per_minute`
+- `validation_status`
+- `warning_codes_json`
+- `action`
+- `previous_json`
+- `new_json`
+- `note`
+- `format`
+- `output_path`
+- `fingerprint`
+- `size_bytes`
+- `verified_at`
+
+`subtitle_tracks` conserva tracks versionados y enlaza cada pista con su transcripcion origen y, cuando aplica, con un candidato de clip o un render job. `subtitle_cues` conserva cues ordenados de forma estable. `subtitle_edit_events` registra ediciones y restauraciones sin sobrescribir el historial previo. `subtitle_exports` conserva exportaciones verificadas y su fingerprint.
+
+La capa de subtitulos mantiene separada la transcripcion original del texto editorial, soporta tracks de video completo o de clip, y no convierte las preferencias de segmentacion en una reescritura automatica de contenido.
+
 ## Pendientes
 
 - formato fisico final de persistencia para artefactos grandes;

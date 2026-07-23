@@ -57,6 +57,7 @@ flowchart TD
 - `Clip Render Store`
 - `Analysis Pipeline`
 - `Workflow Shell`
+- `Subtitle Editing`
 - `Insight Engine`
 - `Acoustic Analysis`
 - `Visual Analysis`
@@ -83,6 +84,7 @@ flowchart TD
 10. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion, analisis acustico, analisis visual o analisis multimodal.
 11. La UI solo consume resultados publicados por la capa de aplicacion.
 12. Los clips aprobados pueden renderizarse localmente sin modificar el archivo fuente; la verificacion de salida guarda metadatos tecnicos y el Task Center conserva el historial.
+13. Los subtitulos se generan a partir de la transcripcion vigente o de un clip aprobado; la edicion de subtitulos no reescribe la transcripcion original y la exportacion se verifica antes de considerarse valida.
 
 ## Workflow shell de escritorio
 
@@ -91,6 +93,7 @@ flowchart TD
 - `presentation/desktop/views/workflow_view.py` presenta la accion recomendada, el progreso y las etapas del pipeline.
 - `presentation/desktop/views/task_center_view.py` expone tareas persistidas e interrupciones visibles al usuario.
 - `presentation/desktop/views/clip_ranking_view.py` expone el flujo de render local y de colecciones sobre candidatos aprobados.
+- `presentation/desktop/views/subtitle_editor_view.py` expone generacion, edicion, importacion y exportacion de subtitulos.
 - `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
 - `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
 
@@ -103,6 +106,7 @@ flowchart TD
 - analisis acustico;
 - analisis visual;
 - analisis de voz;
+- subtitulos;
 - generacion de insights;
 - ranking de clips;
 - sincronizacion con plataformas;
@@ -143,6 +147,7 @@ flowchart TD
 - `cache/videos/<video-id>/thumbnails/`
 - `cache/videos/<video-id>/audio/`
 - `cache/acoustics/<video-id>/`
+- `cache/subtitles/<video-id>/`
 
 El video original no se copia ni se modifica.
 
@@ -261,6 +266,14 @@ La transcripcion local se divide en:
 - `infrastructure/transcription`: loader de DLL NVIDIA, manager de modelos, adaptador `faster-whisper` y exportador.
 
 La capa de dominio no importa `faster_whisper`, `ctranslate2`, Qt ni SQLite.
+
+## Subtitle layer
+
+- `domain/subtitles`: entidades, errores, repositorios, value objects y reglas editoriales.
+- `application/services/subtitle_service.py`: orquestacion, generacion, edicion, importacion, exportacion, historial y stale.
+- `infrastructure/subtitles`: segmentacion, normalizacion, validacion de tiempos, importadores y exportadores.
+- La capa consume transcripciones existentes y no altera el motor de transcripcion.
+- Los tracks de clip preservan tiempos absolutos como metadata y exportan tiempo relativo cuando corresponde.
 
 ## Presentacion de escritorio
 

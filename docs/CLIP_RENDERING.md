@@ -17,7 +17,7 @@ It does not:
 
 - publish to platforms;
 - edit multi-track timelines;
-- add burned-in subtitles;
+- add burned-in subtitles yet;
 - do smart vertical reframing;
 - add automatic music or generative transitions.
 
@@ -42,6 +42,7 @@ It does not:
 - Render jobs are persisted in the Task Center.
 - The workflow page may recommend rendering approved clips after review.
 - Rendering is optional and does not replace personalization readiness.
+- Subtitle tracks remain separate editorial artifacts and are not burned into render output in this first version.
 
 ## Data model
 

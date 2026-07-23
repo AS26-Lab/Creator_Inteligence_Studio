@@ -1603,6 +1603,123 @@ def migration_12(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_batch_items_job_id ON clip_render_batch_items(render_job_id)")
 
 
+def migration_13(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subtitle_tracks (
+            id TEXT PRIMARY KEY,
+            video_asset_id TEXT NOT NULL,
+            transcription_id TEXT NOT NULL,
+            ranked_clip_candidate_id TEXT,
+            render_job_id TEXT,
+            language TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'generating',
+                    'completed',
+                    'completed_with_warnings',
+                    'editing',
+                    'locked',
+                    'stale',
+                    'failed',
+                    'imported',
+                    'archived'
+                )
+            ),
+            source_type TEXT NOT NULL,
+            track_version INTEGER NOT NULL DEFAULT 1,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            source_start_seconds REAL NOT NULL,
+            source_end_seconds REAL NOT NULL,
+            cue_count INTEGER NOT NULL DEFAULT 0,
+            total_text_length INTEGER NOT NULL DEFAULT 0,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_locked INTEGER NOT NULL DEFAULT 0,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE RESTRICT,
+            FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE RESTRICT,
+            FOREIGN KEY (render_job_id) REFERENCES clip_render_jobs(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subtitle_cues (
+            id TEXT PRIMARY KEY,
+            subtitle_track_id TEXT NOT NULL,
+            cue_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            end_seconds REAL NOT NULL,
+            text TEXT NOT NULL,
+            original_text TEXT NOT NULL,
+            source_segment_ids_json TEXT NOT NULL,
+            speaker_label TEXT,
+            line_count INTEGER NOT NULL DEFAULT 1,
+            character_count INTEGER NOT NULL DEFAULT 0,
+            characters_per_second REAL NOT NULL DEFAULT 0,
+            words_per_minute REAL NOT NULL DEFAULT 0,
+            validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'warning', 'invalid')),
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (subtitle_track_id) REFERENCES subtitle_tracks(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subtitle_edit_events (
+            id TEXT PRIMARY KEY,
+            subtitle_track_id TEXT NOT NULL,
+            subtitle_cue_id TEXT,
+            event_index INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            previous_json TEXT NOT NULL,
+            new_json TEXT NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (subtitle_track_id) REFERENCES subtitle_tracks(id) ON DELETE CASCADE,
+            FOREIGN KEY (subtitle_cue_id) REFERENCES subtitle_cues(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subtitle_exports (
+            id TEXT PRIMARY KEY,
+            subtitle_track_id TEXT NOT NULL,
+            format TEXT NOT NULL,
+            output_path TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            size_bytes INTEGER,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            verified_at TEXT,
+            FOREIGN KEY (subtitle_track_id) REFERENCES subtitle_tracks(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_video_asset_id ON subtitle_tracks(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_transcription_id ON subtitle_tracks(transcription_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_candidate_id ON subtitle_tracks(ranked_clip_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_render_job_id ON subtitle_tracks(render_job_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_tracks_status ON subtitle_tracks(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_cues_track_id ON subtitle_cues(subtitle_track_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_cues_track_order ON subtitle_cues(subtitle_track_id, cue_index)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_edit_events_track_id ON subtitle_edit_events(subtitle_track_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_edit_events_cue_id ON subtitle_edit_events(subtitle_cue_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_edit_events_track_order ON subtitle_edit_events(subtitle_track_id, event_index)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_subtitle_exports_track_id ON subtitle_exports(subtitle_track_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -1616,6 +1733,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=10, name="personalization_models"),
     Migration(version=11, name="operational_evaluation"),
     Migration(version=12, name="clip_rendering"),
+    Migration(version=13, name="subtitles"),
 )
 
 
@@ -1677,6 +1795,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_11(connection)
                 elif migration.version == 12:
                     migration_12(connection)
+                elif migration.version == 13:
+                    migration_13(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

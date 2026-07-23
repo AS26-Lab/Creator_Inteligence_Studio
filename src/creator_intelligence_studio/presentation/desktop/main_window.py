@@ -37,6 +37,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     PersonalizationDataView,
     PersonalizationModelsView,
     ProjectsView,
+    SubtitleEditorView,
     TaskCenterView,
     WorkflowView,
     VisualAnalysisView,
@@ -65,6 +66,7 @@ class MainWindow(QMainWindow):
             "tasks",
             "onboarding",
             "transcription",
+            "subtitles",
             "analysis",
             "visual",
             "multimodal",
@@ -144,12 +146,14 @@ class MainWindow(QMainWindow):
             open_visual_callback=lambda: self.show_page("visual"),
             open_multimodal_callback=lambda: self.show_page("multimodal"),
             open_clips_callback=lambda: self.show_page("clips"),
+            open_subtitles_callback=lambda: self.show_page("subtitles"),
             open_workflow_callback=lambda: self.show_page("workflow"),
         )
         self.workflow_view = WorkflowView(workspace)
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
         self.transcription_view = TranscriptionView(workspace)
+        self.subtitle_editor_view = SubtitleEditorView(workspace)
         self.acoustic_view = AcousticAnalysisView(workspace)
         self.visual_view = VisualAnalysisView(workspace)
         self.multimodal_view = MultimodalAnalysisView(workspace)
@@ -166,6 +170,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.task_center_view)
         self.stack.addWidget(self.onboarding_view)
         self.stack.addWidget(self.transcription_view)
+        self.stack.addWidget(self.subtitle_editor_view)
         self.stack.addWidget(self.acoustic_view)
         self.stack.addWidget(self.visual_view)
         self.stack.addWidget(self.multimodal_view)
@@ -233,6 +238,7 @@ class MainWindow(QMainWindow):
         self.task_center_view.refresh()
         self.onboarding_view.refresh()
         self.transcription_view.refresh()
+        self.subtitle_editor_view.refresh()
         self.visual_view.refresh()
         self.multimodal_view.refresh()
         self.clip_ranking_view.refresh()
@@ -343,6 +349,8 @@ class MainWindow(QMainWindow):
             self.multimodal_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
+        elif current_key == "subtitles":
+            self.subtitle_editor_view.refresh()
         elif current_key == "visual":
             self.visual_view.refresh()
         elif current_key == "clips":

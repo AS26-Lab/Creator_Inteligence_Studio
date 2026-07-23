@@ -49,6 +49,11 @@ from creator_intelligence_studio.application.services.clip_rendering_service imp
     ClipRenderOperationReport,
     ClipRenderService,
 )
+from creator_intelligence_studio.application.services.subtitle_service import (
+    SubtitleExportResult,
+    SubtitleService,
+    SubtitleTrackReport,
+)
 from creator_intelligence_studio.application.services.personalization_dataset_service import (
     CreatorReadinessReport,
     DatasetSnapshotComparison,
@@ -262,6 +267,7 @@ class WorkspaceViewModel:
         multimodal_service: MultimodalAnalysisService | None = None,
         clip_service: ClipRankingService | None = None,
         render_service: ClipRenderService | None = None,
+        subtitle_service: SubtitleService | None = None,
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
@@ -389,6 +395,7 @@ class WorkspaceViewModel:
                 export_render_plan=lambda *args, **kwargs: Path(""),
             )
         self.render_service = render_service
+        self.subtitle_service = subtitle_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -411,6 +418,7 @@ class WorkspaceViewModel:
             visual_service=self.visual_service,
             multimodal_service=self.multimodal_service,
             clip_service=self.clip_service,
+            subtitle_service=self.subtitle_service,
             personalization_service=self.personalization_service,
         )
         self._sync_default_selection()
@@ -1685,6 +1693,138 @@ class WorkspaceViewModel:
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.export_render_plan(job_id, destination=destination)
+
+    def generate_video_subtitles(self, video_id: str, *, custom_name: str | None = None, force: bool = False):
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        report = self.subtitle_service.generate_video_subtitles(video_id, custom_name=custom_name, force=force)
+        self.activity_log.insert(0, f"Subtitulos de video: {report.status.value}")
+        return report
+
+    def generate_clip_subtitles(self, candidate_id: str, *, custom_name: str | None = None, force: bool = False):
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        report = self.subtitle_service.generate_clip_subtitles(candidate_id, custom_name=custom_name, force=force)
+        self.activity_log.insert(0, f"Subtitulos de clip: {report.status.value}")
+        return report
+
+    def get_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.get_subtitle_track(track_id)
+
+    def list_video_subtitle_tracks(self, video_id: str):
+        if self.subtitle_service is None:
+            return []
+        return self.subtitle_service.list_video_subtitle_tracks(video_id)
+
+    def list_clip_subtitle_tracks(self, candidate_id: str):
+        if self.subtitle_service is None:
+            return []
+        return self.subtitle_service.list_clip_subtitle_tracks(candidate_id)
+
+    def list_render_job_subtitle_tracks(self, render_job_id: str):
+        if self.subtitle_service is None:
+            return []
+        return self.subtitle_service.list_render_job_subtitle_tracks(render_job_id)
+
+    def validate_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.validate_subtitle_track(track_id)
+
+    def update_subtitle_cue_text(self, cue_id: str, text: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.update_cue_text(cue_id, text)
+
+    def update_subtitle_cue_timing(self, cue_id: str, start_seconds: float, end_seconds: float) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.update_cue_timing(cue_id, start_seconds, end_seconds)
+
+    def split_subtitle_cue(self, cue_id: str, split_position: int) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.split_cue(cue_id, split_position)
+
+    def merge_subtitle_cues(self, first_cue_id: str, second_cue_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.merge_cues(first_cue_id, second_cue_id)
+
+    def insert_subtitle_cue(self, track_id: str, index: int, start_seconds: float, end_seconds: float, text: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.insert_cue(track_id, index, start_seconds, end_seconds, text)
+
+    def delete_subtitle_cue(self, cue_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.delete_cue(cue_id)
+
+    def move_subtitle_cue(self, cue_id: str, new_index: int) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.move_cue(cue_id, new_index)
+
+    def shift_subtitle_track(self, track_id: str, offset_seconds: float) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.shift_track(track_id, offset_seconds)
+
+    def restore_subtitle_cue(self, cue_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.restore_cue(cue_id)
+
+    def restore_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.restore_track(track_id)
+
+    def lock_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.lock_track(track_id)
+
+    def unlock_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.unlock_track(track_id)
+
+    def duplicate_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.duplicate_track(track_id)
+
+    def import_subtitles(self, video_id: str, file_path: str):
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.import_subtitles(video_id, Path(file_path))
+
+    def export_subtitles(self, track_id: str, format_name: str, *, output: str | None = None):
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleExportFormat
+
+        destination = Path(output) if output else None
+        return self.subtitle_service.export_subtitles(track_id, SubtitleExportFormat(format_name), output=destination)
+
+    def archive_subtitle_track(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.archive_subtitle_track(track_id)
+
+    def delete_subtitle_track(self, track_id: str) -> bool:
+        if self.subtitle_service is None:
+            raise RuntimeError("El servicio de subtitulos no esta disponible.")
+        return self.subtitle_service.delete_subtitle_track(track_id)
+
+    def get_subtitle_edit_history(self, track_id: str):
+        if self.subtitle_service is None:
+            return []
+        return self.subtitle_service.get_subtitle_edit_history(track_id)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

@@ -244,6 +244,38 @@ class DesktopViewModelTests(unittest.TestCase):
         self.assertEqual(cards[0].value, "Heybermu")
         self.assertTrue(any(item.label == "Base local" for item in system_items))
 
+    def test_workspace_subtitle_delegation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings = make_settings()
+            paths = ProjectPaths.from_settings(root, settings)
+            paths.ensure_runtime_directories()
+            service = build_catalog_service(settings, paths, logger=logging.getLogger("test"))
+            diagnostic = make_diagnostic(root)
+            subtitle_service = SimpleNamespace(
+                generate_video_subtitles=lambda video_id, custom_name=None, force=False: SimpleNamespace(status=SimpleNamespace(value="completed"), track=SimpleNamespace(id=f"track-{video_id}")),
+                list_video_subtitle_tracks=lambda video_id: (SimpleNamespace(id=f"track-{video_id}"),),
+                get_subtitle_track=lambda track_id: SimpleNamespace(track=SimpleNamespace(id=track_id), cues=(), is_stale=False, validation=None),
+                export_subtitles=lambda track_id, format_name, output=None: SimpleNamespace(path=str(root / "export.srt"), verified=True),
+            )
+            workspace = WorkspaceViewModel(
+                service=service,
+                media_service=make_media_service(),
+                audio_service=make_audio_service(),
+                transcription_service=make_transcription_service(),
+                acoustic_service=make_acoustic_service(),
+                visual_service=make_visual_service(),
+                subtitle_service=subtitle_service,
+                diagnostic=diagnostic,
+                settings=settings,
+                paths=paths,
+            )
+            report = workspace.generate_video_subtitles("video-1")
+            tracks = workspace.list_video_subtitle_tracks("video-1")
+
+        self.assertEqual(report.status.value, "completed")
+        self.assertEqual(len(tracks), 1)
+
     def test_empty_dashboard_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

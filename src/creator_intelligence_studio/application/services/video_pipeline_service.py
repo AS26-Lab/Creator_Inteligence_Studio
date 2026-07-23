@@ -13,6 +13,7 @@ from creator_intelligence_studio.application.services.clip_ranking_service impor
 from creator_intelligence_studio.application.services.media_inspection_service import MediaInspectionService
 from creator_intelligence_studio.application.services.multimodal_analysis_service import MultimodalAnalysisService
 from creator_intelligence_studio.application.services.personalization_dataset_service import PersonalizationDatasetService
+from creator_intelligence_studio.application.services.subtitle_service import SubtitleService
 from creator_intelligence_studio.application.services.transcription_service import TranscriptionService
 from creator_intelligence_studio.application.services.visual_analysis_service import VisualAnalysisService
 from creator_intelligence_studio.domain.errors import NotFoundError
@@ -101,6 +102,7 @@ class VideoPipelineService:
         visual_service: VisualAnalysisService,
         multimodal_service: MultimodalAnalysisService,
         clip_service: ClipRankingService,
+        subtitle_service: SubtitleService | None = None,
         personalization_service: PersonalizationDatasetService | None = None,
     ) -> None:
         self.catalog_service = catalog_service
@@ -111,6 +113,7 @@ class VideoPipelineService:
         self.visual_service = visual_service
         self.multimodal_service = multimodal_service
         self.clip_service = clip_service
+        self.subtitle_service = subtitle_service
         self.personalization_service = personalization_service
 
     def _require_video(self, video_id: str):
@@ -285,7 +288,53 @@ class VideoPipelineService:
             )
         )
 
-        current_stage = next((stage.name for stage in stages if stage.status not in {"completed", "completed_with_warnings"}), stages[-1].name if stages else "inspection")
+        subtitle_track = None
+        subtitle_report = None
+        subtitle_status = "unavailable" if self.subtitle_service is None else "pending"
+        subtitle_summary = "Servicio no disponible" if self.subtitle_service is None else "Pendiente"
+        subtitle_error = None
+        subtitle_stale = False
+        subtitle_available = bool(transcription and transcription.transcription is not None and transcription.status.value == "completed")
+        subtitle_action_id = "prepare_subtitles" if subtitle_available and self.subtitle_service is not None else None
+        if self.subtitle_service is not None and subtitle_available:
+            subtitle_tracks = self.subtitle_service.list_video_subtitle_tracks(video.id)
+            subtitle_track = next((item for item in subtitle_tracks if item.status.value != "archived"), subtitle_tracks[0] if subtitle_tracks else None)
+            if subtitle_track is not None:
+                subtitle_report = self.subtitle_service.get_subtitle_track(subtitle_track.id)
+                subtitle_status = subtitle_report.status.value
+                subtitle_summary = subtitle_report.status.value
+                subtitle_error = subtitle_report.errors[0] if subtitle_report.errors else None
+                subtitle_stale = subtitle_report.is_stale
+                if subtitle_report.status.value in {"completed", "completed_with_warnings", "imported", "locked"} and not subtitle_report.is_stale:
+                    subtitle_action_id = None
+                else:
+                    subtitle_action_id = "prepare_subtitles"
+            else:
+                subtitle_status = "available"
+                subtitle_summary = "Listo para preparar"
+                subtitle_action_id = "prepare_subtitles"
+        stages.append(
+            self._build_stage(
+                name="subtitles",
+                display_name="Subtitulos",
+                status=self._status_label(subtitle_status),
+                available=subtitle_available,
+                stale=subtitle_stale,
+                completed_at=None if subtitle_report is None or subtitle_report.track is None else to_iso_z(subtitle_report.track.completed_at) if subtitle_report.track.completed_at else None,
+                summary=subtitle_summary,
+                error=subtitle_error,
+                action_id=subtitle_action_id,
+            )
+        )
+
+        main_stages = stages[:-1]
+        main_incomplete_stage = next((stage.name for stage in main_stages if stage.status not in {"completed", "completed_with_warnings"}), None)
+        if main_incomplete_stage is not None:
+            current_stage = main_incomplete_stage
+        elif self.subtitle_service is not None and stages[-1].status in {"pending", "available", "stale", "failed", "blocked", "unavailable"}:
+            current_stage = "subtitles"
+        else:
+            current_stage = "ranking" if stages else "inspection"
         progress_weights = {
             "inspection": 0.10,
             "audio": 0.12,
@@ -296,7 +345,7 @@ class VideoPipelineService:
             "ranking": 0.15,
         }
         completed = 0.0
-        for stage in stages:
+        for stage in main_stages:
             completed += progress_weights.get(stage.name, 0.0) if stage.status in {"completed", "completed_with_warnings", "stale"} else 0.0
             if stage.status == "stale":
                 warnings.append(f"{stage.display_name} desactualizado")
@@ -331,6 +380,8 @@ class VideoPipelineService:
         else:
             render_recommended = bool(ranking and ranking.run and ranking.run.selected_count > 0)
             recommended_action = "Renderizar clips aprobados" if render_recommended else "Revisar clips"
+            if self.subtitle_service is not None and stages[-1].status in {"pending", "available", "stale"}:
+                recommended_action = "Actualizar subtitulos" if stages[-1].status == "stale" else "Preparar subtitulos"
             if self.personalization_service is not None:
                 try:
                     project = self.catalog_service.get_project(video.project_id)
@@ -357,9 +408,9 @@ class VideoPipelineService:
             overall_status = "blocked"
         elif any(stage.status == "stale" for stage in stages):
             overall_status = "stale"
-        elif all(stage.status == "completed" for stage in stages):
+        elif all(stage.status == "completed" for stage in main_stages):
             overall_status = "completed"
-        elif any(stage.status == "completed_with_warnings" for stage in stages):
+        elif any(stage.status == "completed_with_warnings" for stage in main_stages):
             overall_status = "completed_with_warnings"
 
         if blocked_reason is None and any(stage.status in {"blocked", "unavailable"} for stage in stages):
@@ -407,6 +458,9 @@ class VideoPipelineService:
         if status.current_stage == "multimodal":
             self.multimodal_service.analyze_multimodal(video_id, force=False, progress_callback=progress_callback)
             return VideoWorkflowStepResult("multimodal", "completed", "Analisis multimodal completado", to_iso_z(datetime.now(timezone.utc)))
+        if status.current_stage == "subtitles" and self.subtitle_service is not None:
+            self.subtitle_service.generate_video_subtitles(video_id, force=True)
+            return VideoWorkflowStepResult("subtitles", "completed", "Subtitulos preparados", to_iso_z(datetime.now(timezone.utc)))
         self.clip_service.rank_clip_candidates(video_id, force=False, progress_callback=progress_callback)
         return VideoWorkflowStepResult("ranking", "completed", "Ranking de clips completado", to_iso_z(datetime.now(timezone.utc)))
 
@@ -493,5 +547,8 @@ class VideoPipelineService:
         if stage_name == "multimodal":
             self.multimodal_service.analyze_multimodal(video_id, force=True, progress_callback=progress_callback)
             return VideoWorkflowStepResult("multimodal", "completed", "Analisis multimodal rehecho", to_iso_z(datetime.now(timezone.utc)))
+        if stage_name == "subtitles" and self.subtitle_service is not None:
+            self.subtitle_service.generate_video_subtitles(video_id, force=True)
+            return VideoWorkflowStepResult("subtitles", "completed", "Subtitulos rehechos", to_iso_z(datetime.now(timezone.utc)))
         self.clip_service.rank_clip_candidates(video_id, force=True, progress_callback=progress_callback)
         return VideoWorkflowStepResult("ranking", "completed", "Ranking rehecho", to_iso_z(datetime.now(timezone.utc)))

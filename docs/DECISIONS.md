@@ -33,6 +33,7 @@
 | 2026-07-23 | UX de workflow | La primera experiencia integrada debe mostrar la accion recomendada por video, tareas persistidas, onboarding reabrible y preferencias iniciales sin exponer IDs internos. | La GUI orienta Home, Videos, Workflow y Task Center alrededor del estado real del pipeline. | Forzar al usuario a navegar por servicios tecnicos o depender solo de CLI. |
 | 2026-07-23 | Persistencia de interfaz | La seleccion de creador, proyecto, pagina, preferencias y tareas de fondo se persistiran de forma local y reversible. | La reapertura mantiene contexto operativo sin guardar secretos ni mover datos automaticamente. | Reiniciar siempre desde cero o mezclar contexto sin persistencia. |
 | 2026-07-23 | Render local de clips | El render inicial de clips sera local, reproducible y verificable con FFmpeg, usando perfiles transparentes y temporal administrado `.part.mp4`. | Se conserva el video fuente, el historial de renders y la verificacion tecnica del output. | Editores completos, subida automatica o render distribuido como primer paso. |
+| 2026-07-23 | Subtitulos locales | La primera capa de subtitulos sera editorial, local y versionada, construida sobre la transcripcion existente sin reescribirla. | Se pueden generar tracks de video completo o clip, editar cues, importar/exportar formatos comunes y conservar historial sin alterar la transcripcion original. | Traduccion automatica, diarizacion, subtitulos quemados o un editor completo como primer paso. |
 
 ## Transcription Decision
 

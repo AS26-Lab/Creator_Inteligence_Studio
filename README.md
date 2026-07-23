@@ -78,6 +78,7 @@ La aplicacion ya permite:
 - construir una linea temporal multimodal con candidatos tecnicos sincronizados;
 - rankear candidatos de clip con revision humana, feedback e historial local;
 - renderizar localmente clips aprobados o colecciones con FFmpeg, con salida verificada y historial persistente;
+- generar, editar, importar y exportar subtitulos locales basados en transcripciones existentes;
 - preparar datasets de personalizacion por creador a partir del feedback humano;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
@@ -99,6 +100,7 @@ La accion recomendada depende del estado real del video y no ejecuta tareas cost
 
 La guia detallada del flujo esta en [`docs/PRODUCT_UX_WORKFLOW.md`](docs/PRODUCT_UX_WORKFLOW.md).
 La primera version de render local esta documentada en [`docs/CLIP_RENDERING.md`](docs/CLIP_RENDERING.md).
+La primera version de subtitulos locales esta documentada en [`docs/SUBTITLES.md`](docs/SUBTITLES.md).
 
 ## Base local
 
@@ -215,6 +217,26 @@ python -m creator_intelligence_studio transcription delete --video-id <video_id>
 
 El caché de modelos vive en `models/transcription/faster-whisper/`.
 Las exportaciones controladas se escriben en `cache/transcriptions/` salvo que el usuario indique otra ruta.
+
+## Comandos de subtitulos
+
+```bat
+python -m creator_intelligence_studio subtitles generate-video --video-id <video_id>
+python -m creator_intelligence_studio subtitles generate-clip --candidate-id <candidate_id>
+python -m creator_intelligence_studio subtitles show --track-id <track_id>
+python -m creator_intelligence_studio subtitles list-video --video-id <video_id>
+python -m creator_intelligence_studio subtitles list-clip --candidate-id <candidate_id>
+python -m creator_intelligence_studio subtitles validate --track-id <track_id>
+python -m creator_intelligence_studio subtitles update-text --cue-id <cue_id> --text "..."
+python -m creator_intelligence_studio subtitles update-time --cue-id <cue_id> --start 1.2 --end 4.5
+python -m creator_intelligence_studio subtitles split --cue-id <cue_id> --position 24
+python -m creator_intelligence_studio subtitles merge --first-cue-id <first_cue_id> --second-cue-id <second_cue_id>
+python -m creator_intelligence_studio subtitles import --video-id <video_id> --file "C:\ruta\subtitles.srt"
+python -m creator_intelligence_studio subtitles export --track-id <track_id> --format srt
+python -m creator_intelligence_studio subtitles history --track-id <track_id>
+```
+
+Los subtitulos locales son una capa editorial separada de la transcripcion. Los cambios sobre subtitulos no reescriben la transcripcion original.
 
 ## Comandos de analisis acustico
 
@@ -342,6 +364,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - `cache/videos/<video-id>/visual/`: keyframes y artefactos de analisis visual.
 - `cache/multimodal/<video-id>/`: linea temporal multimodal y exportaciones controladas.
 - `cache/clips/<video-id>/exports/`: planes de clip y exportaciones controladas.
+- `cache/subtitles/<video-id>/`: tracks, exportaciones y revisiones controladas.
 - `cache/personalization/<creator-id>/`: snapshots de dataset, reportes y exportaciones controladas.
 
 ## Script & Voice Studio
@@ -353,6 +376,7 @@ Script & Voice Studio es un modulo opcional. No es necesario para analizar video
 CUDA Toolkit y PyTorch todavia no estan instalados en este repositorio. La aplicacion actual solo realiza diagnostico basico, catalogo, inspeccion tecnica local con herramientas externas si existen, preparacion tecnica de audio cuando `ffmpeg` esta disponible, preparacion de rutas, logging e interfaz.
 
 `ffprobe` es la herramienta requerida para la inspeccion tecnica. `ffmpeg` se usa para miniaturas tecnicas y para extraer audio normalizado. El video original nunca se copia ni se modifica.
+Los subtitulos locales se construyen desde la transcripcion existente y no sustituyen al motor de transcripcion.
 
 ## Seguridad y repositorio
 

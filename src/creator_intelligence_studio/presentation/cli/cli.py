@@ -124,6 +124,31 @@ from creator_intelligence_studio.application.commands.transcription_commands imp
     TranscribeVideoCommand,
     VerifyModelCommand,
 )
+from creator_intelligence_studio.application.commands.subtitle_commands import (
+    ArchiveSubtitleTrackCommand,
+    DeleteSubtitleCueCommand,
+    DeleteSubtitleTrackCommand,
+    DuplicateSubtitleTrackCommand,
+    ExportSubtitleTrackCommand,
+    GenerateClipSubtitlesCommand,
+    GenerateVideoSubtitlesCommand,
+    ImportSubtitleTrackCommand,
+    InsertSubtitleCueCommand,
+    ListClipSubtitleTracksCommand,
+    ListVideoSubtitleTracksCommand,
+    LockSubtitleTrackCommand,
+    MergeSubtitleCuesCommand,
+    MoveSubtitleCueCommand,
+    RegenerateSubtitleTrackCommand,
+    ShiftSubtitleTrackCommand,
+    ShowSubtitleTrackCommand,
+    SplitSubtitleCueCommand,
+    SubtitleHistoryCommand,
+    UnlockSubtitleTrackCommand,
+    UpdateSubtitleTextCommand,
+    UpdateSubtitleTimeCommand,
+    ValidateSubtitleTrackCommand,
+)
 from creator_intelligence_studio.application.commands.media_commands import (
     InspectVideoCommand,
     ShowVideoInspectionCommand,
@@ -149,6 +174,11 @@ from creator_intelligence_studio.application.services.transcription_service impo
     TranscriptionExportResult,
     TranscriptionReport,
     TranscriptionService,
+)
+from creator_intelligence_studio.application.services.subtitle_service import (
+    SubtitleExportResult,
+    SubtitleService,
+    SubtitleTrackReport,
 )
 from creator_intelligence_studio.application.services.acoustic_analysis_service import (
     AcousticAnalysisExportResult,
@@ -210,6 +240,7 @@ from creator_intelligence_studio.domain.multimodal_analysis.entities import Mult
 from creator_intelligence_studio.domain.multimodal_analysis.value_objects import MultimodalAnalysisStatus
 from creator_intelligence_studio.domain.transcription.entities import Transcription, TranscriptionSegment, TranscriptionStatus
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionExportFormat, TranscriptionOptions
+from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleExportFormat, SubtitleGenerationOptions
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
 
 
@@ -364,6 +395,119 @@ def build_parser() -> argparse.ArgumentParser:
     transcription_delete = transcription_sub.add_parser("delete", help="Eliminar una transcripcion")
     transcription_delete.add_argument("--video-id", required=True)
     transcription_delete.add_argument("--json", action="store_true")
+
+    subtitles_parser = subparsers.add_parser("subtitles", help="Subtitulos locales")
+    subtitles_sub = subtitles_parser.add_subparsers(dest="action", required=True)
+
+    def _subtitle_options(subparser):
+        subparser.add_argument("--language", default="es")
+        subparser.add_argument("--max-lines", type=int, default=2)
+        subparser.add_argument("--max-chars-per-line", type=int, default=42)
+        subparser.add_argument("--max-chars-per-cue", type=int, default=84)
+        subparser.add_argument("--min-duration", type=float, default=0.8)
+        subparser.add_argument("--max-duration", type=float, default=7.0)
+        subparser.add_argument("--min-gap", type=float, default=0.05)
+        subparser.add_argument("--cps-warning", type=float, default=22.0)
+        subparser.add_argument("--custom-name")
+        subparser.add_argument("--json", action="store_true")
+
+    subtitles_generate_video = subtitles_sub.add_parser("generate-video", help="Generar subtitulos para un video")
+    subtitles_generate_video.add_argument("--video-id", required=True)
+    _subtitle_options(subtitles_generate_video)
+
+    subtitles_generate_clip = subtitles_sub.add_parser("generate-clip", help="Generar subtitulos para un candidato")
+    subtitles_generate_clip.add_argument("--candidate-id", required=True)
+    _subtitle_options(subtitles_generate_clip)
+
+    subtitles_show = subtitles_sub.add_parser("show", help="Mostrar un track de subtitulos")
+    subtitles_show.add_argument("--track-id", required=True)
+    subtitles_show.add_argument("--json", action="store_true")
+
+    subtitles_list_video = subtitles_sub.add_parser("list-video", help="Listar tracks por video")
+    subtitles_list_video.add_argument("--video-id", required=True)
+    subtitles_list_video.add_argument("--json", action="store_true")
+
+    subtitles_list_clip = subtitles_sub.add_parser("list-clip", help="Listar tracks por candidato")
+    subtitles_list_clip.add_argument("--candidate-id", required=True)
+    subtitles_list_clip.add_argument("--json", action="store_true")
+
+    subtitles_validate = subtitles_sub.add_parser("validate", help="Validar un track")
+    subtitles_validate.add_argument("--track-id", required=True)
+    subtitles_validate.add_argument("--json", action="store_true")
+
+    subtitles_update_text = subtitles_sub.add_parser("update-text", help="Editar texto de un cue")
+    subtitles_update_text.add_argument("--cue-id", required=True)
+    subtitles_update_text.add_argument("--text", required=True)
+    subtitles_update_text.add_argument("--json", action="store_true")
+
+    subtitles_update_time = subtitles_sub.add_parser("update-time", help="Editar tiempos de un cue")
+    subtitles_update_time.add_argument("--cue-id", required=True)
+    subtitles_update_time.add_argument("--start", required=True, type=float)
+    subtitles_update_time.add_argument("--end", required=True, type=float)
+    subtitles_update_time.add_argument("--json", action="store_true")
+
+    subtitles_split = subtitles_sub.add_parser("split", help="Dividir un cue")
+    subtitles_split.add_argument("--cue-id", required=True)
+    subtitles_split.add_argument("--position", required=True, type=int)
+    subtitles_split.add_argument("--json", action="store_true")
+
+    subtitles_merge = subtitles_sub.add_parser("merge", help="Fusionar cues")
+    subtitles_merge.add_argument("--first-cue-id", required=True)
+    subtitles_merge.add_argument("--second-cue-id", required=True)
+    subtitles_merge.add_argument("--json", action="store_true")
+
+    subtitles_insert = subtitles_sub.add_parser("insert", help="Insertar un cue")
+    subtitles_insert.add_argument("--track-id", required=True)
+    subtitles_insert.add_argument("--index", required=True, type=int)
+    subtitles_insert.add_argument("--start", required=True, type=float)
+    subtitles_insert.add_argument("--end", required=True, type=float)
+    subtitles_insert.add_argument("--text", required=True)
+    subtitles_insert.add_argument("--json", action="store_true")
+
+    subtitles_delete_cue = subtitles_sub.add_parser("delete-cue", help="Eliminar un cue")
+    subtitles_delete_cue.add_argument("--cue-id", required=True)
+    subtitles_delete_cue.add_argument("--json", action="store_true")
+
+    subtitles_shift = subtitles_sub.add_parser("shift", help="Desplazar un track")
+    subtitles_shift.add_argument("--track-id", required=True)
+    subtitles_shift.add_argument("--offset", required=True, type=float)
+    subtitles_shift.add_argument("--json", action="store_true")
+
+    subtitles_lock = subtitles_sub.add_parser("lock", help="Bloquear un track")
+    subtitles_lock.add_argument("--track-id", required=True)
+    subtitles_lock.add_argument("--json", action="store_true")
+
+    subtitles_unlock = subtitles_sub.add_parser("unlock", help="Desbloquear un track")
+    subtitles_unlock.add_argument("--track-id", required=True)
+    subtitles_unlock.add_argument("--json", action="store_true")
+
+    subtitles_duplicate = subtitles_sub.add_parser("duplicate", help="Duplicar un track")
+    subtitles_duplicate.add_argument("--track-id", required=True)
+    subtitles_duplicate.add_argument("--json", action="store_true")
+
+    subtitles_import = subtitles_sub.add_parser("import", help="Importar subtitulos")
+    subtitles_import.add_argument("--video-id", required=True)
+    subtitles_import.add_argument("--file", required=True)
+    subtitles_import.add_argument("--format", choices=["srt", "vtt", "ass", "json"], default=None)
+    subtitles_import.add_argument("--json", action="store_true")
+
+    subtitles_export = subtitles_sub.add_parser("export", help="Exportar subtitulos")
+    subtitles_export.add_argument("--track-id", required=True)
+    subtitles_export.add_argument("--format", required=True, choices=["srt", "vtt", "ass", "txt", "json"])
+    subtitles_export.add_argument("--output")
+    subtitles_export.add_argument("--json", action="store_true")
+
+    subtitles_history = subtitles_sub.add_parser("history", help="Mostrar historial de un track")
+    subtitles_history.add_argument("--track-id", required=True)
+    subtitles_history.add_argument("--json", action="store_true")
+
+    subtitles_archive = subtitles_sub.add_parser("archive", help="Archivar un track")
+    subtitles_archive.add_argument("--track-id", required=True)
+    subtitles_archive.add_argument("--json", action="store_true")
+
+    subtitles_delete = subtitles_sub.add_parser("delete", help="Eliminar un track")
+    subtitles_delete.add_argument("--track-id", required=True)
+    subtitles_delete.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -1507,6 +1651,128 @@ def _handle_transcription(args, service: TranscriptionService, stdout, stderr) -
     raise ValueError("Accion de transcripcion no reconocida.")
 
 
+def _build_subtitle_options(args) -> SubtitleGenerationOptions:
+    return SubtitleGenerationOptions(
+        language=args.language,
+        max_lines=args.max_lines,
+        max_chars_per_line=args.max_chars_per_line,
+        max_chars_per_cue=args.max_chars_per_cue,
+        min_duration_seconds=args.min_duration,
+        max_duration_seconds=args.max_duration,
+        min_gap_seconds=args.min_gap,
+        cps_warning_threshold=args.cps_warning,
+    )
+
+
+def _handle_subtitles(args, service: SubtitleService, stdout, stderr) -> int:
+    if args.action == "generate-video":
+        command = GenerateVideoSubtitlesCommand(args.video_id, options=_build_subtitle_options(args))
+        report = service.generate_video_subtitles(command.video_id, command.options, custom_name=args.custom_name)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "generate-clip":
+        command = GenerateClipSubtitlesCommand(args.candidate_id, options=_build_subtitle_options(args))
+        report = service.generate_clip_subtitles(command.candidate_id, command.options, custom_name=args.custom_name)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "show":
+        command = ShowSubtitleTrackCommand(args.track_id)
+        report = service.get_subtitle_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "list-video":
+        command = ListVideoSubtitleTracksCommand(args.video_id)
+        tracks = service.list_video_subtitle_tracks(command.video_id)
+        print(json.dumps([track.to_dict() for track in tracks], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "list-clip":
+        command = ListClipSubtitleTracksCommand(args.candidate_id)
+        tracks = service.list_clip_subtitle_tracks(command.candidate_id)
+        print(json.dumps([track.to_dict() for track in tracks], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "validate":
+        command = ValidateSubtitleTrackCommand(args.track_id)
+        report = service.validate_subtitle_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if not (report.validation and report.validation.blocking_errors) else 1
+    if args.action == "update-text":
+        command = UpdateSubtitleTextCommand(args.cue_id, args.text)
+        report = service.update_cue_text(command.cue_id, command.text)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "update-time":
+        command = UpdateSubtitleTimeCommand(args.cue_id, args.start, args.end)
+        report = service.update_cue_timing(command.cue_id, command.start_seconds, command.end_seconds)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "split":
+        command = SplitSubtitleCueCommand(args.cue_id, args.position)
+        report = service.split_cue(command.cue_id, command.split_position)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "merge":
+        command = MergeSubtitleCuesCommand(args.first_cue_id, args.second_cue_id)
+        report = service.merge_cues(command.first_cue_id, command.second_cue_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "insert":
+        command = InsertSubtitleCueCommand(args.track_id, args.index, args.start, args.end, args.text)
+        report = service.insert_cue(command.track_id, command.index, command.start_seconds, command.end_seconds, command.text)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delete-cue":
+        command = DeleteSubtitleCueCommand(args.cue_id)
+        report = service.delete_cue(command.cue_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "shift":
+        command = ShiftSubtitleTrackCommand(args.track_id, args.offset)
+        report = service.shift_track(command.track_id, command.offset_seconds)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "lock":
+        command = LockSubtitleTrackCommand(args.track_id)
+        report = service.lock_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "unlock":
+        command = UnlockSubtitleTrackCommand(args.track_id)
+        report = service.unlock_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "duplicate":
+        command = DuplicateSubtitleTrackCommand(args.track_id)
+        report = service.duplicate_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "import":
+        command = ImportSubtitleTrackCommand(args.video_id, Path(args.file), format=SubtitleExportFormat(args.format) if args.format else None)
+        report = service.import_subtitles(command.video_id, command.file, format=command.format)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export":
+        command = ExportSubtitleTrackCommand(args.track_id, SubtitleExportFormat(args.format), output=Path(args.output) if args.output else None)
+        result = service.export_subtitles(command.track_id, command.format, output=command.output)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "history":
+        command = SubtitleHistoryCommand(args.track_id)
+        events = service.get_subtitle_edit_history(command.track_id)
+        print(json.dumps([event.to_dict() for event in events], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "archive":
+        command = ArchiveSubtitleTrackCommand(args.track_id)
+        report = service.archive_subtitle_track(command.track_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delete":
+        command = DeleteSubtitleTrackCommand(args.track_id)
+        deleted = service.delete_subtitle_track(command.track_id)
+        print(json.dumps({"track_id": command.track_id, "deleted": deleted}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if deleted else 1
+    raise ValueError("Accion de subtitulos no reconocida.")
+
+
 def _handle_acoustic(args, service: AcousticAnalysisService, stdout, stderr) -> int:
     if args.action == "analyze":
         command = AnalyzeAcousticCommand(args.video_id, force=args.force)
@@ -2249,6 +2515,7 @@ def dispatch(
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
     render_service: ClipRenderService | None = None,
+    subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
     diagnostic: EnvironmentDiagnostic,
     stdout=None,
@@ -2292,6 +2559,10 @@ def dispatch(
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")
             return _handle_render(args, render_service, stdout, stderr)
+        if args.entity == "subtitles":
+            if subtitle_service is None:
+                raise DomainError("El servicio de subtitulos no esta disponible.")
+            return _handle_subtitles(args, subtitle_service, stdout, stderr)
         if args.entity == "personalization":
             if personalization_service is None:
                 raise DomainError("El servicio de personalizacion no esta disponible.")

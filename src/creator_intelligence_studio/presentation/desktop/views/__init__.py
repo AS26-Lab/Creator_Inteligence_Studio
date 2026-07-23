@@ -18,6 +18,7 @@ from .preferences_dialog import PreferencesDialog
 from .visual_analysis_view import VisualAnalysisView
 from .system_view import SystemView
 from .transcription_view import TranscriptionView
+from .subtitle_editor_view import SubtitleEditorView
 from .videos_view import VideosView
 
 __all__ = [
@@ -37,5 +38,6 @@ __all__ = [
     "VisualAnalysisView",
     "SystemView",
     "TranscriptionView",
+    "SubtitleEditorView",
     "VideosView",
 ]

@@ -11,6 +11,7 @@ flowchart LR
     Home --> Tasks[Task Center]
     Home --> Onboarding[Onboarding]
     Home --> Transcription[Transcripcion]
+    Home --> Subtitles[Subtitulos]
     Home --> Visual[Analisis visual]
     Home --> Multimodal[Analisis multimodal]
     Home --> Clips[Clips]
@@ -110,6 +111,15 @@ flowchart LR
 - indicador de progreso aproximado;
 - estado de stale.
 
+### Subtitulos
+
+- vista de editor de tracks por video, candidato o render;
+- generacion para video completo o clip;
+- tabla de cues, historial y validacion;
+- importacion y exportacion SRT, VTT, ASS, TXT y JSON;
+- preview tecnica por posicion temporal;
+- estado stale sin sobrescribir la transcripcion original.
+
 ### Analisis acustico
 
 - estado del analisis;
@@ -203,6 +213,7 @@ flowchart LR
 - sin feedback todavia;
 - sin inspeccion tecnica aun;
 - sin transcripcion aun;
+- sin subtitulos aun;
 - sin analisis multimodal aun;
 - sin clips aprobados aun;
 - sin herramientas multimedia disponibles.
