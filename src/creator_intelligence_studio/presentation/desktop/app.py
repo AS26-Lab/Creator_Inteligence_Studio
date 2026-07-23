@@ -33,6 +33,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         clip_service=context.clip_service,
         personalization_service=context.personalization_service,
         model_service=context.model_service,
+        evaluation_service=context.evaluation_service,
         diagnostic=context.diagnostic,
         settings=context.settings,
         paths=context.paths,

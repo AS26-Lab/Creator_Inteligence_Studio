@@ -89,6 +89,15 @@ from creator_intelligence_studio.application.commands.model_commands import (
     VerifyPersonalizationModelCommand,
     ActivePersonalizationModelCommand,
 )
+from creator_intelligence_studio.application.commands.evaluation_commands import (
+    CancelOperationalEvaluationCommand,
+    CleanOperationalEvaluationCommand,
+    ExportOperationalEvaluationCommand,
+    RetryOperationalEvaluationStageCommand,
+    RunOperationalEvaluationCommand,
+    ShowOperationalEvaluationCommand,
+    StageOperationalEvaluationCommand,
+)
 from creator_intelligence_studio.application.commands.transcription_commands import (
     DeleteTranscriptionCommand,
     DownloadModelCommand,
@@ -158,6 +167,13 @@ from creator_intelligence_studio.application.services.personalization_training_s
     PersonalizationTrainingReport,
     PersonalizationTrainingService,
     TrainingValidationReport,
+)
+from creator_intelligence_studio.application.services.operational_evaluation_service import (
+    OperationalEvaluationComparisonReport,
+    OperationalEvaluationService,
+)
+from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
+    OperationalEvaluationRunStatus,
 )
 from creator_intelligence_studio.application.services.media_inspection_service import (
     MediaInspectionService,
@@ -636,6 +652,58 @@ def build_parser() -> argparse.ArgumentParser:
     models_explain.add_argument("--creator-id", required=True)
     models_explain.add_argument("--candidate-id", required=True)
     models_explain.add_argument("--json", action="store_true")
+
+    evaluation_parser = subparsers.add_parser("evaluation", help="Evaluacion operativa end-to-end")
+    evaluation_sub = evaluation_parser.add_subparsers(dest="action", required=True)
+
+    evaluation_scenarios = evaluation_sub.add_parser("scenarios", help="Listar escenarios disponibles")
+    evaluation_scenarios.add_argument("--json", action="store_true")
+
+    evaluation_run = evaluation_sub.add_parser("run", help="Ejecutar un escenario")
+    evaluation_run.add_argument("--scenario", required=True)
+    evaluation_run.add_argument("--force", action="store_true")
+    evaluation_run.add_argument("--json", action="store_true")
+
+    evaluation_show = evaluation_sub.add_parser("show", help="Mostrar un run")
+    evaluation_show.add_argument("--run-id", required=True)
+    evaluation_show.add_argument("--json", action="store_true")
+
+    evaluation_stages = evaluation_sub.add_parser("stages", help="Listar etapas")
+    evaluation_stages.add_argument("--run-id", required=True)
+    evaluation_stages.add_argument("--json", action="store_true")
+
+    evaluation_metrics = evaluation_sub.add_parser("metrics", help="Listar metricas")
+    evaluation_metrics.add_argument("--run-id", required=True)
+    evaluation_metrics.add_argument("--json", action="store_true")
+
+    evaluation_assertions = evaluation_sub.add_parser("assertions", help="Listar assertions")
+    evaluation_assertions.add_argument("--run-id", required=True)
+    evaluation_assertions.add_argument("--json", action="store_true")
+    evaluation_assertions.add_argument("--severity")
+
+    evaluation_artifacts = evaluation_sub.add_parser("artifacts", help="Listar artefactos")
+    evaluation_artifacts.add_argument("--run-id", required=True)
+    evaluation_artifacts.add_argument("--json", action="store_true")
+
+    evaluation_retry = evaluation_sub.add_parser("retry-stage", help="Reintentar una etapa")
+    evaluation_retry.add_argument("--run-id", required=True)
+    evaluation_retry.add_argument("--stage", required=True)
+    evaluation_retry.add_argument("--json", action="store_true")
+
+    evaluation_cancel = evaluation_sub.add_parser("cancel", help="Cancelar un run")
+    evaluation_cancel.add_argument("--run-id", required=True)
+    evaluation_cancel.add_argument("--json", action="store_true")
+
+    evaluation_export = evaluation_sub.add_parser("export", help="Exportar un run")
+    evaluation_export.add_argument("--run-id", required=True)
+    evaluation_export.add_argument("--format", required=True, choices=["json", "csv", "txt"])
+    evaluation_export.add_argument("--output")
+    evaluation_export.add_argument("--json", action="store_true")
+
+    evaluation_clean = evaluation_sub.add_parser("clean", help="Limpiar assets administrados")
+    evaluation_clean.add_argument("--run-id", required=True)
+    evaluation_clean.add_argument("--dry-run", action="store_true")
+    evaluation_clean.add_argument("--json", action="store_true")
 
     return parser
 
@@ -1871,6 +1939,95 @@ def _handle_models(args, service: PersonalizationTrainingService, stdout, stderr
     raise ValueError("Accion de modelos no reconocida.")
 
 
+def _handle_evaluation(args, service: OperationalEvaluationService, stdout, stderr) -> int:
+    if args.action == "scenarios":
+        scenarios = service.list_scenarios()
+        payload = [scenario.to_dict() for scenario in scenarios]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "run":
+        command = RunOperationalEvaluationCommand(args.scenario, force=args.force)
+        report = service.run_scenario(command.scenario_id, force=command.force)
+        payload = report.to_dict()
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(build_evaluation_text(report), file=stdout)
+        return 0 if report.run.status not in {OperationalEvaluationRunStatus.FAILED, OperationalEvaluationRunStatus.CANCELLED, OperationalEvaluationRunStatus.BLOCKED} else 1
+    if args.action == "show":
+        command = ShowOperationalEvaluationCommand(args.run_id)
+        report = service.get_report(command.run_id)
+        if report is None:
+            print("Run de evaluacion no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "stages":
+        command = StageOperationalEvaluationCommand(args.run_id)
+        stages = service.list_stages(command.run_id)
+        print(json.dumps([stage.to_dict() for stage in stages], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "metrics":
+        command = StageOperationalEvaluationCommand(args.run_id)
+        metrics = service.list_metrics(command.run_id)
+        print(json.dumps([metric.to_dict() for metric in metrics], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "assertions":
+        command = StageOperationalEvaluationCommand(args.run_id)
+        assertions = service.list_assertions(command.run_id)
+        if args.severity:
+            assertions = [item for item in assertions if item.severity.value == args.severity]
+        print(json.dumps([assertion.to_dict() for assertion in assertions], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "artifacts":
+        command = StageOperationalEvaluationCommand(args.run_id)
+        artifacts = service.list_artifacts(command.run_id)
+        print(json.dumps([artifact.to_dict() for artifact in artifacts], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "retry-stage":
+        command = RetryOperationalEvaluationStageCommand(args.run_id, args.stage)
+        report = service.retry_stage(command.run_id, command.stage_name)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "cancel":
+        command = CancelOperationalEvaluationCommand(args.run_id)
+        cancelled = service.cancel(command.run_id)
+        print(json.dumps({"run_id": command.run_id, "cancelled": cancelled}, ensure_ascii=False, indent=2), file=stdout)
+        return 0 if cancelled else 1
+    if args.action == "export":
+        command = ExportOperationalEvaluationCommand(args.run_id, args.format)
+        destination = Path(args.output) if args.output else None
+        path = service.export(command.run_id, command.format, destination=destination)
+        payload = {"run_id": command.run_id, "format": command.format, "path": str(path)}
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "clean":
+        command = CleanOperationalEvaluationCommand(args.run_id, dry_run=args.dry_run)
+        payload = service.clean(command.run_id, dry_run=command.dry_run)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de evaluacion no reconocida.")
+
+
+def build_evaluation_text(report) -> str:
+    lines = [
+        f"Escenario: {report.scenario.id}",
+        f"Run: {report.run.id}",
+        f"Estado: {report.run.status.value}",
+        f"Resultado final: {report.run.final_result.value}",
+        f"Duracion total: {report.run.total_duration_seconds if report.run.total_duration_seconds is not None else 'no verificada'}",
+        f"Etapas: {report.run.completed_stage_count}/{report.run.stage_count}",
+        f"Assertions: {report.run.assertion_pass_count} OK / {report.run.assertion_fail_count} fallidas",
+        f"Cache: {report.run.cache_hit_count} hits / {report.run.cache_miss_count} misses",
+    ]
+    for stage in report.stages:
+        lines.append(f"- {stage.stage_index}. {stage.stage_name}: {stage.status.value} [{stage.cache_status.value}]")
+    return "\n".join(lines)
+
+
 def dispatch(
     args: argparse.Namespace,
     *,
@@ -1887,6 +2044,7 @@ def dispatch(
     stdout=None,
     stderr=None,
     model_service: PersonalizationTrainingService | None = None,
+    evaluation_service: OperationalEvaluationService | None = None,
 ) -> int:
     """Ejecuta el comando solicitado."""
 
@@ -1928,6 +2086,10 @@ def dispatch(
             if model_service is None:
                 raise DomainError("El servicio de modelos personalizados no esta disponible.")
             return _handle_models(args, model_service, stdout, stderr)
+        if args.entity == "evaluation":
+            if evaluation_service is None:
+                raise DomainError("El servicio de evaluacion operativa no esta disponible.")
+            return _handle_evaluation(args, evaluation_service, stdout, stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

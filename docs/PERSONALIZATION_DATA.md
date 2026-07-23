@@ -235,3 +235,7 @@ Text content and private notes are not shown by default.
 - labels remain human-derived and traceable;
 - the model layer must not rewrite labels or feedback history;
 - feature schema compatibility is required before training.
+
+## Operational evaluation handoff
+
+Operational evaluation scenarios may produce synthetic dataset snapshots to validate the full workflow. These demo snapshots remain isolated from real creator data and are not mixed into production personalization datasets.

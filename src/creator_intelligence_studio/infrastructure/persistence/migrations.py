@@ -1298,6 +1298,158 @@ def migration_10(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_personalization_model_comparisons_creator_id ON personalization_model_comparisons(creator_id)")
 
 
+def migration_11(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operational_evaluation_runs (
+            id TEXT PRIMARY KEY,
+            scenario_id TEXT NOT NULL,
+            creator_id TEXT,
+            project_id TEXT,
+            video_asset_id TEXT,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'queued',
+                    'preparing_scenario',
+                    'running',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'cancelled',
+                    'blocked'
+                )
+            ),
+            scenario_version TEXT NOT NULL,
+            evaluator_version TEXT NOT NULL,
+            configuration_fingerprint TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            total_duration_seconds REAL,
+            stage_count INTEGER NOT NULL,
+            completed_stage_count INTEGER NOT NULL,
+            failed_stage_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            assertion_pass_count INTEGER NOT NULL,
+            assertion_fail_count INTEGER NOT NULL,
+            cache_hit_count INTEGER NOT NULL,
+            cache_miss_count INTEGER NOT NULL,
+            final_result TEXT NOT NULL CHECK (
+                final_result IN (
+                    'passed',
+                    'passed_with_warnings',
+                    'failed',
+                    'blocked',
+                    'cancelled',
+                    'inconclusive'
+                )
+            ),
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE SET NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operational_evaluation_stages (
+            id TEXT PRIMARY KEY,
+            evaluation_run_id TEXT NOT NULL,
+            stage_index INTEGER NOT NULL,
+            stage_name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'pending',
+                    'running',
+                    'completed',
+                    'completed_with_warnings',
+                    'failed',
+                    'skipped',
+                    'cached',
+                    'cancelled',
+                    'blocked'
+                )
+            ),
+            started_at TEXT,
+            completed_at TEXT,
+            duration_seconds REAL,
+            input_summary_json TEXT NOT NULL,
+            output_summary_json TEXT NOT NULL,
+            cache_status TEXT NOT NULL,
+            retry_count INTEGER NOT NULL,
+            warning_code TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (evaluation_run_id) REFERENCES operational_evaluation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operational_evaluation_metrics (
+            id TEXT PRIMARY KEY,
+            evaluation_run_id TEXT NOT NULL,
+            stage_name TEXT,
+            metric_name TEXT NOT NULL,
+            metric_value REAL,
+            metric_unit TEXT,
+            details_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (evaluation_run_id) REFERENCES operational_evaluation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operational_evaluation_assertions (
+            id TEXT PRIMARY KEY,
+            evaluation_run_id TEXT NOT NULL,
+            stage_name TEXT,
+            assertion_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            expected_json TEXT NOT NULL,
+            actual_json TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (evaluation_run_id) REFERENCES operational_evaluation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS operational_evaluation_artifacts (
+            id TEXT PRIMARY KEY,
+            evaluation_run_id TEXT NOT NULL,
+            stage_name TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            managed_path TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            size_bytes INTEGER,
+            exists_at_completion INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (evaluation_run_id) REFERENCES operational_evaluation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_runs_scenario_id ON operational_evaluation_runs(scenario_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_runs_creator_id ON operational_evaluation_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_runs_status ON operational_evaluation_runs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_stages_run_id ON operational_evaluation_stages(evaluation_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_stages_stage_name ON operational_evaluation_stages(evaluation_run_id, stage_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_metrics_run_id ON operational_evaluation_metrics(evaluation_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_assertions_run_id ON operational_evaluation_assertions(evaluation_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_operational_evaluation_artifacts_run_id ON operational_evaluation_artifacts(evaluation_run_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -1309,6 +1461,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=8, name="clip_ranking"),
     Migration(version=9, name="personalization_data"),
     Migration(version=10, name="personalization_models"),
+    Migration(version=11, name="operational_evaluation"),
 )
 
 
@@ -1366,6 +1519,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_9(connection)
                 elif migration.version == 10:
                     migration_10(connection)
+                elif migration.version == 11:
+                    migration_11(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

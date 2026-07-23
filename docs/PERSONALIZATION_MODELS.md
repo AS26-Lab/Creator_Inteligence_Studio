@@ -128,3 +128,7 @@ The personalized score does not overwrite `rank_score`.
 - There is no creator-level deep learning yet.
 - There is no platform analytics feedback loop yet.
 - There is no automatic tuning of the main ranker yet.
+
+## Operational evaluation
+
+The operational evaluation layer can validate training, activation and personalized scoring using synthetic demo data. That verifies the workflow, but it does not imply real-world model usefulness.

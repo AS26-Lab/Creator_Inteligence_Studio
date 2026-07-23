@@ -285,3 +285,10 @@ Reglas:
 - `infrastructure/persistence/sqlite_personalization_model_repository.py`: persistencia local del registro de modelos, metricas, predicciones y comparaciones.
 - Los artefactos se cargan solo desde el almacen local administrado por la aplicacion.
 - joblib se usa solo para artefactos locales de confianza.
+
+### Evaluacion operativa
+
+- `domain/operational_evaluation`: entidades, errores, repositorios, value objects y reglas de escenarios reproducibles.
+- `application/services/operational_evaluation_service.py`: orquestacion de escenarios, tiempos, assertions, cache, reportes, retry, cancelacion y limpieza.
+- `infrastructure/operational_evaluation`: generacion de assets demo, temporizador de etapas, muestreo de recursos, motor de assertions, builder de reportes y orquestador.
+- `infrastructure/persistence/sqlite_operational_evaluation_repository.py`: persistencia local de runs, stages, metricas, assertions y artefactos.

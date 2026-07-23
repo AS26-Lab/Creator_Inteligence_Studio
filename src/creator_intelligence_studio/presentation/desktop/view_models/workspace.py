@@ -57,6 +57,10 @@ from creator_intelligence_studio.application.services.personalization_training_s
     PersonalizationTrainingService,
     TrainingValidationReport,
 )
+from creator_intelligence_studio.application.services.operational_evaluation_service import (
+    OperationalEvaluationComparisonReport,
+    OperationalEvaluationService,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
@@ -236,6 +240,7 @@ class WorkspaceViewModel:
         paths: ProjectPaths,
         personalization_service: PersonalizationDatasetService | None = None,
         model_service: PersonalizationTrainingService | None = None,
+        evaluation_service: OperationalEvaluationService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -331,6 +336,7 @@ class WorkspaceViewModel:
         self.clip_service = clip_service
         self.personalization_service = personalization_service
         self.model_service = model_service
+        self.evaluation_service = evaluation_service
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
@@ -1369,3 +1375,63 @@ class WorkspaceViewModel:
         if self.model_service is None:
             raise RuntimeError("El servicio de modelos personalizados no esta disponible.")
         return self.model_service.explain_personalized_score(creator_id, candidate_id)
+
+    def list_operational_scenarios(self):
+        if self.evaluation_service is None:
+            return []
+        return self.evaluation_service.list_scenarios()
+
+    def run_operational_evaluation(self, scenario_id: str, force: bool = False, *, progress_callback=None):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.run_scenario(scenario_id, force=force, progress_callback=progress_callback)
+
+    def get_operational_evaluation_run(self, run_id: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.get_report(run_id)
+
+    def list_operational_evaluation_stages(self, run_id: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.list_stages(run_id)
+
+    def list_operational_evaluation_metrics(self, run_id: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.list_metrics(run_id)
+
+    def list_operational_evaluation_assertions(self, run_id: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.list_assertions(run_id)
+
+    def list_operational_evaluation_artifacts(self, run_id: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.list_artifacts(run_id)
+
+    def retry_operational_evaluation_stage(self, run_id: str, stage_name: str):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.retry_stage(run_id, stage_name)
+
+    def cancel_operational_evaluation(self, run_id: str) -> bool:
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.cancel(run_id)
+
+    def export_operational_evaluation(self, run_id: str, format_name: str, *, destination: Path | None = None):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.export(run_id, format_name, destination=destination)
+
+    def compare_operational_evaluations(self, baseline_run_id: str, candidate_run_id: str) -> OperationalEvaluationComparisonReport:
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.compare_runs(baseline_run_id, candidate_run_id)
+
+    def clean_operational_evaluation(self, run_id: str, *, dry_run: bool = False):
+        if self.evaluation_service is None:
+            raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
+        return self.evaluation_service.clean(run_id, dry_run=dry_run)

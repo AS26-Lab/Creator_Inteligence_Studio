@@ -489,3 +489,7 @@ Los registros conservan:
 - estado del modelo registrado.
 
 No se deben mezclar creadores ni usar datos de otro creador como entrenamiento.
+
+## Migration v11
+
+La migracion v11 agrega la auditoria de `operational_evaluation_runs`, `operational_evaluation_stages`, `operational_evaluation_metrics`, `operational_evaluation_assertions` y `operational_evaluation_artifacts`. Estas tablas registran escenarios, tiempos, cache, assertions y artefactos administrados sin tocar las fuentes de usuario.

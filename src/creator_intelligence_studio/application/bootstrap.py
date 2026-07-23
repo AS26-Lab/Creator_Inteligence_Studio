@@ -44,6 +44,10 @@ from creator_intelligence_studio.application.services.personalization_training_s
     PersonalizationTrainingService,
     build_personalization_training_service,
 )
+from creator_intelligence_studio.application.services.operational_evaluation_service import (
+    OperationalEvaluationService,
+    build_operational_evaluation_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -85,6 +89,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_personalizati
 from creator_intelligence_studio.infrastructure.persistence.sqlite_personalization_model_repository import (
     SQLitePersonalizationModelRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_operational_evaluation_repository import (
+    SQLiteOperationalEvaluationRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -122,6 +129,7 @@ class ServiceContext(BootstrapContext):
     clip_service: ClipRankingService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
+    evaluation_service: OperationalEvaluationService | None = None
 
 
 def _load_context() -> BootstrapContext:
@@ -234,6 +242,22 @@ def _load_service_context() -> ServiceContext:
         model_repository=SQLitePersonalizationModelRepository(database),
         logger=context.logger,
     )
+    evaluation_service = build_operational_evaluation_service(
+        settings=context.settings,
+        paths=context.paths,
+        catalog_service=service,
+        media_service=media_service,
+        audio_service=audio_service,
+        transcription_service=transcription_service,
+        acoustic_service=acoustic_service,
+        visual_service=visual_service,
+        multimodal_service=multimodal_service,
+        clip_service=clip_service,
+        personalization_service=personalization_service,
+        model_service=model_service,
+        repository=SQLiteOperationalEvaluationRepository(database),
+        logger=context.logger,
+    )
     return ServiceContext(
         settings=context.settings,
         paths=context.paths,
@@ -249,6 +273,7 @@ def _load_service_context() -> ServiceContext:
         clip_service=clip_service,
         personalization_service=personalization_service,
         model_service=model_service,
+        evaluation_service=evaluation_service,
     )
 
 
@@ -322,6 +347,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             clip_service=context.clip_service,
             personalization_service=context.personalization_service,
             model_service=context.model_service,
+            evaluation_service=context.evaluation_service,
             diagnostic=context.diagnostic,
             stdout=stdout,
             stderr=stderr,

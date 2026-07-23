@@ -1,0 +1,62 @@
+# Operational Evaluation
+
+This layer provides a reproducible end-to-end harness for the existing Creator Intelligence Studio pipeline.
+
+## Purpose
+
+Operational evaluation runs controlled demo scenarios across the real services, records timings, cache behavior, warnings, assertions, and artifacts, and produces auditable reports. It does not add new algorithms or models.
+
+## Scenarios
+
+- `smoke_pipeline`
+- `controlled_creator_workflow`
+- `failure_recovery`
+- `cache_reuse`
+- `cpu_fallback`
+
+## Isolation
+
+- Demo creator, project, and video records only.
+- Demo assets are generated in workspace-managed locations.
+- Evaluation artifacts stay inside managed paths such as `temp/evaluations/`.
+- No private user media is required.
+
+## Stage coverage
+
+The orchestrator reuses existing services for media inspection, audio preparation, transcription, acoustic analysis, visual analysis, multimodal analysis, clip ranking, controlled feedback, dataset snapshots, readiness checks, baseline training, verification, activation, and personalized scoring.
+
+## Observability
+
+Each run captures:
+
+- stage timings;
+- cache hits and misses;
+- approximate RAM/VRAM sampling;
+- assertions by severity;
+- warnings and errors;
+- produced artifacts;
+- final result.
+
+## CLI
+
+- `evaluation scenarios`
+- `evaluation run --scenario <name>`
+- `evaluation show --run-id <id>`
+- `evaluation stages --run-id <id>`
+- `evaluation metrics --run-id <id>`
+- `evaluation assertions --run-id <id>`
+- `evaluation artifacts --run-id <id>`
+- `evaluation retry-stage --run-id <id> --stage <name>`
+- `evaluation cancel --run-id <id>`
+- `evaluation export --run-id <id> --format json|csv|txt`
+- `evaluation clean --run-id <id> [--dry-run]`
+
+## GUI
+
+The operational evaluation view shows scenarios, history, stages, metrics, assertions, warnings, artifacts, cache reuse, and the final result. It also supports compare, retry, cancel, export, and safe cleanup.
+
+## Limitations
+
+- A technically successful run does not prove recommendation quality.
+- No new analysis model is introduced.
+- Demo scenarios are synthetic and isolated from user-private content.

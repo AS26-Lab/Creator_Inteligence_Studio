@@ -7,6 +7,7 @@ from .creators_view import CreatorsView
 from .clip_ranking_view import ClipRankingView
 from .dashboard_view import DashboardView
 from .multimodal_analysis_view import MultimodalAnalysisView
+from .operational_evaluation_view import OperationalEvaluationView
 from .personalization_data_view import PersonalizationDataView
 from .personalization_models_view import PersonalizationModelsView
 from .projects_view import ProjectsView
@@ -21,6 +22,7 @@ __all__ = [
     "ClipRankingView",
     "DashboardView",
     "MultimodalAnalysisView",
+    "OperationalEvaluationView",
     "PersonalizationDataView",
     "PersonalizationModelsView",
     "ProjectsView",

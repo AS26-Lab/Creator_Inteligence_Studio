@@ -206,3 +206,13 @@ flowchart LR
 - explicaciones y scoring separado;
 - sin autoentrenamiento en segundo plano;
 - sin reemplazar el ranking de clips.
+
+### Evaluacion operativa
+
+- escenarios de demo controlados;
+- historial de runs y estados;
+- etapas, tiempos, cache y assertions;
+- comparacion de ejecuciones;
+- retry y cancelacion;
+- limpieza segura de artefactos administrados;
+- no modifica algoritmos ni modelos existentes.

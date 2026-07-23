@@ -29,6 +29,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     CreatorsView,
     DashboardView,
     MultimodalAnalysisView,
+    OperationalEvaluationView,
     PersonalizationDataView,
     PersonalizationModelsView,
     ProjectsView,
@@ -49,7 +50,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "personalization", "models", "system"]
+        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "personalization", "evaluation", "models", "system"]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -121,6 +122,7 @@ class MainWindow(QMainWindow):
         self.multimodal_view = MultimodalAnalysisView(workspace)
         self.clip_ranking_view = ClipRankingView(workspace)
         self.personalization_view = PersonalizationDataView(workspace)
+        self.evaluation_view = OperationalEvaluationView(workspace)
         self.personalization_models_view = PersonalizationModelsView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
@@ -133,6 +135,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.multimodal_view)
         self.stack.addWidget(self.clip_ranking_view)
         self.stack.addWidget(self.personalization_view)
+        self.stack.addWidget(self.evaluation_view)
         self.stack.addWidget(self.personalization_models_view)
         self.stack.addWidget(self.system_view)
 
@@ -191,6 +194,7 @@ class MainWindow(QMainWindow):
         self.multimodal_view.refresh()
         self.clip_ranking_view.refresh()
         self.personalization_view.refresh()
+        self.evaluation_view.refresh()
         self.personalization_models_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
@@ -286,3 +290,5 @@ class MainWindow(QMainWindow):
             self.clip_ranking_view.refresh()
         elif current_key == "personalization":
             self.personalization_view.refresh()
+        elif current_key == "evaluation":
+            self.evaluation_view.refresh()

@@ -153,3 +153,7 @@ The clip ranking layer feeds creator-isolated dataset snapshots for future train
 - no training happens inside the ranking layer.
 
 The ranking layer also provides the source candidates for creator-specific model training. The model layer stays separate, local and auditable, and it does not feed predictions back into the ranking scores.
+
+## Operational evaluation
+
+Operational evaluation scenarios may traverse clip ranking as part of a controlled demo run. The harness records technical outcomes and cache behavior, but it does not change ranking formulas or auto-promote clips.

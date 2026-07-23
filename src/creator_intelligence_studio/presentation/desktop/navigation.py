@@ -29,6 +29,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("multimodal", "Analisis multimodal"),
         NavigationItem("clips", "Clips"),
         NavigationItem("personalization", "Personalizacion"),
+        NavigationItem("evaluation", "Evaluacion operativa"),
         NavigationItem("thumbnails", "Miniaturas", enabled=False, badge="Proximamente"),
         NavigationItem("audience", "Audiencia", enabled=False, badge="Proximamente"),
         NavigationItem("trends", "Tendencias", enabled=False, badge="Proximamente"),

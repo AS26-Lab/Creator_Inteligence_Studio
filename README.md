@@ -356,3 +356,18 @@ La primera version de modelos personalizados por creador ya queda soportada loca
 - aislamiento de datos por creador.
 
 No predice viralidad y no mezcla datos entre creadores.
+
+## Evaluacion operativa end-to-end
+
+La capa `evaluation` ejecuta escenarios de demo controlados sobre el pipeline real para auditar tiempos, cache, assertions, recuperacion y artefactos. No agrega modelos ni cambia las formulas existentes.
+
+Comandos principales:
+
+```bash
+python -m creator_intelligence_studio evaluation scenarios
+python -m creator_intelligence_studio evaluation run --scenario smoke_pipeline
+python -m creator_intelligence_studio evaluation show --run-id <run_id>
+python -m creator_intelligence_studio evaluation export --run-id <run_id> --format json
+```
+
+Los artefactos de evaluacion se guardan en rutas gestionadas por la aplicacion, como `temp/evaluations/`, y no deben subirse al repositorio.
