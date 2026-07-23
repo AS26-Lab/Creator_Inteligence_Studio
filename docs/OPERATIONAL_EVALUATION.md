@@ -25,6 +25,14 @@ Operational evaluation runs controlled demo scenarios across the real services, 
 
 The orchestrator reuses existing services for media inspection, audio preparation, transcription, acoustic analysis, visual analysis, multimodal analysis, clip ranking, controlled feedback, dataset snapshots, readiness checks, baseline training, verification, activation, and personalized scoring.
 
+The controlled creator workflow also validates:
+
+- workflow status aggregation per video;
+- recommended next action;
+- persisted task state after interruption;
+- selection persistence for creator, project and last page;
+- onboarding reopen behavior.
+
 ## Observability
 
 Each run captures:
@@ -62,3 +70,4 @@ The operational evaluation view shows scenarios, history, stages, metrics, asser
 - Demo scenarios are synthetic and isolated from user-private content.
 - `excluded` dataset rows are audited separately and do not count as train/validation/test leakage.
 - The controlled binary baseline scenario does not require neutral examples to pass readiness.
+- A passing run validates technical integrity and persistence, not recommendation quality or commercial usefulness.

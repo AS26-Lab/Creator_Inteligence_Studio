@@ -81,6 +81,23 @@ La aplicacion ya permite:
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
+## Flujo de producto y UX
+
+La GUI incluye un flujo guiado para operar sin conocer IDs internos ni comandos CLI:
+
+- Home con creador activo, proyecto activo, tareas y atajos;
+- selector persistente de creador y proyecto;
+- importacion y preparacion de video;
+- vista unificada de workflow por video con siguiente accion recomendada;
+- task center global para tareas de fondo;
+- onboarding corto reabrible;
+- preferencias iniciales de datos, modelos, exportaciones y transcripcion;
+- vista tecnica de system health con detalles expandibles.
+
+La accion recomendada depende del estado real del video y no ejecuta tareas costosas automaticamente sin confirmacion.
+
+La guia detallada del flujo esta en [`docs/PRODUCT_UX_WORKFLOW.md`](docs/PRODUCT_UX_WORKFLOW.md).
+
 ## Base local
 
 La base estructurada inicial se guarda en:
@@ -371,3 +388,5 @@ python -m creator_intelligence_studio evaluation export --run-id <run_id> --form
 ```
 
 Los artefactos de evaluacion se guardan en rutas gestionadas por la aplicacion, como `temp/evaluations/`, y no deben subirse al repositorio.
+
+Una evaluacion end-to-end pasada demuestra coherencia tecnica, no calidad comercial ni capacidad predictiva universal.

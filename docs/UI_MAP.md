@@ -7,6 +7,9 @@ flowchart LR
     Home[Inicio] --> Creators[Creadores]
     Home --> Projects[Proyectos]
     Home --> Media[Videos]
+    Home --> Workflow[Workflow]
+    Home --> Tasks[Task Center]
+    Home --> Onboarding[Onboarding]
     Home --> Transcription[Transcripcion]
     Home --> Visual[Analisis visual]
     Home --> Multimodal[Analisis multimodal]
@@ -20,12 +23,15 @@ flowchart LR
 
 ### Inicio
 
-- estado del entorno;
-- estado de GPU y fallback;
+- creador activo y proyecto activo;
+- videos recientes y pendientes de atencion;
+- tareas en progreso;
+- candidatos pendientes de revision;
+- estado de personalizacion;
+- errores recientes;
+- almacenamiento aproximado;
 - accesos rapidos;
-- ultimos trabajos;
-- actividad reciente;
-- resumen de almacenamiento y herramientas.
+- resumen de GPU, CUDA y herramientas.
 
 ### Creadores
 
@@ -58,6 +64,37 @@ flowchart LR
 - resumen de transcripcion en el inspector contextual.
 - acceso a analisis acustico del video seleccionado.
 - acceso a analisis visual del video seleccionado.
+- acceso a la vista unificada de workflow por video.
+
+### Workflow
+
+- estado agregado por video;
+- siguiente accion recomendada;
+- progreso aproximado;
+- estados de cada etapa con summary, warnings y errores;
+- ejecucion del siguiente paso, del grupo de etapas o hasta ranking;
+- reintento de etapa fallida;
+- reactivacion de etapas stale;
+- sin entrenamiento automatico.
+
+### Task Center
+
+- tareas activas y persistidas;
+- etapa, video, progreso y tiempo;
+- marcar interrumpida;
+- reintentar desde el workflow del video;
+- continuidad tras cambio de pagina o reapertura.
+
+### Onboarding
+
+- explicacion corta del producto;
+- seleccion de almacenamiento;
+- verificacion de FFmpeg;
+- verificacion de transcripcion;
+- creacion del primer creador;
+- creacion del primer proyecto;
+- importacion del primer video;
+- reabrible desde ayuda o barra superior.
 
 ### Transcripcion
 
@@ -141,7 +178,8 @@ flowchart LR
 - CUDA;
 - base local;
 - espacio disponible;
-- disponibilidad de `ffprobe` y `ffmpeg`.
+- disponibilidad de `ffprobe` y `ffmpeg`;
+- estado simplificado de health con detalles expandibles.
 
 ### Proximamente
 
@@ -215,4 +253,6 @@ flowchart LR
 - comparacion de ejecuciones;
 - retry y cancelacion;
 - limpieza segura de artefactos administrados;
-- no modifica algoritmos ni modelos existentes.
+- no modifica algoritmos ni modelos existentes;
+- `excluded` se audita, pero no cuenta como leakage entrenable;
+- una evaluacion aprobada demuestra integridad tecnica, no calidad comercial.

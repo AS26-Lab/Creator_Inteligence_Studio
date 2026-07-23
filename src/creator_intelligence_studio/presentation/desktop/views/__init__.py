@@ -11,6 +11,10 @@ from .operational_evaluation_view import OperationalEvaluationView
 from .personalization_data_view import PersonalizationDataView
 from .personalization_models_view import PersonalizationModelsView
 from .projects_view import ProjectsView
+from .task_center_view import TaskCenterView
+from .workflow_view import WorkflowView
+from .onboarding_view import OnboardingView
+from .preferences_dialog import PreferencesDialog
 from .visual_analysis_view import VisualAnalysisView
 from .system_view import SystemView
 from .transcription_view import TranscriptionView
@@ -26,6 +30,10 @@ __all__ = [
     "PersonalizationDataView",
     "PersonalizationModelsView",
     "ProjectsView",
+    "TaskCenterView",
+    "WorkflowView",
+    "OnboardingView",
+    "PreferencesDialog",
     "VisualAnalysisView",
     "SystemView",
     "TranscriptionView",

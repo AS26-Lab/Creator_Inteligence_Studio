@@ -21,6 +21,9 @@ from PySide6.QtWidgets import (
 )
 
 from creator_intelligence_studio.presentation.desktop.navigation import build_navigation_items
+from creator_intelligence_studio.presentation.desktop.views.preferences_dialog import (
+    PreferencesDialog,
+)
 from creator_intelligence_studio.presentation.desktop.theme import SIDEBAR_WIDTH
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 from creator_intelligence_studio.presentation.desktop.views import (
@@ -28,11 +31,14 @@ from creator_intelligence_studio.presentation.desktop.views import (
     ClipRankingView,
     CreatorsView,
     DashboardView,
+    OnboardingView,
     MultimodalAnalysisView,
     OperationalEvaluationView,
     PersonalizationDataView,
     PersonalizationModelsView,
     ProjectsView,
+    TaskCenterView,
+    WorkflowView,
     VisualAnalysisView,
     SystemView,
     TranscriptionView,
@@ -50,7 +56,24 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
 
-        self._page_keys = ["home", "creators", "projects", "videos", "transcription", "analysis", "visual", "multimodal", "clips", "personalization", "evaluation", "models", "system"]
+        self._page_keys = [
+            "home",
+            "creators",
+            "projects",
+            "videos",
+            "workflow",
+            "tasks",
+            "onboarding",
+            "transcription",
+            "analysis",
+            "visual",
+            "multimodal",
+            "clips",
+            "personalization",
+            "evaluation",
+            "models",
+            "system",
+        ]
 
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -67,20 +90,25 @@ class MainWindow(QMainWindow):
         self.settings_button = QToolButton()
         self.settings_button.setText("Configuración")
         self.workspace_button = QToolButton()
-        self.workspace_button.setText("Espacio")
+        self.workspace_button.setText("Tareas")
+        self.onboarding_button = QToolButton()
+        self.onboarding_button.setText("Guia")
 
         self.creator_combo.setMinimumWidth(170)
         self.project_combo.setMinimumWidth(170)
         self.search_edit.setMinimumWidth(260)
         self.settings_button.setMinimumWidth(110)
         self.workspace_button.setMinimumWidth(110)
+        self.onboarding_button.setMinimumWidth(90)
         self.gpu_label.setMinimumWidth(230)
         self.gpu_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
         self.settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.workspace_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.onboarding_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_button.setToolTip("Abrir configuración de la aplicación")
-        self.workspace_button.setToolTip("Cambiar el espacio de trabajo")
+        self.workspace_button.setToolTip("Abrir el centro de tareas")
+        self.onboarding_button.setToolTip("Reabrir el onboarding")
         self.search_edit.setToolTip("Busca en el contenido visible del espacio de trabajo")
         self.creator_combo.setToolTip("Selecciona el creador activo")
         self.project_combo.setToolTip("Selecciona el proyecto activo")
@@ -101,6 +129,7 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.gpu_label)
         top_layout.addWidget(self.settings_button)
         top_layout.addWidget(self.workspace_button)
+        top_layout.addWidget(self.onboarding_button)
 
         self.stack = QStackedWidget()
         self.inspector = InspectorPanel()
@@ -115,7 +144,11 @@ class MainWindow(QMainWindow):
             open_visual_callback=lambda: self.show_page("visual"),
             open_multimodal_callback=lambda: self.show_page("multimodal"),
             open_clips_callback=lambda: self.show_page("clips"),
+            open_workflow_callback=lambda: self.show_page("workflow"),
         )
+        self.workflow_view = WorkflowView(workspace)
+        self.task_center_view = TaskCenterView(workspace)
+        self.onboarding_view = OnboardingView(workspace)
         self.transcription_view = TranscriptionView(workspace)
         self.acoustic_view = AcousticAnalysisView(workspace)
         self.visual_view = VisualAnalysisView(workspace)
@@ -129,6 +162,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.creators_view)
         self.stack.addWidget(self.projects_view)
         self.stack.addWidget(self.videos_view)
+        self.stack.addWidget(self.workflow_view)
+        self.stack.addWidget(self.task_center_view)
+        self.stack.addWidget(self.onboarding_view)
         self.stack.addWidget(self.transcription_view)
         self.stack.addWidget(self.acoustic_view)
         self.stack.addWidget(self.visual_view)
@@ -162,6 +198,7 @@ class MainWindow(QMainWindow):
         self._build_sidebar()
         self._build_topbar()
         self.refresh_all()
+        self.show_page(self.workspace.ui_state.last_page if self.workspace.ui_state.last_page in self._page_keys else "home")
 
     def _build_sidebar(self) -> None:
         for item in build_navigation_items():
@@ -180,6 +217,9 @@ class MainWindow(QMainWindow):
         self.creator_combo.currentIndexChanged.connect(self._creator_changed)
         self.project_combo.currentIndexChanged.connect(self._project_changed)
         self.search_edit.textChanged.connect(self._search_changed)
+        self.settings_button.clicked.connect(self._open_preferences)
+        self.workspace_button.clicked.connect(lambda: self.show_page("tasks"))
+        self.onboarding_button.clicked.connect(lambda: self.show_page("onboarding"))
         self._refresh_topbar()
 
     def refresh_all(self) -> None:
@@ -189,6 +229,9 @@ class MainWindow(QMainWindow):
         self.creators_view.refresh()
         self.projects_view.refresh()
         self.videos_view.refresh()
+        self.workflow_view.refresh()
+        self.task_center_view.refresh()
+        self.onboarding_view.refresh()
         self.transcription_view.refresh()
         self.visual_view.refresh()
         self.multimodal_view.refresh()
@@ -219,6 +262,18 @@ class MainWindow(QMainWindow):
 
         self.creator_combo.blockSignals(False)
         self.project_combo.blockSignals(False)
+        self._refresh_context_label()
+
+    def _refresh_context_label(self) -> None:
+        creator = self.workspace.selected_creator()
+        project = self.workspace.selected_project()
+        context = f"Creador: {creator.display_name if creator else 'ninguno'} | Proyecto: {project.name if project else 'ninguno'}"
+        if hasattr(self, "context_label"):
+            self.context_label.setText(context)
+        else:
+            self.context_label = QLabel(context)
+            self.context_label.setObjectName("MutedLabel")
+            self.statusBar().addPermanentWidget(self.context_label)
 
     def _refresh_gpu_state(self) -> None:
         gpu_devices = self.workspace.diagnostic.gpu_devices
@@ -247,6 +302,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(self._page_keys.index(key))
         self.status_label.setText(current_item.text())
         self._search_changed(self.search_edit.text())
+        self.workspace.set_last_page(key)
 
     def show_page(self, key: str) -> None:
         if key not in self._page_keys:
@@ -257,6 +313,7 @@ class MainWindow(QMainWindow):
             if item and item.data(Qt.ItemDataRole.UserRole) == key:
                 self.sidebar.setCurrentRow(row)
                 break
+        self.workspace.set_last_page(key)
 
     def _creator_changed(self) -> None:
         creator_id = self.creator_combo.currentData()
@@ -272,6 +329,8 @@ class MainWindow(QMainWindow):
         self.workspace.select_project(str(project_id))
         self.videos_view.refresh()
         self.projects_view.refresh()
+        self.workflow_view.refresh()
+        self.task_center_view.refresh()
 
     def _search_changed(self, text: str) -> None:
         current_key = self._page_keys[self.stack.currentIndex()]
@@ -292,3 +351,8 @@ class MainWindow(QMainWindow):
             self.personalization_view.refresh()
         elif current_key == "evaluation":
             self.evaluation_view.refresh()
+
+    def _open_preferences(self) -> None:
+        dialog = PreferencesDialog(self.workspace, self)
+        dialog.exec()
+        self.refresh_all()

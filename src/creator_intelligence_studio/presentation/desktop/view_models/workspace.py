@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from creator_intelligence_studio.application.services.audio_preparation_service import (
@@ -61,6 +62,11 @@ from creator_intelligence_studio.application.services.operational_evaluation_ser
     OperationalEvaluationComparisonReport,
     OperationalEvaluationService,
 )
+from creator_intelligence_studio.application.services.video_pipeline_service import (
+    VideoPipelineService,
+    VideoPipelineStatus,
+    VideoWorkflowStepResult,
+)
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
@@ -91,6 +97,10 @@ from .models import (
     SystemItemViewModel,
     VideoFiltersViewModel,
     VideoRowViewModel,
+)
+from creator_intelligence_studio.presentation.desktop.ui_state import (
+    BackgroundTaskRecord,
+    WorkspaceUiStateStore,
 )
 
 
@@ -340,10 +350,23 @@ class WorkspaceViewModel:
         self.diagnostic = diagnostic
         self.settings = settings
         self.paths = paths
-        self.selected_creator_id: str | None = None
-        self.selected_project_id: str | None = None
+        self.ui_state_store = WorkspaceUiStateStore(paths.data_directory / "workspace_ui_state.json")
+        self.ui_state = self.ui_state_store.load()
+        self.selected_creator_id: str | None = self.ui_state.active_creator_id
+        self.selected_project_id: str | None = self.ui_state.active_project_id
         self.selected_video_id: str | None = None
         self.activity_log: list[str] = []
+        self.pipeline_service = VideoPipelineService(
+            catalog_service=self.service,
+            media_service=self.media_service,
+            audio_service=self.audio_service,
+            transcription_service=self.transcription_service,
+            acoustic_service=self.acoustic_service,
+            visual_service=self.visual_service,
+            multimodal_service=self.multimodal_service,
+            clip_service=self.clip_service,
+            personalization_service=self.personalization_service,
+        )
         self._sync_default_selection()
 
     def _sync_default_selection(self) -> None:
@@ -353,13 +376,21 @@ class WorkspaceViewModel:
             self.selected_project_id = None
             self.selected_video_id = None
             return
-        if self.selected_creator_id not in {creator.id for creator in creators}:
-            active_creator = next((creator for creator in creators if creator.status == CreatorStatus.ACTIVE), creators[0])
-            self.selected_creator_id = active_creator.id
+        creator_ids = {creator.id for creator in creators}
+        if self.selected_creator_id not in creator_ids:
+            if self.ui_state.active_creator_id in creator_ids:
+                self.selected_creator_id = self.ui_state.active_creator_id
+            else:
+                active_creator = next((creator for creator in creators if creator.status == CreatorStatus.ACTIVE), creators[0])
+                self.selected_creator_id = active_creator.id
         projects = self.projects_for_selected_creator()
         if projects:
-            if self.selected_project_id not in {project.id for project in projects}:
-                self.selected_project_id = projects[0].id
+            project_ids = {project.id for project in projects}
+            if self.selected_project_id not in project_ids:
+                if self.ui_state.active_project_id in project_ids and self.selected_creator_id == self.ui_state.active_creator_id:
+                    self.selected_project_id = self.ui_state.active_project_id
+                else:
+                    self.selected_project_id = projects[0].id
         else:
             self.selected_project_id = None
         if self.selected_project_id is None:
@@ -367,6 +398,34 @@ class WorkspaceViewModel:
 
     def refresh(self) -> None:
         self._sync_default_selection()
+
+    def set_last_page(self, page_key: str) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, last_page=page_key)
+
+    def set_onboarding_seen(self, seen: bool) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, onboarding_seen=seen)
+
+    def set_technical_details_visible(self, visible: bool) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, show_technical_details=visible)
+
+    def set_transcription_preferences(self, *, device: str | None = None, profile: str | None = None) -> None:
+        changes: dict[str, object] = {}
+        if device is not None:
+            changes["preferred_transcription_device"] = device
+        if profile is not None:
+            changes["transcription_profile"] = profile
+        if changes:
+            self.ui_state = self.ui_state_store.update(self.ui_state, **changes)
+
+    def set_ranking_profile(self, profile: str) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, ranking_profile=profile)
+
+    def _persist_selection(self) -> None:
+        self.ui_state = self.ui_state_store.update(
+            self.ui_state,
+            active_creator_id=self.selected_creator_id,
+            active_project_id=self.selected_project_id,
+        )
 
     def creators(self):
         return self.service.list_creators()
@@ -387,12 +446,14 @@ class WorkspaceViewModel:
         projects = self.projects_for_selected_creator()
         self.selected_project_id = projects[0].id if projects else None
         self.selected_video_id = None
+        self._persist_selection()
 
     def select_project(self, project_id: str) -> None:
         project = self.service.get_project(project_id)
         self.selected_project_id = project.id
         self.selected_creator_id = project.creator_id
         self.selected_video_id = None
+        self._persist_selection()
 
     def select_video(self, video_id: str | None) -> None:
         self.selected_video_id = video_id
@@ -408,6 +469,7 @@ class WorkspaceViewModel:
         self.selected_project_id = None
         self.selected_video_id = None
         self._sync_default_selection()
+        self._persist_selection()
         return creator
 
     def archive_creator(self, creator_reference: str):
@@ -427,6 +489,7 @@ class WorkspaceViewModel:
         self.selected_creator_id = project.creator_id
         self.selected_project_id = project.id
         self.selected_video_id = None
+        self._persist_selection()
         return project
 
     def archive_project(self, project_id: str):
@@ -445,6 +508,7 @@ class WorkspaceViewModel:
         self.activity_log.insert(0, f"Video registrado: {video.title}")
         self.selected_project_id = project_id
         self.selected_video_id = video.id
+        self._persist_selection()
         return video
 
     def verify_video(self, video_id: str) -> VideoVerificationReport:
@@ -706,6 +770,133 @@ class WorkspaceViewModel:
             return None
         return self.service.get_video(self.selected_video_id)
 
+    def default_transcription_options(self) -> TranscriptionOptions:
+        return TranscriptionOptions(
+            profile=self.ui_state.transcription_profile,
+            device=self.ui_state.preferred_transcription_device,
+            model_name="small",
+        )
+
+    def video_pipeline_status(self, video_id: str) -> VideoPipelineStatus:
+        return self.pipeline_service.get_video_pipeline_status(video_id)
+
+    def run_pipeline_next_step(self, video_id: str, *, progress_callback=None) -> VideoWorkflowStepResult:
+        return self.pipeline_service.run_next_step(
+            video_id,
+            transcription_device=self.ui_state.preferred_transcription_device,
+            transcription_profile=self.ui_state.transcription_profile,
+            progress_callback=progress_callback,
+        )
+
+    def run_pipeline_until_ranking(self, video_id: str, *, progress_callback=None) -> list[VideoWorkflowStepResult]:
+        return self.pipeline_service.run_until_ranking(
+            video_id,
+            transcription_device=self.ui_state.preferred_transcription_device,
+            transcription_profile=self.ui_state.transcription_profile,
+            progress_callback=progress_callback,
+        )
+
+    def run_pipeline_group(self, video_id: str, group_name: str, *, progress_callback=None) -> list[VideoWorkflowStepResult]:
+        return self.pipeline_service.run_stage_group(
+            video_id,
+            group_name,
+            transcription_device=self.ui_state.preferred_transcription_device,
+            transcription_profile=self.ui_state.transcription_profile,
+            progress_callback=progress_callback,
+        )
+
+    def retry_pipeline_stage(self, video_id: str, stage_name: str, *, progress_callback=None) -> VideoWorkflowStepResult:
+        return self.pipeline_service.retry_stage(
+            video_id,
+            stage_name,
+            transcription_device=self.ui_state.preferred_transcription_device,
+            transcription_profile=self.ui_state.transcription_profile,
+            progress_callback=progress_callback,
+        )
+
+    def background_tasks(self) -> list[BackgroundTaskRecord]:
+        return list(self.ui_state.tasks)
+
+    def _update_tasks(self, tasks: tuple[BackgroundTaskRecord, ...]) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, tasks=tasks)
+
+    def register_background_task(
+        self,
+        *,
+        title: str,
+        status: str,
+        stage_name: str | None = None,
+        video_id: str | None = None,
+        video_title: str | None = None,
+        action_id: str | None = None,
+        progress_percent: float = 0.0,
+        message: str | None = None,
+        error: str | None = None,
+        cancellable: bool = True,
+        payload: dict[str, object] | None = None,
+    ) -> BackgroundTaskRecord:
+        from datetime import datetime, timezone
+        from uuid import uuid4
+
+        task = BackgroundTaskRecord(
+            task_id=str(uuid4()),
+            title=title,
+            status=status,
+            stage_name=stage_name,
+            video_id=video_id,
+            video_title=video_title,
+            action_id=action_id,
+            progress_percent=progress_percent,
+            message=message,
+            error=error,
+            cancellable=cancellable,
+            payload=payload or {},
+            created_at=to_iso_z(datetime.now(timezone.utc)),
+            updated_at=to_iso_z(datetime.now(timezone.utc)),
+        )
+        self._update_tasks(tuple(self.ui_state.tasks) + (task,))
+        return task
+
+    def update_background_task(self, task_id: str, **changes) -> BackgroundTaskRecord | None:
+        from datetime import datetime, timezone
+
+        updated: BackgroundTaskRecord | None = None
+        tasks: list[BackgroundTaskRecord] = []
+        now = to_iso_z(datetime.now(timezone.utc))
+        for task in self.ui_state.tasks:
+            if task.task_id == task_id:
+                updated = replace(task, updated_at=now, **changes)
+                tasks.append(updated)
+            else:
+                tasks.append(task)
+        if updated is not None:
+            self._update_tasks(tuple(tasks))
+        return updated
+
+    def complete_background_task(self, task_id: str, message: str | None = None) -> BackgroundTaskRecord | None:
+        from datetime import datetime, timezone
+
+        return self.update_background_task(
+            task_id,
+            status="completed",
+            progress_percent=100.0,
+            message=message,
+            completed_at=to_iso_z(datetime.now(timezone.utc)),
+        )
+
+    def fail_background_task(self, task_id: str, error: str) -> BackgroundTaskRecord | None:
+        return self.update_background_task(task_id, status="failed", error=error, message=error)
+
+    def interrupt_background_task(self, task_id: str, message: str | None = None) -> BackgroundTaskRecord | None:
+        from datetime import datetime, timezone
+
+        return self.update_background_task(
+            task_id,
+            status="interrupted",
+            message=message,
+            interrupted_at=to_iso_z(datetime.now(timezone.utc)),
+        )
+
     def dashboard_cards(self) -> list[CardViewModel]:
         creators = self.service.list_creators()
         projects = self.service.list_projects()
@@ -784,6 +975,47 @@ class WorkspaceViewModel:
                 accent="accent",
                 icon="↻",
             ),
+        ]
+
+    def dashboard_cards(self) -> list[CardViewModel]:
+        creators = self.service.list_creators()
+        projects = self.service.list_projects()
+        videos = [video for project in projects for video in self.service.list_videos(project.id)]
+        active_projects = [project for project in projects if project.status == ProjectStatus.ACTIVE]
+        pending_videos = [
+            video
+            for video in videos
+            if video.processing_status in {
+                VideoProcessingStatus.REGISTERED,
+                VideoProcessingStatus.QUEUED,
+                VideoProcessingStatus.PROCESSING,
+            }
+        ]
+        active_creator = self.selected_creator()
+        active_project = self.selected_project()
+        active_tasks = [task for task in self.background_tasks() if task.status in {"running", "pending", "interrupted"}]
+        readiness_value = "Sin dato"
+        readiness_detail = "No hay dataset disponible"
+        if active_creator and self.personalization_service is not None:
+            try:
+                readiness = self.get_creator_readiness(active_creator.id)
+                readiness_value = readiness.readiness_status.value
+                readiness_detail = f"Score: {readiness.readiness_score:.3f}"
+            except Exception:
+                readiness_value = "No disponible"
+                readiness_detail = "No se pudo evaluar"
+        return [
+            CardViewModel(title="Creador activo", value=active_creator.display_name if active_creator else "Ninguno", detail=active_creator.slug if active_creator else "Seleccione uno", icon="○"),
+            CardViewModel(title="Proyecto activo", value=active_project.name if active_project else "Ninguno", detail=active_project.project_type.value if active_project else "Seleccione uno", accent="accent_ml", icon="◧"),
+            CardViewModel(title="Proyectos activos", value=str(len(active_projects)), detail=f"Total de proyectos: {len(projects)}", accent="accent_ml", icon="◪"),
+            CardViewModel(title="Videos registrados", value=str(len(videos)), detail="Metadatos locales registrados", icon="▶"),
+            CardViewModel(title="Tareas activas", value=str(len(active_tasks)), detail="Workflow, transcripcion o evaluacion en segundo plano", accent="warning", icon="⏳"),
+            CardViewModel(title="Videos pendientes", value=str(len(pending_videos)), detail="Registrados, en cola o procesando", accent="warning", icon="⏳"),
+            CardViewModel(title="Personalizacion", value=readiness_value, detail=readiness_detail, accent="success" if readiness_value.startswith("ready") else "accent_ml", icon="λ"),
+            CardViewModel(title="Almacenamiento disponible", value=_humanize_bytes(self.paths.free_space_bytes()), detail="Espacio libre en la unidad del proyecto", icon="¤"),
+            CardViewModel(title="GPU detectada", value=self.diagnostic.gpu_devices[0].name if self.diagnostic.gpu_devices else "No verificada", detail=(f"VRAM: {self.diagnostic.gpu_devices[0].memory_total_mib / 1024:.1f} GiB" if self.diagnostic.gpu_devices and self.diagnostic.gpu_devices[0].memory_total_mib is not None else "VRAM no verificada"), accent="success" if self.diagnostic.gpu_devices else "warning", icon="◬"),
+            CardViewModel(title="Estado CUDA", value=(f"Detectada por el controlador: {self.diagnostic.cuda_version_reported}" if self.diagnostic.cuda_version_reported else "Detectada por el controlador: no verificado"), detail="Runtime: no verificado", accent="accent_ml", icon="↻"),
+            CardViewModel(title="Actividad reciente", value=self.activity_log[0] if self.activity_log else "Sin actividad reciente", detail=active_project.name if active_project else "Sin proyecto activo", accent="accent", icon="↻"),
         ]
 
     def system_items(self) -> list[SystemItemViewModel]:

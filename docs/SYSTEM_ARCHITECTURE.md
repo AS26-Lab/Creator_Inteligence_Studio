@@ -18,6 +18,7 @@ flowchart TD
 - Pantallas, navegacion y estado visual.
 - No contiene logica de negocio pesada.
 - Consume casos de uso expuestos por la capa de aplicacion.
+- Mantiene estado de interfaz, workflow guiado, preferencias y tareas persistidas.
 
 ### Aplicacion
 
@@ -25,6 +26,7 @@ flowchart TD
 - Valida comandos.
 - Orquesta jobs, cache, permisos y progresos.
 - Traduce entradas de UI en acciones del dominio.
+- Expone el pipeline status agregado por video, el task center y la persistencia de UI.
 
 ### Dominio
 
@@ -53,6 +55,7 @@ flowchart TD
 - `Artifact Store`
 - `Job Orchestrator`
 - `Analysis Pipeline`
+- `Workflow Shell`
 - `Insight Engine`
 - `Acoustic Analysis`
 - `Visual Analysis`
@@ -77,6 +80,15 @@ flowchart TD
 9. El cache se reutiliza si tamano, fecha de modificacion y fingerprints siguen vigentes.
 10. El resultado pasa a `stale` cuando el archivo cambia despues de la inspeccion, preparacion, transcripcion, analisis acustico, analisis visual o analisis multimodal.
 11. La UI solo consume resultados publicados por la capa de aplicacion.
+
+## Workflow shell de escritorio
+
+- `application/services/video_pipeline_service.py` agrega el estado publico de cada video sin duplicar la logica de los servicios base.
+- `presentation/desktop/ui_state.py` persiste la seleccion activa, la pagina actual, preferencias iniciales y tareas de fondo.
+- `presentation/desktop/views/workflow_view.py` presenta la accion recomendada, el progreso y las etapas del pipeline.
+- `presentation/desktop/views/task_center_view.py` expone tareas persistidas e interrupciones visibles al usuario.
+- `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
+- `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
 
 ## Jobs
 
@@ -253,6 +265,7 @@ La capa de dominio no importa `faster_whisper`, `ctranslate2`, Qt ni SQLite.
 - Los widgets no acceden a SQLite directamente.
 - La logica de negocio permanece en `domain/`, `application/` e `infrastructure/`.
 - La GUI expone un panel lateral contextual y una barra superior con seleccion de creador y proyecto.
+- El flujo principal se organiza alrededor de Home, Videos, Workflow, Task Center y Onboarding.
 
 ## Sistema visual
 

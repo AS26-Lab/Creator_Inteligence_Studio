@@ -496,6 +496,7 @@ class TranscriptionServiceTests(unittest.TestCase):
 
             fake_engine = FakeBackendEngine(backend_available=True, cancelable=True)
             model_manager = FakeModelManager(paths.models_directory)
+            model_manager.installed_models.add("small")
             service = TranscriptionService(
                 settings=settings,
                 paths=paths,

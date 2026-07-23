@@ -1,0 +1,128 @@
+"""Centro global de tareas en segundo plano."""
+
+from __future__ import annotations
+
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
+from creator_intelligence_studio.presentation.desktop.widgets.cards import EmptyStateWidget
+
+
+class TaskCenterView(QWidget):
+    """Lista tareas persistidas por la interfaz."""
+
+    def __init__(self, workspace: WorkspaceViewModel, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.workspace = workspace
+        self.refresh_button = QPushButton("Actualizar")
+        self.open_button = QPushButton("Abrir video")
+        self.cancel_button = QPushButton("Marcar interrumpida")
+        self.retry_button = QPushButton("Reintentar")
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(["Titulo", "Video", "Etapa", "Estado", "Progreso", "Mensaje", "Actualizada", "ID"])
+        self.table.setColumnHidden(7, True)
+        self.table.itemSelectionChanged.connect(self._selection_changed)
+        self.empty_state = EmptyStateWidget("Sin tareas", "Las tareas activas y persistidas aparecen aqui.")
+
+        title = QLabel("Task Center")
+        title.setObjectName("TitleLabel")
+        subtitle = QLabel("Seguimiento global de tareas en segundo plano y tareas interrumpidas.")
+        subtitle.setObjectName("MutedLabel")
+
+        actions = QHBoxLayout()
+        for widget in (self.refresh_button, self.open_button, self.cancel_button, self.retry_button):
+            actions.addWidget(widget)
+        actions.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addLayout(actions)
+        layout.addWidget(self.empty_state)
+        layout.addWidget(self.table)
+
+        self.refresh_button.clicked.connect(self.refresh)
+        self.open_button.clicked.connect(self._open_video)
+        self.cancel_button.clicked.connect(self._interrupt_task)
+        self.retry_button.clicked.connect(self._retry_task)
+
+    def _selected_task_id(self) -> str | None:
+        rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
+        if not rows:
+            return None
+        item = self.table.item(rows[0].row(), 7)
+        return item.text() if item else None
+
+    def _selected_task(self):
+        task_id = self._selected_task_id()
+        if not task_id:
+            return None
+        return next((task for task in self.workspace.background_tasks() if task.task_id == task_id), None)
+
+    def refresh(self) -> None:
+        tasks = self.workspace.background_tasks()
+        self.table.setRowCount(0)
+        if not tasks:
+            self.table.hide()
+            self.empty_state.show()
+            self.open_button.setEnabled(False)
+            self.cancel_button.setEnabled(False)
+            self.retry_button.setEnabled(False)
+            return
+        self.empty_state.hide()
+        self.table.show()
+        for row_index, task in enumerate(tasks):
+            self.table.insertRow(row_index)
+            values = [
+                task.title,
+                task.video_title or task.video_id or "",
+                task.stage_name or "",
+                task.status,
+                f"{task.progress_percent:.1f}%",
+                task.message or task.error or "",
+                task.updated_at,
+                task.task_id,
+            ]
+            for column, value in enumerate(values):
+                self.table.setItem(row_index, column, QTableWidgetItem(str(value)))
+        self.table.resizeColumnsToContents()
+        self._selection_changed()
+
+    def _selection_changed(self) -> None:
+        task = self._selected_task()
+        enabled = task is not None
+        self.open_button.setEnabled(enabled)
+        self.cancel_button.setEnabled(enabled and bool(getattr(task, "cancellable", True)))
+        self.retry_button.setEnabled(enabled)
+
+    def _open_video(self) -> None:
+        task = self._selected_task()
+        if task is None or task.video_id is None:
+            return
+        self.workspace.select_video(task.video_id)
+        QMessageBox.information(self, "Task Center", f"Video seleccionado: {task.video_title or task.video_id}")
+
+    def _interrupt_task(self) -> None:
+        task = self._selected_task()
+        if task is None:
+            return
+        self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        self.refresh()
+
+    def _retry_task(self) -> None:
+        task = self._selected_task()
+        if task is None:
+            return
+        if task.video_id:
+            self.workspace.select_video(task.video_id)
+        QMessageBox.information(self, "Task Center", "Abre el workflow del video para reintentar la etapa.")
+

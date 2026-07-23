@@ -18,6 +18,8 @@ class SystemView(QWidget):
         self.cards_container = QWidget(self)
         self.cards_layout = QGridLayout(self.cards_container)
         self.cards_layout.setSpacing(12)
+        self.health_label = QLabel()
+        self.health_label.setWordWrap(True)
         self.details_label = QLabel()
         self.details_label.setWordWrap(True)
 
@@ -29,6 +31,7 @@ class SystemView(QWidget):
         subtitle.setObjectName("MutedLabel")
         layout.addWidget(title)
         layout.addWidget(subtitle)
+        layout.addWidget(self.health_label)
         layout.addWidget(self.cards_container)
         layout.addWidget(self.details_label)
         layout.addStretch(1)
@@ -46,6 +49,29 @@ class SystemView(QWidget):
             item = self.cards_layout.takeAt(0)
             if widget := item.widget():
                 widget.deleteLater()
+        tools = self.workspace.media_tools()
+        ffmpeg_state = "Correcto" if tools.ffmpeg.available else "No disponible"
+        ffprobe_state = "Correcto" if tools.ffprobe.available else "No disponible"
+        if self.workspace.diagnostic.state.cuda_runtime_not_verified:
+            cuda_state = "No verificado"
+        elif self.workspace.diagnostic.cuda_driver_detected:
+            cuda_state = "Correcto"
+        else:
+            cuda_state = "Atencion"
+        db_state = "Correcto" if self.workspace.paths.database_path.exists() else "No disponible"
+        folders_state = "Correcto" if self.workspace.paths.data_directory.exists() else "No verificado"
+        self.health_label.setText(
+            "Estado general: "
+            + ", ".join(
+                [
+                    f"FFmpeg {ffmpeg_state}",
+                    f"FFprobe {ffprobe_state}",
+                    f"Base {db_state}",
+                    f"Carpetas {folders_state}",
+                    f"CUDA {cuda_state}",
+                ]
+            )
+        )
         for index, item in enumerate(self.workspace.system_items()):
             self.cards_layout.addWidget(
                 MetricCard(CardViewModel(title=item.label, value=item.value, detail="")),
