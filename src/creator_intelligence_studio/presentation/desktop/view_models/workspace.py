@@ -901,6 +901,31 @@ class WorkspaceViewModel:
                         payload=job.to_dict(),
                     )
                 )
+                try:
+                    deliveries = self.render_service.list_render_deliveries(job.id)
+                except Exception:
+                    deliveries = []
+                for delivery in deliveries:
+                    tasks.append(
+                        BackgroundTaskRecord(
+                            task_id=delivery.id,
+                            title="Entrega de subtitulos" if delivery.subtitle_mode.value != "burn_in" else "Render con subtitulos",
+                            status=delivery.status.value,
+                            stage_name=delivery.status.value,
+                            video_id=job.video_asset_id,
+                            video_title=video_title,
+                            action_id=delivery.subtitle_track_id,
+                            progress_percent=delivery.progress_percent,
+                            message=delivery.warning_message or delivery.error_message or delivery.status.value,
+                            error=delivery.error_message,
+                            cancellable=delivery.status.value in {"queued", "validating", "preparing", "rendering", "verifying"},
+                            created_at=to_iso_z(delivery.created_at),
+                            updated_at=to_iso_z(delivery.updated_at),
+                            interrupted_at=to_iso_z(delivery.cancelled_at) if delivery.status.value == "interrupted" else None,
+                            completed_at=to_iso_z(delivery.completed_at),
+                            payload={"delivery": delivery.to_dict(), "kind": "subtitle_delivery"},
+                        )
+                    )
         return sorted(tasks, key=lambda item: item.updated_at, reverse=True)
 
     def _update_tasks(self, tasks: tuple[BackgroundTaskRecord, ...]) -> None:
@@ -1542,6 +1567,16 @@ class WorkspaceViewModel:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.render_capabilities()
 
+    def render_subtitle_capabilities(self):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.render_subtitle_capabilities()
+
+    def render_subtitle_styles(self):
+        if self.render_service is None:
+            return []
+        return self.render_service.render_subtitle_styles()
+
     def render_profiles(self):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
@@ -1560,6 +1595,36 @@ class WorkspaceViewModel:
             allow_overwrite=allow_overwrite,
             custom_name=custom_name,
             collection_id=collection_id,
+        )
+
+    def create_sidecar_delivery(self, job_id: str, track_id: str, *, format_name: str = "srt", output: str | None = None, allow_stale: bool = False, allow_overwrite: bool = False, custom_name: str | None = None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.create_sidecar_delivery(
+            job_id,
+            track_id,
+            format_name=format_name,
+            output=output,
+            allow_stale=allow_stale,
+            allow_overwrite=allow_overwrite,
+            custom_name=custom_name,
+        )
+
+    def create_burn_in_render(self, candidate_id: str, track_id: str, *, profile: str = "balanced", style: str = "clean", output: str | None = None, output_root_override: str | None = None, allow_stale: bool = False, allow_overwrite: bool = False, custom_name: str | None = None, progress_callback=None, cancellation_token=None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.create_burn_in_render(
+            candidate_id,
+            track_id,
+            profile=profile,
+            style_preset=style,
+            output=output,
+            output_root_override=output_root_override,
+            allow_stale=allow_stale,
+            allow_overwrite=allow_overwrite,
+            custom_name=custom_name,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
         )
 
     def render_candidate(self, candidate_id: str, *, profile: str = "balanced", output: str | None = None, output_root_override: str | None = None, explicit: bool = False, allow_stale: bool = False, allow_overwrite: bool = False, custom_name: str | None = None, collection_id: str | None = None, progress_callback=None, cancellation_token=None):
@@ -1602,6 +1667,26 @@ class WorkspaceViewModel:
         if self.render_service is None:
             return []
         return self.render_service.list_render_jobs()
+
+    def get_delivery(self, delivery_id: str):
+        if self.render_service is None:
+            return None
+        return self.render_service.get_delivery(delivery_id)
+
+    def list_render_deliveries(self, job_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_render_deliveries(job_id)
+
+    def list_candidate_deliveries(self, candidate_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_candidate_deliveries(candidate_id)
+
+    def list_video_deliveries(self, video_id: str):
+        if self.render_service is None:
+            return []
+        return self.render_service.list_video_deliveries(video_id)
 
     def list_candidate_renders(self, candidate_id: str):
         if self.render_service is None:
@@ -1653,6 +1738,11 @@ class WorkspaceViewModel:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.verify_render(job_id)
 
+    def verify_delivery(self, delivery_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.verify_delivery(delivery_id)
+
     def cancel_render(self, job_id: str):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
@@ -1669,6 +1759,11 @@ class WorkspaceViewModel:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.cancel_render_batch(batch_id)
 
+    def cancel_delivery(self, delivery_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.cancel_delivery(delivery_id)
+
     def retry_render(self, job_id: str, *, progress_callback=None, cancellation_token=None):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
@@ -1679,20 +1774,40 @@ class WorkspaceViewModel:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.retry_render_batch(batch_id, progress_callback=progress_callback, cancellation_token=cancellation_token)
 
+    def retry_delivery(self, delivery_id: str, *, progress_callback=None, cancellation_token=None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.retry_delivery(delivery_id, progress_callback=progress_callback, cancellation_token=cancellation_token)
+
     def delete_render_artifact(self, job_id: str):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.delete_render_artifact(job_id)
+
+    def delete_delivery(self, delivery_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.delete_delivery(delivery_id)
 
     def reveal_render_output(self, job_id: str):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.reveal_render_output(job_id)
 
+    def reveal_delivery(self, delivery_id: str):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.reveal_delivery(delivery_id)
+
     def export_render_plan(self, job_id: str, destination: str | None = None):
         if self.render_service is None:
             raise RuntimeError("El servicio de render no esta disponible.")
         return self.render_service.export_render_plan(job_id, destination=destination)
+
+    def export_delivery_manifest(self, delivery_id: str, destination: str | None = None):
+        if self.render_service is None:
+            raise RuntimeError("El servicio de render no esta disponible.")
+        return self.render_service.export_delivery_manifest(delivery_id, destination=destination)
 
     def generate_video_subtitles(self, video_id: str, *, custom_name: str | None = None, force: bool = False):
         if self.subtitle_service is None:

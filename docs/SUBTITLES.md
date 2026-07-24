@@ -16,7 +16,6 @@ It does not:
 
 - translate automatically;
 - perform diarization;
-- burn subtitles into video yet;
 - replace the transcription engine;
 - auto-correct creator wording or tone.
 
@@ -112,11 +111,18 @@ Manual cue editing stays interactive and local.
 
 The workflow can surface an optional next action such as preparing subtitles, but subtitles are not required for analysis, ranking, personalization, or clip rendering.
 
+## Deliveries
+
+Subtitle tracks can also feed clip deliveries:
+
+- sidecar SRT or VTT keeps the clip MP4 unchanged;
+- burn-in creates a new MP4 with embedded subtitles;
+- both modes snapshot the subtitle track version and fingerprint used for the render.
+
 ## Limitations
 
-- No burned-in subtitles yet.
+- No subtitle editor with full video editing yet.
 - No translation yet.
 - No live playback editor yet.
 - No automatic content rewriting.
 - No automatic profanity replacement.
-

@@ -46,7 +46,7 @@ It shows:
 The aggregated status does not duplicate core analysis logic.
 
 Rendering is optional and local. It becomes available after review when a clip is approved or explicitly selected, but it does not replace the personalization workflow.
-Subtitle preparation is also optional. It can follow a transcription or a clip review, but it does not change the source transcription and it is not required for ranking, personalization, or rendering without subtitles.
+Subtitle preparation is also optional. It can follow a transcription or a clip review, but it does not change the source transcription and it is not required for ranking, personalization, or rendering without subtitles. When the user wants delivery with subtitles, the system can produce a sidecar file or a new burn-in MP4 from the chosen track.
 
 ## Task Center
 
@@ -87,7 +87,7 @@ The initial UX preferences are local and reversible:
 ## Limitations
 
 - This workflow does not render clips.
-- This workflow does not burn subtitles into clips yet.
+- This workflow does not require subtitles for the main pipeline, although subtitle delivery is available as a separate optional step.
 - This workflow does not auto-train a model.
 - A successful run proves technical coherence, not predictive or commercial quality.
 - Existing data is not moved automatically when a new folder preference is selected.

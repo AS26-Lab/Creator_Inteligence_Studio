@@ -57,6 +57,42 @@ class ClipRenderArtifactType(str, Enum):
     OUTPUT = "output"
     PLAN = "plan"
     MANIFEST = "manifest"
+    SUBTITLE_SRT = "subtitle_srt"
+    SUBTITLE_VTT = "subtitle_vtt"
+    DELIVERY_MANIFEST = "delivery_manifest"
+    BURN_IN_SOURCE_ASS = "burn_in_source_ass"
+    TECHNICAL_LOG = "technical_log"
+
+
+class SubtitleRenderMode(str, Enum):
+    NONE = "none"
+    SIDECAR_SRT = "sidecar_srt"
+    SIDECAR_VTT = "sidecar_vtt"
+    BURN_IN = "burn_in"
+
+
+class SubtitleRenderStylePreset(str, Enum):
+    CLEAN = "clean"
+    HIGH_CONTRAST = "high_contrast"
+    COMPACT = "compact"
+    SOCIAL_SAFE = "social_safe"
+
+
+class ClipRenderDeliveryStatus(str, Enum):
+    QUEUED = "queued"
+    PREPARING = "preparing"
+    RENDERING = "rendering"
+    VERIFYING = "verifying"
+    COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
+    STALE = "stale"
+    OUTPUT_EXISTS = "output_exists"
+    INVALID_TRACK = "invalid_track"
+    SOURCE_MISSING = "source_missing"
+    BOUNDS_MISMATCH = "bounds_mismatch"
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +134,82 @@ class ClipRenderProfileConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ClipRenderSubtitleStyle:
+    """Estilo declarativo para render con subtitulos."""
+
+    preset: SubtitleRenderStylePreset
+    font_family: str
+    font_size: int
+    primary_color: str
+    outline_color: str
+    outline_width: int
+    shadow: int
+    bold: bool
+    alignment: int
+    margin_left: int
+    margin_right: int
+    margin_vertical: int
+    safe_area: int
+    background_box: bool
+    max_lines: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "preset": self.preset.value,
+            "font_family": self.font_family,
+            "font_size": self.font_size,
+            "primary_color": self.primary_color,
+            "outline_color": self.outline_color,
+            "outline_width": self.outline_width,
+            "shadow": self.shadow,
+            "bold": self.bold,
+            "alignment": self.alignment,
+            "margin_left": self.margin_left,
+            "margin_right": self.margin_right,
+            "margin_vertical": self.margin_vertical,
+            "safe_area": self.safe_area,
+            "background_box": self.background_box,
+            "max_lines": self.max_lines,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ClipRenderSubtitleConfig:
+    """Bloque inmutable de subtitulos para un render o delivery."""
+
+    mode: SubtitleRenderMode
+    track_id: str | None
+    track_version: int | None
+    fingerprint: str | None
+    format: str | None
+    style_preset: SubtitleRenderStylePreset | None
+    style: ClipRenderSubtitleStyle | None
+    expected_cue_count: int | None
+    stale_acknowledged: bool
+    temporary_ass_path: str | None
+    sidecar_output_path: str | None
+    source_export_path: str | None
+    source_export_fingerprint: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "mode": self.mode.value,
+            "track_id": self.track_id,
+            "track_version": self.track_version,
+            "fingerprint": self.fingerprint,
+            "format": self.format,
+            "style_preset": self.style_preset.value if self.style_preset else None,
+            "style": self.style.to_dict() if self.style else None,
+            "expected_cue_count": self.expected_cue_count,
+            "stale_acknowledged": self.stale_acknowledged,
+            "temporary_ass_path": self.temporary_ass_path,
+            "sidecar_output_path": self.sidecar_output_path,
+            "source_export_path": self.source_export_path,
+            "source_export_fingerprint": self.source_export_fingerprint,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ClipRenderPlan:
     """Plan inmutable para ejecutar un render."""
 
@@ -132,6 +244,7 @@ class ClipRenderPlan:
     expected_width: int | None
     expected_height: int | None
     expected_audio: bool
+    subtitle_config: ClipRenderSubtitleConfig | None
     configuration_fingerprint: str
     renderer_version: str
     custom_name: str | None = None
@@ -169,6 +282,7 @@ class ClipRenderPlan:
             "expected_width": self.expected_width,
             "expected_height": self.expected_height,
             "expected_audio": self.expected_audio,
+            "subtitle_config": self.subtitle_config.to_dict() if self.subtitle_config else None,
             "configuration_fingerprint": self.configuration_fingerprint,
             "renderer_version": self.renderer_version,
             "custom_name": self.custom_name,

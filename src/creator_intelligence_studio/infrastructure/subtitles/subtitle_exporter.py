@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderSubtitleStyle, SubtitleRenderStylePreset
 from creator_intelligence_studio.domain.subtitles.entities import SubtitleCue, SubtitleExport, SubtitleTrack
 from creator_intelligence_studio.domain.subtitles.errors import SubtitleExportError
 from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleExportFormat
@@ -45,13 +46,20 @@ def _format_ass_timestamp(seconds: float) -> str:
 
 
 class SubtitleExporter:
-    def export(self, track: SubtitleTrack, cues: list[SubtitleCue], format: SubtitleExportFormat) -> str:
+    def export(
+        self,
+        track: SubtitleTrack,
+        cues: list[SubtitleCue],
+        format: SubtitleExportFormat,
+        *,
+        style: ClipRenderSubtitleStyle | None = None,
+    ) -> str:
         if format == SubtitleExportFormat.SRT:
             return self._export_srt(cues)
         if format == SubtitleExportFormat.VTT:
             return self._export_vtt(cues)
         if format == SubtitleExportFormat.ASS:
-            return self._export_ass(track, cues)
+            return self._export_ass(track, cues, style=style)
         if format == SubtitleExportFormat.TXT:
             return self._export_txt(cues)
         if format == SubtitleExportFormat.JSON:
@@ -75,7 +83,32 @@ class SubtitleExporter:
             lines.append("")
         return "\n".join(lines).strip() + "\n"
 
-    def _export_ass(self, track: SubtitleTrack, cues: list[SubtitleCue]) -> str:
+    @staticmethod
+    def _escape_ass_text(text: str) -> str:
+        return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
+
+    def _export_ass(self, track: SubtitleTrack, cues: list[SubtitleCue], *, style: ClipRenderSubtitleStyle | None = None) -> str:
+        style = style or ClipRenderSubtitleStyle(
+            preset=SubtitleRenderStylePreset.CLEAN,
+            font_family="Arial",
+            font_size=48,
+            primary_color="&H00FFFFFF",
+            outline_color="&H00000000",
+            outline_width=2,
+            shadow=0,
+            bold=False,
+            alignment=2,
+            margin_left=40,
+            margin_right=40,
+            margin_vertical=40,
+            safe_area=10,
+            background_box=False,
+            max_lines=2,
+        )
+        primary_color = style.primary_color
+        if not primary_color.startswith("&H"):
+            primary_color = "&H00FFFFFF"
+        outline_color = style.outline_color if style.outline_color.startswith("&H") else "&H00000000"
         lines = [
             "[Script Info]",
             "ScriptType: v4.00+",
@@ -84,13 +117,19 @@ class SubtitleExporter:
             "",
             "[V4+ Styles]",
             "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
-            "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,40,1",
+            (
+                "Style: Default,"
+                f"{style.font_family},{style.font_size},{primary_color},&H000000FF,{outline_color},"
+                f"{'&H64000000' if style.background_box else '&H00000000'},{1 if style.bold else 0},0,0,0,100,100,0,0,"
+                f"{1 if style.background_box else 1},{max(1, style.outline_width)},{style.shadow},{style.alignment},"
+                f"{style.margin_left},{style.margin_right},{style.margin_vertical},1"
+            ),
             "",
             "[Events]",
             "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
         ]
         for cue in cues:
-            text = cue.text.replace("\n", r"\N")
+            text = self._escape_ass_text(cue.text)
             lines.append(
                 f"Dialogue: 0,{_format_ass_timestamp(cue.start_seconds)},{_format_ass_timestamp(cue.end_seconds)},Default,,0,0,0,,{text}"
             )
@@ -109,4 +148,3 @@ class SubtitleExporter:
             "exported_at": utc_now().isoformat(),
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
-

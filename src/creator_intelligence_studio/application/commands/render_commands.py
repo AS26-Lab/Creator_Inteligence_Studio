@@ -16,11 +16,44 @@ class RenderProfilesCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class RenderSubtitlesCapabilitiesCommand:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class RenderSubtitlesStylesCommand:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class RenderCandidateCommand:
     candidate_id: str
     profile: str = "balanced"
     output: str | None = None
     explicit: bool = False
+    allow_stale: bool = False
+    allow_overwrite: bool = False
+    custom_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RenderSidecarCommand:
+    job_id: str
+    track_id: str
+    format: str = "srt"
+    output: str | None = None
+    allow_stale: bool = False
+    allow_overwrite: bool = False
+    custom_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RenderBurnInCommand:
+    candidate_id: str
+    track_id: str
+    profile: str = "balanced"
+    style: str = "clean"
+    output: str | None = None
     allow_stale: bool = False
     allow_overwrite: bool = False
     custom_name: str | None = None
@@ -85,4 +118,40 @@ class RetryRenderBatchCommand:
 class ExportRenderPlanCommand:
     job_id: str
     format: str = "json"
+    output: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ShowRenderDeliveryCommand:
+    delivery_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ListRenderDeliveriesCommand:
+    job_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class VerifyRenderDeliveryCommand:
+    delivery_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CancelRenderDeliveryCommand:
+    delivery_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class RetryRenderDeliveryCommand:
+    delivery_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteRenderDeliveryCommand:
+    delivery_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExportRenderDeliveryManifestCommand:
+    delivery_id: str
     output: str | None = None

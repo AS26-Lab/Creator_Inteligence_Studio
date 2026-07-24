@@ -168,6 +168,7 @@ flowchart LR
 - historial de cambios;
 - colecciones locales de clips;
 - render local de clips aprobados o seleccionados desde el candidato o la coleccion;
+- entregas de subtitulos sidecar o burn-in asociadas al render de clip;
 - historial de renders y acceso al output verificado desde Task Center;
 - exportacion JSON, CSV y EDL tecnico;
 - stale y recalculo sin perder feedback humano.

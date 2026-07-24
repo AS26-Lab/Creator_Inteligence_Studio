@@ -252,7 +252,7 @@ Campos principales:
 - `size_bytes`
 - `verified_at`
 
-`subtitle_tracks` conserva tracks versionados y enlaza cada pista con su transcripcion origen y, cuando aplica, con un candidato de clip o un render job. `subtitle_cues` conserva cues ordenados de forma estable. `subtitle_edit_events` registra ediciones y restauraciones sin sobrescribir el historial previo. `subtitle_exports` conserva exportaciones verificadas y su fingerprint.
+`subtitle_tracks` conserva tracks versionados y enlaza cada pista con su transcripcion origen y, cuando aplica, con un candidato de clip o un render job. `subtitle_cues` conserva cues ordenados de forma estable. `subtitle_edit_events` registra ediciones y restauraciones sin sobrescribir el historial previo. `subtitle_exports` conserva exportaciones verificadas y su fingerprint. La migracion v14 agrega `clip_render_deliveries` y `clip_render_delivery_artifacts` para sidecar y burn-in sin alterar el render historico.
 
 La capa de subtitulos mantiene separada la transcripcion original del texto editorial, soporta tracks de video completo o de clip, y no convierte las preferencias de segmentacion en una reescritura automatica de contenido.
 

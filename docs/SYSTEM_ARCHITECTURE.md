@@ -94,6 +94,9 @@ flowchart TD
 - `presentation/desktop/views/task_center_view.py` expone tareas persistidas e interrupciones visibles al usuario.
 - `presentation/desktop/views/clip_ranking_view.py` expone el flujo de render local y de colecciones sobre candidatos aprobados.
 - `presentation/desktop/views/subtitle_editor_view.py` expone generacion, edicion, importacion y exportacion de subtitulos.
+- `presentation/desktop/views/clip_ranking_view.py` y `presentation/desktop/views/task_center_view.py` tambien exponen entregas de subtitulos sidecar o burn-in como tareas persistidas.
+- `application/services/clip_rendering_service.py` coordina jobs de render, entregas de subtitulos, manifests y verificacion de salida.
+- `infrastructure/clip_rendering/subtitle_rendering.py` centraliza estilos, escape ASS y hashes de configuracion de subtitulos.
 - `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
 - `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
 

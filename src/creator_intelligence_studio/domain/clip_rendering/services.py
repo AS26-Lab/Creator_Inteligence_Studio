@@ -11,7 +11,17 @@ from creator_intelligence_studio.domain.clip_ranking.value_objects import ClipRa
 from creator_intelligence_studio.domain.videos.entities import VideoAsset
 
 from .errors import ClipRenderStateError, ClipRenderValidationError
-from .value_objects import ClipRenderProfile, ClipRenderProfileConfig, ClipRenderJobStatus, ClipRenderBatchStatus, validate_render_bounds
+from .value_objects import (
+    ClipRenderProfile,
+    ClipRenderProfileConfig,
+    ClipRenderJobStatus,
+    ClipRenderBatchStatus,
+    ClipRenderSubtitleStyle,
+    ClipRenderSubtitleConfig,
+    SubtitleRenderMode,
+    SubtitleRenderStylePreset,
+    validate_render_bounds,
+)
 
 
 def _json_dumps(payload: dict[str, object]) -> str:
@@ -110,6 +120,7 @@ def build_render_configuration_fingerprint(
     expected_height: int | None,
     expected_audio: bool,
     renderer_version: str,
+    subtitle_config: ClipRenderSubtitleConfig | None = None,
 ) -> str:
     payload = {
         "profile": profile.value,
@@ -119,7 +130,15 @@ def build_render_configuration_fingerprint(
         "expected_audio": expected_audio,
         "renderer_version": renderer_version,
     }
+    if subtitle_config is not None and subtitle_config.mode != SubtitleRenderMode.NONE:
+        payload["subtitle_config"] = subtitle_config.to_dict()
     return hashlib.sha256(_json_dumps(payload).encode("utf-8")).hexdigest()
+
+
+def build_subtitle_style_fingerprint(style: ClipRenderSubtitleStyle | None) -> str | None:
+    if style is None:
+        return None
+    return hashlib.sha256(_json_dumps(style.to_dict()).encode("utf-8")).hexdigest()
 
 
 def build_source_fingerprint(video: VideoAsset, candidate: RankedClipCandidate | None, *, collection_id: str | None = None) -> str:

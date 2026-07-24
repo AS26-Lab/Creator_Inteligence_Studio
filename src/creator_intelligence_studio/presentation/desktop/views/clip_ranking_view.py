@@ -68,6 +68,8 @@ class RenderClipThread(QThread):
         workspace: WorkspaceViewModel,
         *,
         candidate_id: str | None = None,
+        subtitle_track_id: str | None = None,
+        subtitle_style: str = "clean",
         collection_id: str | None = None,
         profile: str = "balanced",
         output: str | None = None,
@@ -80,6 +82,8 @@ class RenderClipThread(QThread):
         super().__init__()
         self.workspace = workspace
         self.candidate_id = candidate_id
+        self.subtitle_track_id = subtitle_track_id
+        self.subtitle_style = subtitle_style
         self.collection_id = collection_id
         self.profile = profile
         self.output = output
@@ -98,6 +102,18 @@ class RenderClipThread(QThread):
                     output_root=self.output_root,
                     explicit=self.explicit,
                     allow_stale=self.allow_stale,
+                )
+            elif self.subtitle_track_id is not None and self.candidate_id is not None:
+                report = self.workspace.create_burn_in_render(
+                    self.candidate_id,
+                    self.subtitle_track_id,
+                    profile=self.profile,
+                    style=self.subtitle_style,
+                    output_root_override=self.output_root,
+                    allow_stale=self.allow_stale,
+                    allow_overwrite=self.allow_overwrite,
+                    custom_name=self.custom_name,
+                    progress_callback=lambda phase, ratio, _payload: self.progress_ready.emit(phase, float(ratio or 0.0)),
                 )
             elif self.candidate_id is not None:
                 report = self.workspace.render_candidate(
@@ -149,6 +165,11 @@ class ClipRankingView(QWidget):
         self.profile_combo.addItems(["balanced", "speech-focused", "visual-focused", "high-energy", "story-beats"])
         self.render_profile_combo = QComboBox()
         self.render_profile_combo.addItems(["balanced", "source_quality", "compact", "draft"])
+        self.subtitle_track_combo = QComboBox()
+        self.subtitle_format_combo = QComboBox()
+        self.subtitle_format_combo.addItems(["srt", "vtt"])
+        self.subtitle_style_combo = QComboBox()
+        self.subtitle_style_combo.addItems(["clean", "high_contrast", "compact", "social_safe"])
         self.render_name_edit = QLineEdit()
         self.render_name_edit.setPlaceholderText("Nombre de salida opcional")
         self.render_folder_edit = QLineEdit()
@@ -166,6 +187,8 @@ class ClipRankingView(QWidget):
         self.delete_button = QPushButton("Eliminar ranking")
         self.render_button = QPushButton("Renderizar clip")
         self.render_collection_button = QPushButton("Renderizar colección")
+        self.sidecar_button = QPushButton("Sidecar")
+        self.burn_in_button = QPushButton("Burn-in")
 
         self.approve_button = QPushButton("Aprobar")
         self.reject_button = QPushButton("Rechazar")
@@ -209,6 +232,18 @@ class ClipRankingView(QWidget):
         render_row.addWidget(self.render_collection_button)
         render_row.addStretch(1)
 
+        subtitle_row = QHBoxLayout()
+        subtitle_row.addWidget(QLabel("Subtitulos"))
+        subtitle_row.addWidget(QLabel("Track"))
+        subtitle_row.addWidget(self.subtitle_track_combo)
+        subtitle_row.addWidget(QLabel("Formato"))
+        subtitle_row.addWidget(self.subtitle_format_combo)
+        subtitle_row.addWidget(QLabel("Estilo"))
+        subtitle_row.addWidget(self.subtitle_style_combo)
+        subtitle_row.addWidget(self.sidecar_button)
+        subtitle_row.addWidget(self.burn_in_button)
+        subtitle_row.addStretch(1)
+
         actions = QHBoxLayout()
         for widget in (
             self.approve_button,
@@ -234,6 +269,7 @@ class ClipRankingView(QWidget):
         layout.addWidget(subtitle)
         layout.addLayout(top)
         layout.addLayout(render_row)
+        layout.addLayout(subtitle_row)
         layout.addLayout(actions)
         layout.addWidget(self.status_label)
         layout.addWidget(self.stale_label)
@@ -253,6 +289,8 @@ class ClipRankingView(QWidget):
         self.delete_button.clicked.connect(self._delete)
         self.render_button.clicked.connect(self._render_candidate)
         self.render_collection_button.clicked.connect(self._render_collection)
+        self.sidecar_button.clicked.connect(self._render_sidecar)
+        self.burn_in_button.clicked.connect(self._render_burn_in)
         self.approve_button.clicked.connect(self._approve)
         self.reject_button.clicked.connect(self._reject)
         self.shortlist_button.clicked.connect(self._shortlist)
@@ -269,6 +307,23 @@ class ClipRankingView(QWidget):
     def _selected_video_id(self) -> str | None:
         video = self.workspace.selected_video()
         return video.id if video else None
+
+    def _refresh_subtitle_tracks(self, video_id: str | None) -> None:
+        self.subtitle_track_combo.blockSignals(True)
+        self.subtitle_track_combo.clear()
+        if video_id is None:
+            self.subtitle_track_combo.addItem("Sin video", None)
+            self.subtitle_track_combo.blockSignals(False)
+            return
+        tracks = self.workspace.list_video_subtitle_tracks(video_id)
+        for track in tracks:
+            label = f"{track.name} ({track.status.value})"
+            if getattr(track, "language", None):
+                label = f"{label} [{track.language}]"
+            self.subtitle_track_combo.addItem(label, track.id)
+        if self.subtitle_track_combo.count() == 0:
+            self.subtitle_track_combo.addItem("Sin tracks", None)
+        self.subtitle_track_combo.blockSignals(False)
 
     def _selected_candidate_id(self) -> str | None:
         rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
@@ -294,10 +349,12 @@ class ClipRankingView(QWidget):
             self.summary_label.setText("Candidatos no disponibles")
             self.detail.clear()
             self.table.setRowCount(0)
+            self._refresh_subtitle_tracks(None)
             self.phase_label.setText("Listo")
             self.progress_bar.setValue(0)
             self.progress_label.setText("0%")
             return
+        self._refresh_subtitle_tracks(video_id)
         report = self.workspace.get_ranking_run(video_id)
         self._render_report(report)
 
@@ -486,6 +543,65 @@ class ClipRankingView(QWidget):
             output_root=output_root,
             custom_name=self.render_name_edit.text().strip() or None,
             explicit=True,
+        )
+        self._render_thread.result_ready.connect(self._render_finished)
+        self._render_thread.error_ready.connect(self._render_failed)
+        self._render_thread.progress_ready.connect(self._render_progress)
+        self._render_thread.finished.connect(self._render_thread.deleteLater)
+        self._render_thread.start()
+
+    def _selected_subtitle_track_id(self) -> str | None:
+        return self.subtitle_track_combo.currentData()
+
+    def _render_sidecar(self) -> None:
+        candidate = self._current_candidate()
+        track_id = self._selected_subtitle_track_id()
+        if candidate is None or track_id is None:
+            QMessageBox.information(self, "Clip ranking", "Selecciona un candidato y un track primero.")
+            return
+        renders = self.workspace.list_candidate_renders(candidate.id)
+        if not renders:
+            QMessageBox.information(self, "Clip ranking", "No existe un render base para generar sidecar.")
+            return
+        render = max(renders, key=lambda item: item.updated_at)
+        try:
+            report = self.workspace.create_sidecar_delivery(
+                render.id,
+                track_id,
+                format_name=self.subtitle_format_combo.currentText(),
+                allow_stale=False,
+                allow_overwrite=False,
+            )
+        except DomainError as exc:
+            QMessageBox.critical(self, "Clip ranking", str(exc))
+            return
+        QMessageBox.information(self, "Clip ranking", "Sidecar generado.")
+        self.detail.setPlainText(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+
+    def _render_burn_in(self) -> None:
+        candidate = self._current_candidate()
+        track_id = self._selected_subtitle_track_id()
+        if candidate is None or track_id is None:
+            QMessageBox.information(self, "Clip ranking", "Selecciona un candidato y un track primero.")
+            return
+        if self._render_thread is not None and self._render_thread.isRunning():
+            return
+        profile = self.render_profile_combo.currentText()
+        style = self.subtitle_style_combo.currentText()
+        self.phase_label.setText("Renderizando con subtitulos")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("0%")
+        self._render_thread = RenderClipThread(
+            self.workspace,
+            candidate_id=candidate.id,
+            subtitle_track_id=track_id,
+            subtitle_style=style,
+            profile=profile,
+            output_root=self.render_folder_edit.text().strip() or None,
+            explicit=candidate.review_status.value == "needs_review",
+            allow_stale=False,
+            allow_overwrite=False,
+            custom_name=self.render_name_edit.text().strip() or None,
         )
         self._render_thread.result_ready.connect(self._render_finished)
         self._render_thread.error_ready.connect(self._render_failed)

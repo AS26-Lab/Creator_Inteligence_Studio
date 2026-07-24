@@ -234,7 +234,13 @@ python -m creator_intelligence_studio subtitles merge --first-cue-id <first_cue_
 python -m creator_intelligence_studio subtitles import --video-id <video_id> --file "C:\ruta\subtitles.srt"
 python -m creator_intelligence_studio subtitles export --track-id <track_id> --format srt
 python -m creator_intelligence_studio subtitles history --track-id <track_id>
+python -m creator_intelligence_studio render subtitles capabilities --json
+python -m creator_intelligence_studio render subtitles styles --json
+python -m creator_intelligence_studio render sidecar --job-id <job_id> --track-id <track_id> --format srt
+python -m creator_intelligence_studio render burn-in --candidate-id <candidate_id> --track-id <track_id>
 ```
+
+Subtitle deliveries remain local and verifiable. Sidecar keeps the MP4 unchanged and adds a subtitle file plus manifest; burn-in creates a new MP4 with embedded subtitles. See [`docs/SUBTITLE_DELIVERIES.md`](docs/SUBTITLE_DELIVERIES.md).
 
 Los subtitulos locales son una capa editorial separada de la transcripcion. Los cambios sobre subtitulos no reescriben la transcripcion original.
 

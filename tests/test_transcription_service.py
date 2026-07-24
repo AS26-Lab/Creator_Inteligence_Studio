@@ -72,9 +72,10 @@ def write_wav(path: Path, *, seconds: float = 1.0, sample_rate: int = 16000) -> 
 
 
 class FakeBackendEngine:
-    def __init__(self, *, backend_available: bool = True, cancelable: bool = False) -> None:
+    def __init__(self, *, backend_available: bool = True, cancelable: bool = False, delay_seconds: float = 0.05) -> None:
         self.backend_available = backend_available
         self.cancelable = cancelable
+        self.delay_seconds = delay_seconds
         self.released = 0
 
     def verify_backend(self):
@@ -107,7 +108,7 @@ class FakeBackendEngine:
     ) -> TranscriptionResult:
         segments = []
         if self.cancelable:
-            time.sleep(0.05)
+            time.sleep(self.delay_seconds)
             if cancellation_token is not None and cancellation_token.cancelled():
                 raise TranscriptionBackendError("La transcripcion fue cancelada por el usuario.")
         for index, (start, end, text) in enumerate(((0.0, 1.0, "hola"), (1.0, 2.0, "mundo"))):
@@ -494,7 +495,7 @@ class TranscriptionServiceTests(unittest.TestCase):
             )
             prepared_audio_repository.upsert(prepared_audio)
 
-            fake_engine = FakeBackendEngine(backend_available=True, cancelable=True)
+            fake_engine = FakeBackendEngine(backend_available=True, cancelable=True, delay_seconds=0.2)
             model_manager = FakeModelManager(paths.models_directory)
             model_manager.installed_models.add("small")
             service = TranscriptionService(
@@ -518,7 +519,7 @@ class TranscriptionServiceTests(unittest.TestCase):
 
             thread = threading.Thread(target=run_transcription)
             thread.start()
-            time.sleep(0.01)
+            time.sleep(0.1)
             self.assertTrue(service.cancel_transcription(video.id))
             thread.join(timeout=5)
 

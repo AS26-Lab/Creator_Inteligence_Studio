@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass, replace
@@ -13,18 +14,24 @@ from uuid import uuid4
 from creator_intelligence_studio.application.services.catalog_service import CatalogService
 from creator_intelligence_studio.application.services.clip_ranking_service import ClipRankingService
 from creator_intelligence_studio.application.services.media_inspection_service import MediaInspectionService, VideoInspectionReport
+from creator_intelligence_studio.application.services.subtitle_service import SubtitleService, SubtitleTrackReport
 from creator_intelligence_studio.domain.clip_ranking.entities import ClipCollection, ClipCollectionItem, RankedClipCandidate
 from creator_intelligence_studio.domain.clip_ranking.value_objects import ClipRankingReviewStatus
-from creator_intelligence_studio.domain.clip_rendering.entities import ClipRenderArtifact, ClipRenderBatch, ClipRenderBatchItem, ClipRenderEvent, ClipRenderJob
+from creator_intelligence_studio.domain.clip_rendering.entities import ClipRenderArtifact, ClipRenderBatch, ClipRenderBatchItem, ClipRenderDelivery, ClipRenderDeliveryArtifact, ClipRenderEvent, ClipRenderJob
 from creator_intelligence_studio.domain.clip_rendering.errors import ClipRenderCapabilityError, ClipRenderExecutionError, ClipRenderStateError, ClipRenderValidationError
 from creator_intelligence_studio.domain.clip_rendering.repositories import ClipRenderRepository
 from creator_intelligence_studio.domain.clip_rendering.services import build_source_fingerprint, candidate_is_eligible_for_render, normalize_render_profile, render_profile_config
 from creator_intelligence_studio.domain.clip_rendering.value_objects import (
     ClipRenderArtifactType,
     ClipRenderBatchStatus,
+    ClipRenderDeliveryStatus,
     ClipRenderJobStatus,
     ClipRenderPlan,
     ClipRenderProfile,
+    ClipRenderSubtitleConfig,
+    ClipRenderSubtitleStyle,
+    SubtitleRenderMode,
+    SubtitleRenderStylePreset,
     RenderOutputVerification,
 )
 from creator_intelligence_studio.domain.errors import NotFoundError
@@ -33,10 +40,16 @@ from creator_intelligence_studio.domain.videos.entities import VideoAsset
 from creator_intelligence_studio.infrastructure.clip_rendering.encoding_capability_detector import EncodingCapabilityDetector, EncodingCapabilityReport
 from creator_intelligence_studio.infrastructure.clip_rendering.ffmpeg_clip_renderer import CancelToken, ClipRenderExecutionResult, FFmpegClipRenderer
 from creator_intelligence_studio.infrastructure.clip_rendering.filename_builder import build_render_filename, build_render_output_path, sanitize_filename_component
+from creator_intelligence_studio.infrastructure.clip_rendering.subtitle_rendering import build_delivery_manifest, resolve_subtitle_style
 from creator_intelligence_studio.infrastructure.clip_rendering.render_output_verifier import RenderOutputVerifier
 from creator_intelligence_studio.infrastructure.clip_rendering.render_plan_builder import build_render_plan
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
+from creator_intelligence_studio.infrastructure.subtitles.subtitle_exporter import SubtitleExporter
+from creator_intelligence_studio.infrastructure.subtitles.subtitle_importer import SubtitleImporter
+from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleExportFormat
+from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleGenerationOptions
+from creator_intelligence_studio.domain.subtitles.value_objects import SubtitleTrackStatus
 from creator_intelligence_studio.shared.dates import utc_now
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -79,6 +92,28 @@ class ClipRenderBatchReport:
         return {
             "batch": self.batch.to_dict(),
             "jobs": [job.to_dict() for job in self.jobs],
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ClipRenderDeliveryReport:
+    delivery: ClipRenderDelivery
+    job: ClipRenderJob | None
+    artifacts: tuple[ClipRenderDeliveryArtifact, ...]
+    verification: RenderOutputVerification | None
+    reused_output: bool
+    warnings: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "delivery": self.delivery.to_dict(),
+            "job": self.job.to_dict() if self.job else None,
+            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
+            "verification": self.verification.to_dict() if self.verification else None,
+            "reused_output": self.reused_output,
             "warnings": list(self.warnings),
             "errors": list(self.errors),
         }
@@ -128,6 +163,7 @@ class ClipRenderService:
         media_service: MediaInspectionService,
         clip_service: ClipRankingService,
         repository: ClipRenderRepository,
+        subtitle_service: SubtitleService | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self.settings = settings
@@ -136,14 +172,18 @@ class ClipRenderService:
         self.media_service = media_service
         self.clip_service = clip_service
         self.repository = repository
+        self.subtitle_service = subtitle_service
         self.logger = logger or logging.getLogger("creator_intelligence_studio.clip_rendering")
         self._output_root = self.paths.project_root / "exports" / "clips"
+        self._delivery_root_path = self.paths.project_root / "exports" / "deliveries"
         tools = MediaToolLocator(settings=settings, project_root=paths.project_root).discover()
         ffmpeg_path = Path(tools.ffmpeg.path) if tools.ffmpeg.available and tools.ffmpeg.path else None
         ffprobe_path = Path(tools.ffprobe.path) if tools.ffprobe.available and tools.ffprobe.path else None
         self._renderer = FFmpegClipRenderer(ffmpeg_path)
         self._verifier = RenderOutputVerifier(ffprobe_path)
         self._capabilities = EncodingCapabilityDetector(ffmpeg_path)
+        self._subtitle_exporter = SubtitleExporter()
+        self._subtitle_importer = SubtitleImporter()
         self._recover_interrupted_jobs()
 
     def render_capabilities(self) -> EncodingCapabilityReport:
@@ -205,6 +245,36 @@ class ClipRenderService:
 
     def _source_duration_seconds(self, report: VideoInspectionReport | None) -> float | None:
         return report.summary.duration_seconds if report and report.summary else None
+
+    def _delivery_root(self, creator_slug: str, project_slug: str) -> Path:
+        root = self._delivery_root_path / sanitize_filename_component(creator_slug, fallback="creator") / sanitize_filename_component(project_slug, fallback="project")
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    def _subtitle_track_report(self, track_id: str) -> SubtitleTrackReport:
+        if self.subtitle_service is None:
+            raise ClipRenderCapabilityError("El servicio de subtitulos no esta disponible.")
+        report = self.subtitle_service.get_subtitle_track(track_id)
+        if report.track is None:
+            raise ClipRenderStateError("El track de subtitulos no existe.")
+        return report
+
+    def _subtitle_style(self, preset: SubtitleRenderStylePreset) -> ClipRenderSubtitleStyle:
+        return resolve_subtitle_style(preset)
+
+    def render_subtitle_capabilities(self) -> dict[str, object]:
+        capabilities = self.render_capabilities()
+        payload = capabilities.to_dict()
+        payload.update(
+            {
+                "sidecar_available": True,
+                "burn_in_available": bool(capabilities.burn_in_available),
+            }
+        )
+        return payload
+
+    def render_subtitle_styles(self) -> tuple[dict[str, object], ...]:
+        return tuple(resolve_subtitle_style(preset).to_dict() for preset in SubtitleRenderStylePreset)
 
     def _render_root(self, creator_slug: str, project_slug: str) -> Path:
         root = self._output_root / sanitize_filename_component(creator_slug, fallback="creator") / sanitize_filename_component(project_slug, fallback="project")
@@ -270,7 +340,53 @@ class ClipRenderService:
         updated = replace(job, updated_at=utc_now(), **changes)
         return self._persist_job(updated)
 
+    def _delivery_subtitle_config(self, delivery: ClipRenderDelivery) -> ClipRenderSubtitleConfig:
+        style = None
+        if delivery.style_json:
+            try:
+                payload = json.loads(delivery.style_json)
+            except json.JSONDecodeError:
+                payload = {}
+            if isinstance(payload, dict):
+                try:
+                    style = ClipRenderSubtitleStyle(
+                        preset=SubtitleRenderStylePreset(payload.get("preset", SubtitleRenderStylePreset.CLEAN.value)),
+                        font_family=str(payload.get("font_family") or "Arial"),
+                        font_size=int(payload.get("font_size") or 48),
+                        primary_color=str(payload.get("primary_color") or "&H00FFFFFF"),
+                        outline_color=str(payload.get("outline_color") or "&H00000000"),
+                        outline_width=int(payload.get("outline_width") or 2),
+                        shadow=int(payload.get("shadow") or 0),
+                        bold=bool(payload.get("bold", False)),
+                        alignment=int(payload.get("alignment") or 2),
+                        margin_left=int(payload.get("margin_left") or 40),
+                        margin_right=int(payload.get("margin_right") or 40),
+                        margin_vertical=int(payload.get("margin_vertical") or 40),
+                        safe_area=int(payload.get("safe_area") or 10),
+                        background_box=bool(payload.get("background_box", False)),
+                        max_lines=int(payload.get("max_lines") or 2),
+                    )
+                except Exception:
+                    style = None
+        return ClipRenderSubtitleConfig(
+            mode=delivery.subtitle_mode,
+            track_id=delivery.subtitle_track_id,
+            track_version=delivery.subtitle_track_version,
+            fingerprint=delivery.subtitle_track_fingerprint,
+            format=delivery.subtitle_format,
+            style_preset=delivery.style_preset,
+            style=style,
+            expected_cue_count=delivery.expected_cue_count,
+            stale_acknowledged=bool(delivery.status in {ClipRenderDeliveryStatus.COMPLETED, ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS}),
+            temporary_ass_path=None,
+            sidecar_output_path=delivery.output_path,
+            source_export_path=delivery.source_export_path,
+            source_export_fingerprint=delivery.source_export_fingerprint,
+        )
+
     def _current_plan(self, job: ClipRenderJob) -> ClipRenderPlan:
+        delivery = self.repository.list_deliveries_for_job(job.id)
+        subtitle_config = self._delivery_subtitle_config(delivery[0]) if delivery else None
         return ClipRenderPlan(
             job_id=job.id,
             video_asset_id=job.video_asset_id,
@@ -303,6 +419,7 @@ class ClipRenderService:
             expected_width=job.width,
             expected_height=job.height,
             expected_audio=job.audio_codec is not None,
+            subtitle_config=subtitle_config,
             configuration_fingerprint=job.configuration_fingerprint,
             renderer_version=job.renderer_version,
             custom_name=None,
@@ -338,6 +455,7 @@ class ClipRenderService:
         candidate: RankedClipCandidate,
         collection_item: ClipCollectionItem | None,
         profile: ClipRenderProfile,
+        subtitle_config: ClipRenderSubtitleConfig | None,
         output: str | Path | None,
         output_root_override: str | Path | None,
         custom_name: str | None,
@@ -385,6 +503,7 @@ class ClipRenderService:
             candidate=candidate,
             collection_item=collection_item,
             profile=profile,
+            subtitle_config=subtitle_config,
             source_duration_seconds=source_duration_seconds,
             output_root=output_root,
             output_path=output_path,
@@ -398,6 +517,7 @@ class ClipRenderService:
         candidate_id: str,
         *,
         profile: str | ClipRenderProfile = "balanced",
+        subtitle_config: ClipRenderSubtitleConfig | None = None,
         output: str | Path | None = None,
         output_root_override: str | Path | None = None,
         explicit: bool = False,
@@ -414,6 +534,7 @@ class ClipRenderService:
             candidate=candidate,
             collection_item=collection_item,
             profile=normalized_profile,
+            subtitle_config=subtitle_config,
             output=output,
             output_root_override=output_root_override,
             custom_name=custom_name,
@@ -437,6 +558,7 @@ class ClipRenderService:
         candidate_id: str,
         *,
         profile: str | ClipRenderProfile = "balanced",
+        subtitle_config: ClipRenderSubtitleConfig | None = None,
         output: str | Path | None = None,
         output_root_override: str | Path | None = None,
         explicit: bool = False,
@@ -455,6 +577,7 @@ class ClipRenderService:
             candidate=candidate,
             collection_item=collection_item,
             profile=normalized_profile,
+            subtitle_config=subtitle_config,
             output=output,
             output_root_override=output_root_override,
             custom_name=custom_name,
@@ -491,6 +614,7 @@ class ClipRenderService:
         job = self.create_render_job(
             candidate_id,
             profile=normalized_profile,
+            subtitle_config=subtitle_config,
             output=output,
             output_root_override=output_root_override,
             explicit=explicit,
@@ -577,6 +701,536 @@ class ClipRenderService:
             job = self._update_job(job, status=ClipRenderJobStatus.FAILED, progress_percent=job.progress_percent, error_code="verification_failed", error_message="; ".join(verification.errors) or "La verificacion fallo.", completed_at=utc_now())
             self._append_event(job.id, "failed", job.progress_percent, "La verificacion fallo.", {"errors": list(verification.errors)})
         return ClipRenderOperationReport(job=job, plan=plan, verification=verification, artifact=artifact, reused_output=False, warnings=verification.warnings, errors=verification.errors)
+
+    def _delivery_context(self, job: ClipRenderJob) -> tuple[VideoAsset, str, str, Path]:
+        video = self._require_video(job.video_asset_id)
+        creator_slug, project_slug = self._require_creator_and_project(video)
+        root = self._delivery_root(creator_slug, project_slug) / sanitize_filename_component(video.title, fallback="video")
+        root.mkdir(parents=True, exist_ok=True)
+        return video, creator_slug, project_slug, root
+
+    def _delivery_configuration_fingerprint(
+        self,
+        *,
+        job: ClipRenderJob,
+        subtitle_track: ClipRenderSubtitleConfig,
+        output_path: Path,
+        manifest_path: Path | None,
+    ) -> str:
+        payload = {
+            "job_configuration_fingerprint": job.configuration_fingerprint,
+            "job_id": job.id,
+            "subtitle_track": subtitle_track.to_dict(),
+            "output_path": str(output_path),
+            "manifest_path": str(manifest_path) if manifest_path else None,
+            "delivery_version": "v1",
+        }
+        return hashlib.sha256(_json_dumps(payload).encode("utf-8")).hexdigest()
+
+    def _persist_delivery(self, delivery: ClipRenderDelivery) -> ClipRenderDelivery:
+        return self.repository.upsert_delivery(delivery)
+
+    def _persist_delivery_artifact(self, artifact: ClipRenderDeliveryArtifact) -> ClipRenderDeliveryArtifact:
+        return self.repository.upsert_delivery_artifact(artifact)
+
+    def _delivery_artifact(self, delivery_id: str, artifact_type: ClipRenderArtifactType, path: Path, *, verified: bool, verification: dict[str, object] | None = None) -> ClipRenderDeliveryArtifact:
+        return ClipRenderDeliveryArtifact(
+            id=str(uuid4()),
+            delivery_id=delivery_id,
+            artifact_type=artifact_type,
+            managed_path=str(path),
+            fingerprint=self._fingerprint_file(path) if path.exists() else "",
+            size_bytes=path.stat().st_size if path.exists() else None,
+            verified=verified,
+            verification_json=_json_dumps(verification or {}),
+            created_at=utc_now(),
+        )
+
+    def _fingerprint_file(self, path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _write_manifest(self, delivery: ClipRenderDelivery, *, output_path: Path, subtitle_track: SubtitleTrackReport, job: ClipRenderJob, style: ClipRenderSubtitleStyle | None) -> Path:
+        manifest_path = Path(delivery.manifest_path or output_path.with_name(f"{output_path.stem}.delivery.json"))
+        payload = {
+            "manifest_version": 1,
+            "delivery": delivery.to_dict(),
+            "job": job.to_dict(),
+            "subtitle_track": subtitle_track.track.to_dict() if subtitle_track.track else None,
+            "warnings": list(subtitle_track.warnings),
+            "errors": list(subtitle_track.errors),
+            "style": style.to_dict() if style else None,
+            "outputs": {
+                "video": str(output_path) if output_path.suffix.lower() == ".mp4" else None,
+                "subtitle": delivery.output_path,
+                "manifest": str(manifest_path),
+            },
+            "created_at": utc_now().isoformat(),
+        }
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        temp = manifest_path.with_name(f"{manifest_path.stem}.part{manifest_path.suffix}")
+        temp.write_text(build_delivery_manifest(payload), encoding="utf-8")
+        temp.replace(manifest_path)
+        return manifest_path
+
+    def _build_delivery_record(
+        self,
+        *,
+        job: ClipRenderJob,
+        subtitle_track: SubtitleTrackReport,
+        subtitle_config: ClipRenderSubtitleConfig,
+        output_path: Path,
+        manifest_path: Path | None,
+        status: ClipRenderDeliveryStatus,
+        warning_code: str | None = None,
+        warning_message: str | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        retry_count: int = 0,
+        rendered_cue_count: int | None = None,
+    ) -> ClipRenderDelivery:
+        return ClipRenderDelivery(
+            id=str(uuid4()),
+            render_job_id=job.id,
+            subtitle_track_id=subtitle_track.track.id if subtitle_track.track else None,
+            subtitle_track_version=subtitle_track.track.track_version if subtitle_track.track else None,
+            subtitle_track_fingerprint=subtitle_track.track.configuration_fingerprint if subtitle_track.track else None,
+            subtitle_mode=subtitle_config.mode,
+            subtitle_format=subtitle_config.format,
+            style_preset=subtitle_config.style_preset,
+            style_json=_json_dumps(subtitle_config.style.to_dict()) if subtitle_config.style else "{}",
+            source_export_path=subtitle_config.source_export_path,
+            source_export_fingerprint=subtitle_config.source_export_fingerprint,
+            expected_cue_count=subtitle_config.expected_cue_count or 0,
+            rendered_cue_count=rendered_cue_count or 0,
+            output_path=str(output_path),
+            manifest_path=str(manifest_path) if manifest_path else None,
+            configuration_fingerprint=self._delivery_configuration_fingerprint(
+                job=job,
+                subtitle_track=subtitle_config,
+                output_path=output_path,
+                manifest_path=manifest_path,
+            ),
+            status=status,
+            progress_percent=100.0 if status in {ClipRenderDeliveryStatus.COMPLETED, ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS} else 0.0,
+            warning_code=warning_code,
+            warning_message=warning_message,
+            error_code=error_code,
+            error_message=error_message,
+            retry_count=retry_count,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+            completed_at=utc_now() if status in {ClipRenderDeliveryStatus.COMPLETED, ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS} else None,
+            cancelled_at=None,
+        )
+
+    def create_sidecar_delivery(
+        self,
+        job_id: str,
+        track_id: str,
+        *,
+        format_name: str = "srt",
+        output: str | Path | None = None,
+        allow_stale: bool = False,
+        allow_overwrite: bool = False,
+        explicit: bool = False,
+        custom_name: str | None = None,
+    ) -> ClipRenderDeliveryReport:
+        if self.subtitle_service is None:
+            raise ClipRenderCapabilityError("El servicio de subtitulos no esta disponible.")
+        job = self.repository.get_job_by_id(job_id)
+        if job is None:
+            raise NotFoundError("El render solicitado no existe.")
+        track_report = self._subtitle_track_report(track_id)
+        if track_report.validation and track_report.validation.blocking_errors:
+            raise ClipRenderStateError("El track de subtitulos contiene errores bloqueantes.")
+        if track_report.is_stale and not allow_stale:
+            raise ClipRenderStateError("El track de subtitulos esta desactualizado y requiere confirmacion.")
+        if job.ranked_clip_candidate_id and track_report.track.ranked_clip_candidate_id not in {None, job.ranked_clip_candidate_id}:
+            raise ClipRenderStateError("El track de subtitulos pertenece a otro candidato.")
+        if track_report.track.status == SubtitleTrackStatus.ARCHIVED:
+            raise ClipRenderStateError("El track de subtitulos esta archivado.")
+        format_enum = SubtitleExportFormat(format_name)
+        video, _, _, delivery_root = self._delivery_context(job)
+        base_name = sanitize_filename_component(custom_name or Path(job.output_path).stem, fallback="delivery")
+        delivery_dir = delivery_root / base_name
+        delivery_dir.mkdir(parents=True, exist_ok=True)
+        output_path = Path(output) if output is not None else delivery_dir / f"{base_name}.{format_enum.value}"
+        manifest_path = delivery_dir / "delivery.json"
+        if output_path.exists() and not allow_overwrite:
+            raise ClipRenderStateError("La salida de subtitulos ya existe.")
+        if allow_overwrite:
+            output_path.unlink(missing_ok=True)
+            manifest_path.unlink(missing_ok=True)
+        export_result = self.subtitle_service.export_subtitles(track_id, format_enum, output=output_path, custom_name=custom_name)
+        verification = RenderOutputVerification(
+            verified=export_result.verified,
+            output_path=export_result.path,
+            size_bytes=Path(export_result.path).stat().st_size if Path(export_result.path).exists() else None,
+            duration_seconds=None,
+            video_codec=None,
+            audio_codec=None,
+            width=None,
+            height=None,
+            frame_rate=None,
+            audio_sample_rate=None,
+            fingerprint=export_result.fingerprint,
+            warnings=tuple(track_report.validation.warnings if track_report.validation else ()),
+            errors=tuple(track_report.validation.blocking_errors if track_report.validation else ()),
+            details={"round_trip": True, "format": format_enum.value},
+        )
+        subtitle_config = ClipRenderSubtitleConfig(
+            mode=SubtitleRenderMode.SIDECAR_SRT if format_enum == SubtitleExportFormat.SRT else SubtitleRenderMode.SIDECAR_VTT,
+            track_id=track_report.track.id,
+            track_version=track_report.track.track_version,
+            fingerprint=track_report.track.configuration_fingerprint,
+            format=format_enum.value,
+            style_preset=None,
+            style=None,
+            expected_cue_count=len(track_report.cues),
+            stale_acknowledged=track_report.is_stale,
+            temporary_ass_path=None,
+            sidecar_output_path=str(output_path),
+            source_export_path=export_result.path,
+            source_export_fingerprint=export_result.fingerprint,
+        )
+        delivery = self._build_delivery_record(
+            job=job,
+            subtitle_track=track_report,
+            subtitle_config=subtitle_config,
+            output_path=output_path,
+            manifest_path=manifest_path,
+            status=ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS if verification.warnings else ClipRenderDeliveryStatus.COMPLETED,
+            warning_code="warnings" if verification.warnings else None,
+            warning_message="; ".join(verification.warnings) if verification.warnings else None,
+            rendered_cue_count=len(track_report.cues),
+        )
+        manifest_path = self._write_manifest(delivery, output_path=Path(job.output_path), subtitle_track=track_report, job=job, style=None)
+        delivery = replace(delivery, manifest_path=str(manifest_path), updated_at=utc_now())
+        delivery = self._persist_delivery(delivery)
+        artifacts = (
+            self._persist_delivery_artifact(
+                self._delivery_artifact(delivery.id, ClipRenderArtifactType.SUBTITLE_SRT if format_enum == SubtitleExportFormat.SRT else ClipRenderArtifactType.SUBTITLE_VTT, Path(export_result.path), verified=verification.verified, verification=verification.to_dict())
+            ),
+            self._persist_delivery_artifact(
+                self._delivery_artifact(delivery.id, ClipRenderArtifactType.DELIVERY_MANIFEST, manifest_path, verified=True, verification={"manifest": True})
+            ),
+        )
+        return ClipRenderDeliveryReport(delivery=delivery, job=job, artifacts=artifacts, verification=verification, reused_output=False, warnings=verification.warnings, errors=verification.errors)
+
+    def create_burn_in_render(
+        self,
+        candidate_id: str,
+        track_id: str,
+        *,
+        profile: str | ClipRenderProfile = "balanced",
+        style_preset: str | SubtitleRenderStylePreset = SubtitleRenderStylePreset.CLEAN,
+        output: str | Path | None = None,
+        output_root_override: str | Path | None = None,
+        explicit: bool = True,
+        allow_stale: bool = False,
+        allow_overwrite: bool = False,
+        custom_name: str | None = None,
+        renderer_version: str = "v1",
+        progress_callback: RenderProgressCallback | None = None,
+        cancellation_token: CancelToken | None = None,
+    ) -> ClipRenderDeliveryReport:
+        if self.subtitle_service is None:
+            raise ClipRenderCapabilityError("El servicio de subtitulos no esta disponible.")
+        candidate = self._require_candidate(candidate_id)
+        track_report = self._subtitle_track_report(track_id)
+        if track_report.validation and track_report.validation.blocking_errors:
+            raise ClipRenderStateError("El track de subtitulos contiene errores bloqueantes.")
+        if track_report.track is None:
+            raise NotFoundError("El track de subtitulos no existe.")
+        if track_report.track.ranked_clip_candidate_id not in {None, candidate.id}:
+            raise ClipRenderStateError("El track de subtitulos pertenece a otro candidato.")
+        if track_report.is_stale and not allow_stale:
+            raise ClipRenderStateError("El track de subtitulos esta desactualizado y requiere confirmacion.")
+        normalized_profile = normalize_render_profile(profile.value if isinstance(profile, ClipRenderProfile) else str(profile))
+        preset = SubtitleRenderStylePreset(style_preset.value if isinstance(style_preset, SubtitleRenderStylePreset) else str(style_preset))
+        style = self._subtitle_style(preset)
+        video = self._require_video(self.clip_service.get_ranking_run(candidate.ranking_run_id).video_asset_id)
+        creator_slug, project_slug = self._require_creator_and_project(video)
+        delivery_root = self._delivery_root(creator_slug, project_slug) / sanitize_filename_component(video.title, fallback="video")
+        delivery_root.mkdir(parents=True, exist_ok=True)
+        base_name = sanitize_filename_component(custom_name or video.title or "subtitled", fallback="delivery")
+        delivery_dir = delivery_root / base_name
+        delivery_dir.mkdir(parents=True, exist_ok=True)
+        ass_path = delivery_dir / f"{base_name}.ass"
+        delivery_output = Path(output) if output is not None else delivery_dir / f"{base_name}_subtitled.mp4"
+        if delivery_output.exists() and not allow_overwrite:
+            raise ClipRenderStateError("La salida final ya existe.")
+        ass_content = self._subtitle_exporter.export(track_report.track, list(track_report.cues), SubtitleExportFormat.ASS, style=style)
+        ass_path.write_text(ass_content, encoding="utf-8")
+        subtitle_config = ClipRenderSubtitleConfig(
+            mode=SubtitleRenderMode.BURN_IN,
+            track_id=track_report.track.id,
+            track_version=track_report.track.track_version,
+            fingerprint=track_report.track.configuration_fingerprint,
+            format=SubtitleExportFormat.ASS.value,
+            style_preset=preset,
+            style=style,
+            expected_cue_count=len(track_report.cues),
+            stale_acknowledged=track_report.is_stale,
+            temporary_ass_path=str(ass_path),
+            sidecar_output_path=None,
+            source_export_path=str(ass_path),
+            source_export_fingerprint=hashlib.sha256(ass_content.encode("utf-8")).hexdigest(),
+        )
+        report = self.render_candidate(
+            candidate.id,
+            profile=normalized_profile,
+            subtitle_config=subtitle_config,
+            output=delivery_output,
+            output_root_override=output_root_override or delivery_root,
+            explicit=explicit,
+            allow_stale=allow_stale,
+            allow_overwrite=allow_overwrite,
+            custom_name=custom_name or "subtitled",
+            renderer_version=renderer_version,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
+        )
+        if report.job.status == ClipRenderJobStatus.CANCELLED:
+            ass_path.unlink(missing_ok=True)
+            if delivery_output.exists():
+                delivery_output.unlink(missing_ok=True)
+            cancelled_delivery = self._build_delivery_record(
+                job=report.job,
+                subtitle_track=track_report,
+                subtitle_config=subtitle_config,
+                output_path=delivery_output,
+                manifest_path=None,
+                status=ClipRenderDeliveryStatus.CANCELLED,
+                warning_code="cancelled",
+                warning_message="Render cancelado por el usuario.",
+                error_code="cancelled",
+                error_message="Render cancelado por el usuario.",
+                rendered_cue_count=0,
+            )
+            cancelled_delivery = replace(cancelled_delivery, updated_at=utc_now())
+            cancelled_delivery = self._persist_delivery(cancelled_delivery)
+            return ClipRenderDeliveryReport(
+                delivery=cancelled_delivery,
+                job=report.job,
+                artifacts=(),
+                verification=None,
+                reused_output=False,
+                warnings=(),
+                errors=("Render cancelado.",),
+            )
+        manifest_path = delivery_dir / "delivery.json"
+        delivery = self._build_delivery_record(
+            job=report.job,
+            subtitle_track=track_report,
+            subtitle_config=subtitle_config,
+            output_path=delivery_output,
+            manifest_path=manifest_path,
+            status=ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS if report.warnings else ClipRenderDeliveryStatus.COMPLETED,
+            warning_code="warnings" if report.warnings else None,
+            warning_message="; ".join(report.warnings) if report.warnings else None,
+            error_code="failed" if report.errors else None,
+            error_message="; ".join(report.errors) if report.errors else None,
+            rendered_cue_count=len(track_report.cues),
+        )
+        manifest_path = self._write_manifest(delivery, output_path=delivery_output, subtitle_track=track_report, job=report.job, style=style)
+        delivery = replace(delivery, manifest_path=str(manifest_path), updated_at=utc_now())
+        delivery = self._persist_delivery(delivery)
+        artifacts = (
+            self._persist_delivery_artifact(self._delivery_artifact(delivery.id, ClipRenderArtifactType.OUTPUT, delivery_output, verified=bool(report.verification and report.verification.verified), verification=report.verification.to_dict() if report.verification else {})),
+            self._persist_delivery_artifact(self._delivery_artifact(delivery.id, ClipRenderArtifactType.BURN_IN_SOURCE_ASS, ass_path, verified=True, verification={"ass": True})),
+            self._persist_delivery_artifact(self._delivery_artifact(delivery.id, ClipRenderArtifactType.DELIVERY_MANIFEST, manifest_path, verified=True, verification={"manifest": True})),
+        )
+        return ClipRenderDeliveryReport(delivery=delivery, job=report.job, artifacts=artifacts, verification=report.verification, reused_output=report.reused_output, warnings=report.warnings, errors=report.errors)
+
+    def get_delivery(self, delivery_id: str) -> ClipRenderDelivery | None:
+        return self.repository.get_delivery_by_id(delivery_id)
+
+    def list_render_deliveries(self, job_id: str) -> list[ClipRenderDelivery]:
+        return self.repository.list_deliveries_for_job(job_id)
+
+    def list_candidate_deliveries(self, candidate_id: str) -> list[ClipRenderDelivery]:
+        return self.repository.list_deliveries_for_candidate(candidate_id)
+
+    def list_video_deliveries(self, video_asset_id: str) -> list[ClipRenderDelivery]:
+        return self.repository.list_deliveries_for_video(video_asset_id)
+
+    def verify_delivery(self, delivery_id: str) -> ClipRenderDeliveryReport:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None:
+            raise NotFoundError("La entrega solicitada no existe.")
+        job = self.repository.get_job_by_id(delivery.render_job_id)
+        if job is None:
+            raise NotFoundError("El job asociado a la entrega no existe.")
+        artifacts = tuple(self.repository.list_delivery_artifacts_for_delivery(delivery.id))
+        subtitle_track = self._subtitle_track_report(delivery.subtitle_track_id) if delivery.subtitle_track_id else None
+        if delivery.subtitle_mode == SubtitleRenderMode.BURN_IN:
+            verification = self._verifier.verify(self._current_plan(job), Path(delivery.output_path or job.output_path))
+        else:
+            output = Path(delivery.output_path or "")
+            if not output.exists() or output.stat().st_size <= 0:
+                verification = RenderOutputVerification(
+                    verified=False,
+                    output_path=str(output),
+                    size_bytes=output.stat().st_size if output.exists() else None,
+                    duration_seconds=None,
+                    video_codec=None,
+                    audio_codec=None,
+                    width=None,
+                    height=None,
+                    frame_rate=None,
+                    audio_sample_rate=None,
+                    fingerprint=None,
+                    warnings=(),
+                    errors=("La salida de subtitulos no existe o esta vacia.",),
+                    details={"delivery_id": delivery.id},
+                )
+            else:
+                try:
+                    parsed = self._subtitle_importer.import_file(output, format=SubtitleExportFormat(delivery.subtitle_format or "srt"), options=SubtitleGenerationOptions())
+                except Exception as exc:
+                    verification = RenderOutputVerification(
+                        verified=False,
+                        output_path=str(output),
+                        size_bytes=output.stat().st_size,
+                        duration_seconds=None,
+                        video_codec=None,
+                        audio_codec=None,
+                        width=None,
+                        height=None,
+                        frame_rate=None,
+                        audio_sample_rate=None,
+                        fingerprint=self._fingerprint_file(output),
+                        warnings=(),
+                        errors=(str(exc),),
+                        details={"delivery_id": delivery.id},
+                    )
+                else:
+                    cue_count = len(parsed.cues)
+                    verification = RenderOutputVerification(
+                        verified=cue_count > 0,
+                        output_path=str(output),
+                        size_bytes=output.stat().st_size,
+                        duration_seconds=None,
+                        video_codec=None,
+                        audio_codec=None,
+                        width=None,
+                        height=None,
+                        frame_rate=None,
+                        audio_sample_rate=None,
+                        fingerprint=self._fingerprint_file(output),
+                        warnings=parsed.warnings,
+                        errors=() if cue_count > 0 else ("La salida de subtitulos no contiene cues.",),
+                        details={"delivery_id": delivery.id, "cue_count": cue_count, "round_trip": True},
+                    )
+        updated = replace(
+            delivery,
+            status=ClipRenderDeliveryStatus.COMPLETED_WITH_WARNINGS if verification.warnings else ClipRenderDeliveryStatus.COMPLETED if verification.verified else ClipRenderDeliveryStatus.FAILED,
+            progress_percent=100.0 if verification.verified else delivery.progress_percent,
+            warning_code="verification_warnings" if verification.warnings else delivery.warning_code,
+            warning_message="; ".join(verification.warnings) if verification.warnings else delivery.warning_message,
+            error_code=None if verification.verified else "verification_failed",
+            error_message=None if verification.verified else ("; ".join(verification.errors) or "La verificacion fallo."),
+            updated_at=utc_now(),
+            completed_at=utc_now() if verification.verified else delivery.completed_at,
+        )
+        self._persist_delivery(updated)
+        return ClipRenderDeliveryReport(delivery=updated, job=job, artifacts=artifacts, verification=verification, reused_output=False, warnings=verification.warnings, errors=verification.errors)
+
+    def retry_delivery(self, delivery_id: str, *, progress_callback: RenderProgressCallback | None = None, cancellation_token: CancelToken | None = None) -> ClipRenderDeliveryReport:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None:
+            raise NotFoundError("La entrega solicitada no existe.")
+        if delivery.subtitle_mode == SubtitleRenderMode.BURN_IN:
+            if delivery.subtitle_track_id is None:
+                raise ClipRenderStateError("La entrega no tiene track asociado.")
+            job = self.repository.get_job_by_id(delivery.render_job_id)
+            if job is None or job.ranked_clip_candidate_id is None:
+                raise ClipRenderStateError("La entrega no tiene job asociado para reintento.")
+            return self.create_burn_in_render(
+                job.ranked_clip_candidate_id,
+                delivery.subtitle_track_id,
+                profile=job.render_profile,
+                style_preset=delivery.style_preset or SubtitleRenderStylePreset.CLEAN,
+                output=delivery.output_path,
+                allow_stale=True,
+                allow_overwrite=True,
+                renderer_version=job.renderer_version,
+                progress_callback=progress_callback,
+                cancellation_token=cancellation_token,
+            )
+        if delivery.subtitle_mode in {SubtitleRenderMode.SIDECAR_SRT, SubtitleRenderMode.SIDECAR_VTT}:
+            if delivery.subtitle_track_id is None:
+                raise ClipRenderStateError("La entrega no tiene track asociado.")
+            format_name = delivery.subtitle_format or "srt"
+            return self.create_sidecar_delivery(
+                delivery.render_job_id,
+                delivery.subtitle_track_id,
+                format_name=format_name,
+                output=delivery.output_path,
+                allow_stale=True,
+                allow_overwrite=True,
+                custom_name=Path(delivery.output_path or "").stem if delivery.output_path else None,
+            )
+        raise ClipRenderStateError("La modalidad de entrega no se puede reintentar.")
+
+    def cancel_delivery(self, delivery_id: str) -> ClipRenderDelivery | None:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None:
+            return None
+        if delivery.output_path:
+            Path(delivery.output_path).unlink(missing_ok=True)
+        if delivery.manifest_path:
+            Path(delivery.manifest_path).unlink(missing_ok=True)
+        if delivery.source_export_path:
+            Path(delivery.source_export_path).unlink(missing_ok=True)
+        updated = replace(
+            delivery,
+            status=ClipRenderDeliveryStatus.CANCELLED,
+            cancelled_at=utc_now(),
+            updated_at=utc_now(),
+            warning_code="cancelled",
+            warning_message="Entrega cancelada por el usuario.",
+        )
+        self._persist_delivery(updated)
+        return updated
+
+    def delete_delivery(self, delivery_id: str) -> bool:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None:
+            return False
+        if delivery.output_path:
+            Path(delivery.output_path).unlink(missing_ok=True)
+        if delivery.manifest_path:
+            Path(delivery.manifest_path).unlink(missing_ok=True)
+        if delivery.source_export_path:
+            Path(delivery.source_export_path).unlink(missing_ok=True)
+        self.repository.delete_delivery_artifacts_for_delivery(delivery_id)
+        return self.repository.delete_delivery(delivery_id)
+
+    def reveal_delivery(self, delivery_id: str) -> Path | None:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None or not delivery.output_path:
+            return None
+        path = Path(delivery.output_path)
+        return path if path.exists() else None
+
+    def export_delivery_manifest(self, delivery_id: str, *, destination: str | Path | None = None) -> Path:
+        delivery = self.repository.get_delivery_by_id(delivery_id)
+        if delivery is None:
+            raise NotFoundError("La entrega solicitada no existe.")
+        manifest_path = Path(delivery.manifest_path) if delivery.manifest_path else None
+        if manifest_path is None or not manifest_path.exists():
+            raise ClipRenderStateError("La entrega no tiene manifest disponible.")
+        destination_path = Path(destination) if destination is not None else manifest_path
+        if destination_path != manifest_path:
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            destination_path.write_bytes(manifest_path.read_bytes())
+        return destination_path
 
     def retry_render(self, job_id: str, *, progress_callback: RenderProgressCallback | None = None, cancellation_token: CancelToken | None = None) -> ClipRenderOperationReport:
         job = self.repository.get_job_by_id(job_id)
@@ -858,6 +1512,7 @@ def build_clip_render_service(
     media_service: MediaInspectionService,
     clip_service: ClipRankingService,
     repository: ClipRenderRepository,
+    subtitle_service: SubtitleService | None = None,
     logger: logging.Logger | None = None,
 ) -> ClipRenderService:
     return ClipRenderService(
@@ -867,5 +1522,6 @@ def build_clip_render_service(
         media_service=media_service,
         clip_service=clip_service,
         repository=repository,
+        subtitle_service=subtitle_service,
         logger=logger,
     )

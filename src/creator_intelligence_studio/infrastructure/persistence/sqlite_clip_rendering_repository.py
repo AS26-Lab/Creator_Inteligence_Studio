@@ -11,11 +11,21 @@ from creator_intelligence_studio.domain.clip_rendering.entities import (
     ClipRenderArtifact,
     ClipRenderBatch,
     ClipRenderBatchItem,
+    ClipRenderDelivery,
+    ClipRenderDeliveryArtifact,
     ClipRenderEvent,
     ClipRenderJob,
 )
 from creator_intelligence_studio.domain.clip_rendering.repositories import ClipRenderRepository
-from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderArtifactType, ClipRenderBatchStatus, ClipRenderJobStatus, ClipRenderProfile
+from creator_intelligence_studio.domain.clip_rendering.value_objects import (
+    ClipRenderArtifactType,
+    ClipRenderBatchStatus,
+    ClipRenderDeliveryStatus,
+    ClipRenderJobStatus,
+    ClipRenderProfile,
+    SubtitleRenderMode,
+    SubtitleRenderStylePreset,
+)
 from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
 from creator_intelligence_studio.shared.dates import from_iso_z, utc_now
 
@@ -97,6 +107,52 @@ def _row_to_event(row: sqlite3.Row) -> ClipRenderEvent:
         progress_percent=row["progress_percent"],
         message=row["message"],
         details_json=row["details_json"],
+        created_at=from_iso_z(row["created_at"]) or utc_now(),
+    )
+
+
+def _row_to_delivery(row: sqlite3.Row) -> ClipRenderDelivery:
+    return ClipRenderDelivery(
+        id=row["id"],
+        render_job_id=row["render_job_id"],
+        subtitle_track_id=row["subtitle_track_id"],
+        subtitle_track_version=row["subtitle_track_version"],
+        subtitle_track_fingerprint=row["subtitle_track_fingerprint"],
+        subtitle_mode=SubtitleRenderMode(row["subtitle_mode"]),
+        subtitle_format=row["subtitle_format"],
+        style_preset=SubtitleRenderStylePreset(row["style_preset"]) if row["style_preset"] else None,
+        style_json=row["style_json"],
+        source_export_path=row["source_export_path"],
+        source_export_fingerprint=row["source_export_fingerprint"],
+        expected_cue_count=row["expected_cue_count"],
+        rendered_cue_count=row["rendered_cue_count"],
+        output_path=row["output_path"],
+        manifest_path=row["manifest_path"],
+        configuration_fingerprint=row["configuration_fingerprint"],
+        status=ClipRenderDeliveryStatus(row["status"]),
+        progress_percent=row["progress_percent"],
+        warning_code=row["warning_code"],
+        warning_message=row["warning_message"],
+        error_code=row["error_code"],
+        error_message=row["error_message"],
+        retry_count=row["retry_count"],
+        created_at=from_iso_z(row["created_at"]) or utc_now(),
+        updated_at=from_iso_z(row["updated_at"]) or utc_now(),
+        completed_at=from_iso_z(row["completed_at"]),
+        cancelled_at=from_iso_z(row["cancelled_at"]),
+    )
+
+
+def _row_to_delivery_artifact(row: sqlite3.Row) -> ClipRenderDeliveryArtifact:
+    return ClipRenderDeliveryArtifact(
+        id=row["id"],
+        delivery_id=row["delivery_id"],
+        artifact_type=ClipRenderArtifactType(row["artifact_type"]),
+        managed_path=row["managed_path"],
+        fingerprint=row["fingerprint"],
+        size_bytes=row["size_bytes"],
+        verified=bool(row["verified"]),
+        verification_json=row["verification_json"],
         created_at=from_iso_z(row["created_at"]) or utc_now(),
     )
 
@@ -305,6 +361,162 @@ class SQLiteClipRenderingRepository(ClipRenderRepository):
                 "DELETE FROM clip_render_artifacts WHERE render_job_id = ?",
                 (render_job_id,),
             )
+        return cursor.rowcount > 0
+
+    def upsert_delivery(self, delivery: ClipRenderDelivery) -> ClipRenderDelivery:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO clip_render_deliveries (
+                    id, render_job_id, subtitle_track_id, subtitle_track_version,
+                    subtitle_track_fingerprint, subtitle_mode, subtitle_format,
+                    style_preset, style_json, source_export_path,
+                    source_export_fingerprint, expected_cue_count, rendered_cue_count,
+                    output_path, manifest_path, configuration_fingerprint, status,
+                    progress_percent, warning_code, warning_message, error_code,
+                    error_message, retry_count, created_at, updated_at,
+                    completed_at, cancelled_at
+                ) VALUES (
+                    :id, :render_job_id, :subtitle_track_id, :subtitle_track_version,
+                    :subtitle_track_fingerprint, :subtitle_mode, :subtitle_format,
+                    :style_preset, :style_json, :source_export_path,
+                    :source_export_fingerprint, :expected_cue_count, :rendered_cue_count,
+                    :output_path, :manifest_path, :configuration_fingerprint, :status,
+                    :progress_percent, :warning_code, :warning_message, :error_code,
+                    :error_message, :retry_count, :created_at, :updated_at,
+                    :completed_at, :cancelled_at
+                )
+                ON CONFLICT(configuration_fingerprint) DO UPDATE SET
+                    subtitle_track_version = excluded.subtitle_track_version,
+                    subtitle_track_fingerprint = excluded.subtitle_track_fingerprint,
+                    subtitle_format = excluded.subtitle_format,
+                    style_preset = excluded.style_preset,
+                    style_json = excluded.style_json,
+                    source_export_path = excluded.source_export_path,
+                    source_export_fingerprint = excluded.source_export_fingerprint,
+                    expected_cue_count = excluded.expected_cue_count,
+                    rendered_cue_count = excluded.rendered_cue_count,
+                    output_path = excluded.output_path,
+                    manifest_path = excluded.manifest_path,
+                    status = excluded.status,
+                    progress_percent = excluded.progress_percent,
+                    warning_code = excluded.warning_code,
+                    warning_message = excluded.warning_message,
+                    error_code = excluded.error_code,
+                    error_message = excluded.error_message,
+                    retry_count = excluded.retry_count,
+                    updated_at = excluded.updated_at,
+                    completed_at = excluded.completed_at,
+                    cancelled_at = excluded.cancelled_at
+                """,
+                delivery.to_dict() | {
+                    "subtitle_mode": delivery.subtitle_mode.value,
+                    "style_preset": delivery.style_preset.value if delivery.style_preset else None,
+                    "status": delivery.status.value,
+                    "created_at": delivery.created_at.isoformat(),
+                    "updated_at": delivery.updated_at.isoformat(),
+                    "completed_at": delivery.completed_at.isoformat() if delivery.completed_at else None,
+                    "cancelled_at": delivery.cancelled_at.isoformat() if delivery.cancelled_at else None,
+                },
+            )
+            row = connection.execute("SELECT * FROM clip_render_deliveries WHERE configuration_fingerprint = ?", (delivery.configuration_fingerprint,)).fetchone()
+        return _row_to_delivery(row)
+
+    def get_delivery_by_id(self, delivery_id: str) -> ClipRenderDelivery | None:
+        with self._database.connect() as connection:
+            row = connection.execute("SELECT * FROM clip_render_deliveries WHERE id = ?", (delivery_id,)).fetchone()
+        return _row_to_delivery(row) if row else None
+
+    def list_deliveries_for_job(self, render_job_id: str) -> list[ClipRenderDelivery]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM clip_render_deliveries WHERE render_job_id = ? ORDER BY created_at DESC",
+                (render_job_id,),
+            ).fetchall()
+        return [_row_to_delivery(row) for row in rows]
+
+    def list_deliveries_for_candidate(self, candidate_id: str) -> list[ClipRenderDelivery]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT d.*
+                FROM clip_render_deliveries d
+                JOIN clip_render_jobs j ON j.id = d.render_job_id
+                WHERE j.ranked_clip_candidate_id = ?
+                ORDER BY d.created_at DESC
+                """,
+                (candidate_id,),
+            ).fetchall()
+        return [_row_to_delivery(row) for row in rows]
+
+    def list_deliveries_for_video(self, video_asset_id: str) -> list[ClipRenderDelivery]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT d.*
+                FROM clip_render_deliveries d
+                JOIN clip_render_jobs j ON j.id = d.render_job_id
+                WHERE j.video_asset_id = ?
+                ORDER BY d.created_at DESC
+                """,
+                (video_asset_id,),
+            ).fetchall()
+        return [_row_to_delivery(row) for row in rows]
+
+    def upsert_delivery_artifact(self, artifact: ClipRenderDeliveryArtifact) -> ClipRenderDeliveryArtifact:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO clip_render_delivery_artifacts (
+                    id, delivery_id, artifact_type, managed_path, fingerprint,
+                    size_bytes, verified, verification_json, created_at
+                ) VALUES (
+                    :id, :delivery_id, :artifact_type, :managed_path, :fingerprint,
+                    :size_bytes, :verified, :verification_json, :created_at
+                )
+                ON CONFLICT(delivery_id, artifact_type) DO UPDATE SET
+                    managed_path = excluded.managed_path,
+                    fingerprint = excluded.fingerprint,
+                    size_bytes = excluded.size_bytes,
+                    verified = excluded.verified,
+                    verification_json = excluded.verification_json
+                """,
+                artifact.to_dict() | {
+                    "artifact_type": artifact.artifact_type.value,
+                    "verified": 1 if artifact.verified else 0,
+                    "created_at": artifact.created_at.isoformat(),
+                },
+            )
+            row = connection.execute(
+                "SELECT * FROM clip_render_delivery_artifacts WHERE delivery_id = ? AND artifact_type = ?",
+                (artifact.delivery_id, artifact.artifact_type.value),
+            ).fetchone()
+        return _row_to_delivery_artifact(row)
+
+    def list_delivery_artifacts_for_delivery(self, delivery_id: str) -> list[ClipRenderDeliveryArtifact]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM clip_render_delivery_artifacts WHERE delivery_id = ? ORDER BY created_at ASC",
+                (delivery_id,),
+            ).fetchall()
+        return [_row_to_delivery_artifact(row) for row in rows]
+
+    def get_delivery_artifact_for_delivery(self, delivery_id: str, artifact_type: str) -> ClipRenderDeliveryArtifact | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM clip_render_delivery_artifacts WHERE delivery_id = ? AND artifact_type = ?",
+                (delivery_id, artifact_type),
+            ).fetchone()
+        return _row_to_delivery_artifact(row) if row else None
+
+    def delete_delivery_artifacts_for_delivery(self, delivery_id: str) -> bool:
+        with self._database.connect() as connection:
+            cursor = connection.execute("DELETE FROM clip_render_delivery_artifacts WHERE delivery_id = ?", (delivery_id,))
+        return cursor.rowcount > 0
+
+    def delete_delivery(self, delivery_id: str) -> bool:
+        with self._database.connect() as connection:
+            cursor = connection.execute("DELETE FROM clip_render_deliveries WHERE id = ?", (delivery_id,))
         return cursor.rowcount > 0
 
     def append_event(self, event: ClipRenderEvent) -> ClipRenderEvent:

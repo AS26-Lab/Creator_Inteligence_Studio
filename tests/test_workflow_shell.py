@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +13,7 @@ from creator_intelligence_studio.application.services.video_pipeline_service imp
 from creator_intelligence_studio.domain.errors import NotFoundError, StateError
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
+from creator_intelligence_studio.presentation.cli.cli import build_parser, dispatch
 from creator_intelligence_studio.presentation.desktop.error_mapping import map_error
 from creator_intelligence_studio.presentation.desktop.ui_state import BackgroundTaskRecord, WorkspaceUiStateStore
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
@@ -367,6 +370,84 @@ class WorkflowShellTests(unittest.TestCase):
             self.assertEqual(view.table.item(0, 0).text(), "Workflow de video")
             workspace.interrupt_background_task(task.task_id, "Interrumpida")
             self.assertEqual(workspace.background_tasks()[0].status, "interrupted")
+
+    def test_background_tasks_include_subtitle_deliveries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            workspace = make_workspace(root)
+            now = datetime.now(timezone.utc)
+            job = SimpleNamespace(
+                id="job-1",
+                video_asset_id=workspace.selected_video_id,
+                ranked_clip_candidate_id="candidate-1",
+                collection_id=None,
+                status=SimpleNamespace(value="completed"),
+                progress_percent=100.0,
+                warning_message=None,
+                error_message=None,
+                created_at=now,
+                updated_at=now,
+                cancelled_at=None,
+                completed_at=now,
+                to_dict=lambda: {"id": "job-1"},
+            )
+            delivery = SimpleNamespace(
+                id="delivery-1",
+                render_job_id=job.id,
+                subtitle_track_id="track-1",
+                subtitle_mode=SimpleNamespace(value="sidecar_srt"),
+                status=SimpleNamespace(value="completed"),
+                progress_percent=100.0,
+                warning_message=None,
+                error_message=None,
+                created_at=now,
+                updated_at=now,
+                cancelled_at=None,
+                completed_at=now,
+                to_dict=lambda: {"id": "delivery-1"},
+            )
+            workspace.render_service = SimpleNamespace(
+                list_render_jobs=lambda: (job,),
+                list_render_deliveries=lambda job_id: (delivery,) if job_id == job.id else (),
+            )
+            tasks = workspace.background_tasks()
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual({task.task_id for task in tasks}, {"job-1", "delivery-1"})
+            self.assertIn("Entrega de subtitulos", {task.title for task in tasks})
+
+            view = TaskCenterView(workspace)
+            view.refresh()
+            self.assertEqual(view.table.rowCount(), 2)
+            titles = {view.table.item(row, 0).text() for row in range(view.table.rowCount())}
+            self.assertIn("Entrega de subtitulos", titles)
+
+    def test_render_subtitles_cli_handlers(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["render", "subtitles", "capabilities"])
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        code = dispatch(
+            args,
+            service=SimpleNamespace(),
+            media_service=SimpleNamespace(),
+            audio_service=SimpleNamespace(),
+            transcription_service=SimpleNamespace(),
+            acoustic_service=SimpleNamespace(),
+            visual_service=SimpleNamespace(),
+            multimodal_service=SimpleNamespace(),
+            clip_service=SimpleNamespace(),
+            render_service=SimpleNamespace(
+                render_subtitle_capabilities=lambda: {"sidecar_available": True, "burn_in_available": True},
+                render_subtitle_styles=lambda: ({"preset": "clean"},),
+            ),
+            subtitle_service=SimpleNamespace(),
+            personalization_service=SimpleNamespace(),
+            diagnostic=SimpleNamespace(to_json=lambda: "{}", state=SimpleNamespace(ready_for_basic_mode=True)),
+            stdout=stdout,
+            stderr=stderr,
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("sidecar_available", stdout.getvalue())
 
     def test_error_translation_and_state_persistence(self) -> None:
         self.assertEqual(map_error(NotFoundError("faltante")).title, "Elemento no encontrado")

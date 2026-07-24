@@ -17,7 +17,6 @@ It does not:
 
 - publish to platforms;
 - edit multi-track timelines;
-- add burned-in subtitles yet;
 - do smart vertical reframing;
 - add automatic music or generative transitions.
 
@@ -42,7 +41,13 @@ It does not:
 - Render jobs are persisted in the Task Center.
 - The workflow page may recommend rendering approved clips after review.
 - Rendering is optional and does not replace personalization readiness.
-- Subtitle tracks remain separate editorial artifacts and are not burned into render output in this first version.
+- Subtitle tracks remain separate editorial artifacts, but clip deliveries can optionally consume them as sidecar files or burn them into a new MP4.
+
+## Subtitle deliveries
+
+- `sidecar_srt` and `sidecar_vtt` keep the clip MP4 unchanged and export verified subtitle files alongside it.
+- `burn_in` creates a new MP4 using a managed ASS snapshot and FFmpeg/libass when available.
+- Delivery outputs store the subtitle track version, cue count, style, and fingerprints used at render time.
 
 ## Data model
 

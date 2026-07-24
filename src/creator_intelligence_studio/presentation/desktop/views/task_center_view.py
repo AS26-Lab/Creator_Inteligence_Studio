@@ -68,6 +68,9 @@ class TaskCenterView(QWidget):
             return None
         return next((task for task in self.workspace.background_tasks() if task.task_id == task_id), None)
 
+    def _is_delivery_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "subtitle_delivery")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -106,7 +109,16 @@ class TaskCenterView(QWidget):
 
     def _open_video(self) -> None:
         task = self._selected_task()
-        if task is None or task.video_id is None:
+        if task is None:
+            return
+        if self._is_delivery_task(task):
+            path = self.workspace.reveal_delivery(task.task_id)
+            if path is None:
+                QMessageBox.information(self, "Task Center", "La entrega ya no tiene una salida disponible.")
+            else:
+                QMessageBox.information(self, "Task Center", f"Resultado disponible en: {path}")
+            return
+        if task.video_id is None:
             return
         self.workspace.select_video(task.video_id)
         QMessageBox.information(self, "Task Center", f"Video seleccionado: {task.video_title or task.video_id}")
@@ -115,7 +127,9 @@ class TaskCenterView(QWidget):
         task = self._selected_task()
         if task is None:
             return
-        if task.title == "Render de clip":
+        if self._is_delivery_task(task):
+            self.workspace.cancel_delivery(task.task_id)
+        elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
@@ -127,6 +141,10 @@ class TaskCenterView(QWidget):
             return
         if task.video_id:
             self.workspace.select_video(task.video_id)
+        if self._is_delivery_task(task):
+            self.workspace.retry_delivery(task.task_id)
+            self.refresh()
+            return
         if task.title == "Render de clip":
             self.workspace.retry_render(task.task_id)
             self.refresh()

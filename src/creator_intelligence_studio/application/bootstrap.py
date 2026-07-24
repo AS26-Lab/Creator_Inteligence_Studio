@@ -241,15 +241,6 @@ def _load_service_context() -> ServiceContext:
         clip_repository=SQLiteClipRankingRepository(database),
         logger=context.logger,
     )
-    render_service = build_clip_render_service(
-        settings=context.settings,
-        paths=context.paths,
-        catalog_service=service,
-        media_service=media_service,
-        clip_service=clip_service,
-        repository=SQLiteClipRenderingRepository(database),
-        logger=context.logger,
-    )
     subtitle_service = build_subtitle_service(
         settings=context.settings,
         paths=context.paths,
@@ -257,6 +248,16 @@ def _load_service_context() -> ServiceContext:
         transcription_service=transcription_service,
         clip_service=clip_service,
         repository=SQLiteSubtitleRepository(database),
+        logger=context.logger,
+    )
+    render_service = build_clip_render_service(
+        settings=context.settings,
+        paths=context.paths,
+        catalog_service=service,
+        media_service=media_service,
+        clip_service=clip_service,
+        repository=SQLiteClipRenderingRepository(database),
+        subtitle_service=subtitle_service,
         logger=context.logger,
     )
     personalization_service = build_personalization_dataset_service(

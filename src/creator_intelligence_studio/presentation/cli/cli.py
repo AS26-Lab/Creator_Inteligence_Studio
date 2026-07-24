@@ -62,18 +62,29 @@ from creator_intelligence_studio.application.commands.clip_commands import (
 from creator_intelligence_studio.application.commands.render_commands import (
     CancelRenderBatchCommand,
     CancelRenderCommand,
+    CancelRenderDeliveryCommand,
     DeleteRenderArtifactCommand,
+    DeleteRenderDeliveryCommand,
     ExportRenderPlanCommand,
+    ExportRenderDeliveryManifestCommand,
+    ListRenderDeliveriesCommand,
     ListCandidateRendersCommand,
     RenderCapabilitiesCommand,
     RenderCandidateCommand,
+    RenderBurnInCommand,
+    RenderSidecarCommand,
+    RenderSubtitlesCapabilitiesCommand,
+    RenderSubtitlesStylesCommand,
     RenderCollectionCommand,
     RenderProfilesCommand,
     RetryRenderBatchCommand,
     RetryRenderCommand,
+    RetryRenderDeliveryCommand,
+    ShowRenderDeliveryCommand,
     ShowRenderBatchCommand,
     ShowRenderJobCommand,
     VerifyRenderCommand,
+    VerifyRenderDeliveryCommand,
 )
 from creator_intelligence_studio.application.commands.personalization_commands import (
     ArchiveDatasetSnapshotCommand,
@@ -704,6 +715,13 @@ def build_parser() -> argparse.ArgumentParser:
     render_profiles = render_sub.add_parser("profiles", help="Listar perfiles de render")
     render_profiles.add_argument("--json", action="store_true")
 
+    render_subtitles = render_sub.add_parser("subtitles", help="Capacidades y estilos de subtitulos")
+    render_subtitles_sub = render_subtitles.add_subparsers(dest="subaction", required=True)
+    render_subtitles_capabilities = render_subtitles_sub.add_parser("capabilities", help="Mostrar capacidades de subtitulos")
+    render_subtitles_capabilities.add_argument("--json", action="store_true")
+    render_subtitles_styles = render_subtitles_sub.add_parser("styles", help="Mostrar estilos de subtitulos")
+    render_subtitles_styles.add_argument("--json", action="store_true")
+
     render_candidate = render_sub.add_parser("candidate", help="Renderizar un candidato")
     render_candidate.add_argument("--candidate-id", required=True)
     render_candidate.add_argument("--profile", default="balanced")
@@ -713,6 +731,27 @@ def build_parser() -> argparse.ArgumentParser:
     render_candidate.add_argument("--allow-overwrite", action="store_true")
     render_candidate.add_argument("--custom-name")
     render_candidate.add_argument("--json", action="store_true")
+
+    render_sidecar = render_sub.add_parser("sidecar", help="Crear una entrega sidecar")
+    render_sidecar.add_argument("--job-id", required=True)
+    render_sidecar.add_argument("--track-id", required=True)
+    render_sidecar.add_argument("--format", required=True, choices=["srt", "vtt"])
+    render_sidecar.add_argument("--output")
+    render_sidecar.add_argument("--allow-stale", action="store_true")
+    render_sidecar.add_argument("--allow-overwrite", action="store_true")
+    render_sidecar.add_argument("--custom-name")
+    render_sidecar.add_argument("--json", action="store_true")
+
+    render_burn_in = render_sub.add_parser("burn-in", help="Renderizar con subtitulos incrustados")
+    render_burn_in.add_argument("--candidate-id", required=True)
+    render_burn_in.add_argument("--track-id", required=True)
+    render_burn_in.add_argument("--profile", default="balanced")
+    render_burn_in.add_argument("--style", default="clean")
+    render_burn_in.add_argument("--output")
+    render_burn_in.add_argument("--allow-stale", action="store_true")
+    render_burn_in.add_argument("--allow-overwrite", action="store_true")
+    render_burn_in.add_argument("--custom-name")
+    render_burn_in.add_argument("--json", action="store_true")
 
     render_show = render_sub.add_parser("show", help="Mostrar un job de render")
     render_show.add_argument("--job-id", required=True)
@@ -764,6 +803,35 @@ def build_parser() -> argparse.ArgumentParser:
     render_export_plan.add_argument("--format", default="json")
     render_export_plan.add_argument("--output")
     render_export_plan.add_argument("--json", action="store_true")
+
+    render_delivery_show = render_sub.add_parser("delivery-show", help="Mostrar una entrega")
+    render_delivery_show.add_argument("--delivery-id", required=True)
+    render_delivery_show.add_argument("--json", action="store_true")
+
+    render_delivery_list = render_sub.add_parser("delivery-list", help="Listar entregas de un job")
+    render_delivery_list.add_argument("--job-id", required=True)
+    render_delivery_list.add_argument("--json", action="store_true")
+
+    render_delivery_verify = render_sub.add_parser("delivery-verify", help="Verificar una entrega")
+    render_delivery_verify.add_argument("--delivery-id", required=True)
+    render_delivery_verify.add_argument("--json", action="store_true")
+
+    render_delivery_cancel = render_sub.add_parser("delivery-cancel", help="Cancelar una entrega")
+    render_delivery_cancel.add_argument("--delivery-id", required=True)
+    render_delivery_cancel.add_argument("--json", action="store_true")
+
+    render_delivery_retry = render_sub.add_parser("delivery-retry", help="Reintentar una entrega")
+    render_delivery_retry.add_argument("--delivery-id", required=True)
+    render_delivery_retry.add_argument("--json", action="store_true")
+
+    render_delivery_delete = render_sub.add_parser("delivery-delete", help="Eliminar una entrega")
+    render_delivery_delete.add_argument("--delivery-id", required=True)
+    render_delivery_delete.add_argument("--json", action="store_true")
+
+    render_delivery_export = render_sub.add_parser("delivery-export-manifest", help="Exportar el manifest de una entrega")
+    render_delivery_export.add_argument("--delivery-id", required=True)
+    render_delivery_export.add_argument("--output")
+    render_delivery_export.add_argument("--json", action="store_true")
 
     personalization_parser = subparsers.add_parser("personalization", help="Preparacion de datos por creador")
     personalization_sub = personalization_parser.add_subparsers(dest="action", required=True)
@@ -2108,6 +2176,16 @@ def _handle_clips(args, service: ClipRankingService, stdout, stderr) -> int:
 
 
 def _handle_render(args, service: ClipRenderService, stdout, stderr) -> int:
+    if args.action == "subtitles":
+        if args.subaction == "capabilities":
+            payload = service.render_subtitle_capabilities()
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+            return 0
+        if args.subaction == "styles":
+            styles = service.render_subtitle_styles()
+            print(json.dumps(list(styles), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+            return 0
+        raise ValueError("Accion de subtitulos no reconocida.")
     if args.action == "capabilities":
         command = RenderCapabilitiesCommand()
         report = service.render_capabilities()
@@ -2221,6 +2299,91 @@ def _handle_render(args, service: ClipRenderService, stdout, stderr) -> int:
         command = ExportRenderPlanCommand(args.job_id, format=args.format, output=args.output)
         path = service.export_render_plan(command.job_id, destination=command.output)
         print(json.dumps({"job_id": command.job_id, "format": command.format, "path": str(path)}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "sidecar":
+        command = RenderSidecarCommand(
+            job_id=args.job_id,
+            track_id=args.track_id,
+            format=args.format,
+            output=args.output,
+            allow_stale=args.allow_stale,
+            allow_overwrite=args.allow_overwrite,
+            custom_name=args.custom_name,
+        )
+        report = service.create_sidecar_delivery(
+            command.job_id,
+            command.track_id,
+            format_name=command.format,
+            output=command.output,
+            allow_stale=command.allow_stale,
+            allow_overwrite=command.allow_overwrite,
+            custom_name=command.custom_name,
+        )
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "burn-in":
+        command = RenderBurnInCommand(
+            candidate_id=args.candidate_id,
+            track_id=args.track_id,
+            profile=args.profile,
+            style=args.style,
+            output=args.output,
+            allow_stale=args.allow_stale,
+            allow_overwrite=args.allow_overwrite,
+            custom_name=args.custom_name,
+        )
+        report = service.create_burn_in_render(
+            command.candidate_id,
+            command.track_id,
+            profile=command.profile,
+            style_preset=command.style,
+            output=command.output,
+            allow_stale=command.allow_stale,
+            allow_overwrite=command.allow_overwrite,
+            custom_name=command.custom_name,
+        )
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delivery-show":
+        command = ShowRenderDeliveryCommand(args.delivery_id)
+        delivery = service.get_delivery(command.delivery_id)
+        if delivery is None:
+            print("Entrega no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(delivery.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delivery-list":
+        command = ListRenderDeliveriesCommand(args.job_id)
+        deliveries = service.list_render_deliveries(command.job_id)
+        print(json.dumps([delivery.to_dict() for delivery in deliveries], ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delivery-verify":
+        command = VerifyRenderDeliveryCommand(args.delivery_id)
+        report = service.verify_delivery(command.delivery_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if report.verification.verified else 1
+    if args.action == "delivery-cancel":
+        command = CancelRenderDeliveryCommand(args.delivery_id)
+        delivery = service.cancel_delivery(command.delivery_id)
+        if delivery is None:
+            print("Entrega no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(delivery.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delivery-retry":
+        command = RetryRenderDeliveryCommand(args.delivery_id)
+        report = service.retry_delivery(command.delivery_id)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "delivery-delete":
+        command = DeleteRenderDeliveryCommand(args.delivery_id)
+        deleted = service.delete_delivery(command.delivery_id)
+        print(json.dumps({"delivery_id": command.delivery_id, "deleted": deleted}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0 if deleted else 1
+    if args.action == "delivery-export-manifest":
+        command = ExportRenderDeliveryManifestCommand(args.delivery_id, output=args.output)
+        path = service.export_delivery_manifest(command.delivery_id, destination=command.output)
+        print(json.dumps({"delivery_id": command.delivery_id, "path": str(path)}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
         return 0
     raise ValueError("Accion de render no reconocida.")
 

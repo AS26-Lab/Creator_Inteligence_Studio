@@ -10,7 +10,7 @@ from creator_intelligence_studio.domain.clip_rendering.services import (
     build_source_fingerprint,
     render_profile_config,
 )
-from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderPlan, ClipRenderProfile, validate_render_bounds
+from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderPlan, ClipRenderProfile, ClipRenderSubtitleConfig, validate_render_bounds
 from creator_intelligence_studio.domain.videos.entities import VideoAsset
 from creator_intelligence_studio.infrastructure.clip_rendering.filename_builder import build_render_filename, build_render_output_path
 
@@ -32,6 +32,7 @@ def build_render_plan(
     output_root: Path,
     output_path: Path | None = None,
     custom_name: str | None = None,
+    subtitle_config: ClipRenderSubtitleConfig | None = None,
     renderer_version: str = "v1",
 ) -> ClipRenderPlan:
     if candidate is not None:
@@ -74,6 +75,7 @@ def build_render_plan(
         expected_width=getattr(video, "width", None),
         expected_height=getattr(video, "height", None),
         expected_audio=expected_audio,
+        subtitle_config=subtitle_config,
         renderer_version=renderer_version,
     )
     return ClipRenderPlan(
@@ -108,6 +110,7 @@ def build_render_plan(
         expected_width=getattr(video, "width", None),
         expected_height=getattr(video, "height", None),
         expected_audio=expected_audio,
+        subtitle_config=subtitle_config,
         configuration_fingerprint=configuration_fingerprint,
         renderer_version=renderer_version,
         custom_name=custom_name,

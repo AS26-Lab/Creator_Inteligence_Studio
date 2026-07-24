@@ -34,6 +34,8 @@ The controlled creator workflow also validates:
 - selection persistence for creator, project and last page;
 - onboarding reopen behavior.
 
+When a scenario includes subtitle deliveries, it validates local sidecar or burn-in outputs, manifest persistence, and verification metadata. This is a technical integrity check, not a statement about subtitle style quality or audience performance.
+
 ## Observability
 
 Each run captures:

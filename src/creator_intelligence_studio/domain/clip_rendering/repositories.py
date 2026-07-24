@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from .entities import ClipRenderArtifact, ClipRenderBatch, ClipRenderBatchItem, ClipRenderEvent, ClipRenderJob
+from .entities import (
+    ClipRenderArtifact,
+    ClipRenderBatch,
+    ClipRenderBatchItem,
+    ClipRenderDelivery,
+    ClipRenderDeliveryArtifact,
+    ClipRenderEvent,
+    ClipRenderJob,
+)
 
 
 class ClipRenderRepository(ABC):
@@ -50,6 +58,46 @@ class ClipRenderRepository(ABC):
 
     @abstractmethod
     def delete_artifact_for_job(self, render_job_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def upsert_delivery(self, delivery: ClipRenderDelivery) -> ClipRenderDelivery:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_delivery_by_id(self, delivery_id: str) -> ClipRenderDelivery | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_deliveries_for_job(self, render_job_id: str) -> list[ClipRenderDelivery]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_deliveries_for_candidate(self, candidate_id: str) -> list[ClipRenderDelivery]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_deliveries_for_video(self, video_asset_id: str) -> list[ClipRenderDelivery]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def upsert_delivery_artifact(self, artifact: ClipRenderDeliveryArtifact) -> ClipRenderDeliveryArtifact:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_delivery_artifacts_for_delivery(self, delivery_id: str) -> list[ClipRenderDeliveryArtifact]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_delivery_artifact_for_delivery(self, delivery_id: str, artifact_type: str) -> ClipRenderDeliveryArtifact | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_delivery_artifacts_for_delivery(self, delivery_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_delivery(self, delivery_id: str) -> bool:
         raise NotImplementedError
 
     @abstractmethod

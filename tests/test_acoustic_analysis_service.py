@@ -341,9 +341,9 @@ class AcousticAnalysisTests(unittest.TestCase):
                 ).fetchall()
                 run_migrations(connection)
                 idempotent_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
-            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
             self.assertGreaterEqual(len(tables), 3)
-            self.assertEqual(idempotent_count, 13)
+            self.assertEqual(idempotent_count, 14)
 
     def test_frame_metrics_and_vad_handle_silence_noise_clipping_low_volume(self) -> None:
         sample_rate = 16000

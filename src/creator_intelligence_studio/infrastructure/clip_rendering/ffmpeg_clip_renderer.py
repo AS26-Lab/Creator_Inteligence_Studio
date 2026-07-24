@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Protocol
 
 from creator_intelligence_studio.domain.clip_rendering.errors import ClipRenderExecutionError
-from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderPlan
+from creator_intelligence_studio.domain.clip_rendering.value_objects import ClipRenderPlan, SubtitleRenderMode
+from creator_intelligence_studio.infrastructure.clip_rendering.subtitle_rendering import escape_ffmpeg_filter_path
 
 
 class CancelToken(Protocol):
@@ -122,15 +123,18 @@ class FFmpegClipRenderer:
         ]
         if plan.faststart:
             args.extend(["-movflags", "+faststart"])
+        filters: list[str] = []
         if plan.max_width is not None or plan.max_height is not None:
             max_width = plan.max_width or -2
             max_height = plan.max_height or -2
-            args.extend(
-                [
-                    "-vf",
-                    f"scale='min(iw,{max_width})':'min(ih,{max_height})':force_original_aspect_ratio=decrease",
-                ]
-            )
+            filters.append(f"scale='min(iw,{max_width})':'min(ih,{max_height})':force_original_aspect_ratio=decrease")
+        subtitle_config = plan.subtitle_config
+        if subtitle_config is not None and subtitle_config.mode == SubtitleRenderMode.BURN_IN:
+            if not subtitle_config.temporary_ass_path:
+                raise ClipRenderExecutionError("No se definio un archivo ASS temporal para el burn-in.")
+            filters.append(f"ass='{escape_ffmpeg_filter_path(Path(subtitle_config.temporary_ass_path))}'")
+        if filters:
+            args.extend(["-vf", ",".join(filters)])
         if plan.max_frame_rate is not None:
             args.extend(["-r", f"{plan.max_frame_rate:.3f}"])
         args.append(str(plan.temporary_output_path))
