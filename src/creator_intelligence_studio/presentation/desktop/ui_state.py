@@ -87,6 +87,15 @@ class WorkspaceUiState:
     preferred_data_directory: str | None = None
     preferred_models_directory: str | None = None
     preferred_exports_directory: str | None = None
+    minimum_experiment_sample: int = 6
+    default_evaluation_window: str = "latest"
+    confidence_thresholds_json: str | None = None
+    maximum_variants: int = 2
+    require_guardrail: bool = True
+    suggest_learning_promotion: bool = True
+    require_human_confirmation: bool = True
+    include_inconclusive_findings: bool = True
+    report_export_folder: str | None = None
     window_geometry: str | None = None
     window_state: str | None = None
     tasks: tuple[BackgroundTaskRecord, ...] = ()
@@ -105,6 +114,15 @@ class WorkspaceUiState:
             "preferred_data_directory": self.preferred_data_directory,
             "preferred_models_directory": self.preferred_models_directory,
             "preferred_exports_directory": self.preferred_exports_directory,
+            "minimum_experiment_sample": self.minimum_experiment_sample,
+            "default_evaluation_window": self.default_evaluation_window,
+            "confidence_thresholds_json": self.confidence_thresholds_json,
+            "maximum_variants": self.maximum_variants,
+            "require_guardrail": self.require_guardrail,
+            "suggest_learning_promotion": self.suggest_learning_promotion,
+            "require_human_confirmation": self.require_human_confirmation,
+            "include_inconclusive_findings": self.include_inconclusive_findings,
+            "report_export_folder": self.report_export_folder,
             "window_geometry": self.window_geometry,
             "window_state": self.window_state,
             "tasks": [task.to_dict() for task in self.tasks],
@@ -126,6 +144,15 @@ class WorkspaceUiState:
             preferred_data_directory=payload.get("preferred_data_directory"),
             preferred_models_directory=payload.get("preferred_models_directory"),
             preferred_exports_directory=payload.get("preferred_exports_directory"),
+            minimum_experiment_sample=int(payload.get("minimum_experiment_sample", 6)),
+            default_evaluation_window=str(payload.get("default_evaluation_window") or "latest"),
+            confidence_thresholds_json=payload.get("confidence_thresholds_json"),
+            maximum_variants=int(payload.get("maximum_variants", 2)),
+            require_guardrail=bool(payload.get("require_guardrail", True)),
+            suggest_learning_promotion=bool(payload.get("suggest_learning_promotion", True)),
+            require_human_confirmation=bool(payload.get("require_human_confirmation", True)),
+            include_inconclusive_findings=bool(payload.get("include_inconclusive_findings", True)),
+            report_export_folder=payload.get("report_export_folder"),
             window_geometry=payload.get("window_geometry"),
             window_state=payload.get("window_state"),
             tasks=tasks,

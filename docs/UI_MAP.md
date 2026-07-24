@@ -282,3 +282,12 @@ flowchart LR
 - publicaciones normalizadas;
 - metrics visibles sin asumir equivalencia entre plataformas;
 - Task Center para imports persistidos.
+### Experiments and Learning
+
+- Overview con experimentos activos, recomendaciones pendientes, evaluaciones recientes y aprendizajes provisionales;
+- Recommendations con fuente, evidencia, confianza, decision y ejecucion vinculada;
+- Experiments con hipotesis, variable, control, treatment, metrica primaria y guardrails;
+- Assignments con publicacion, variante planeada, variante real y desviaciones;
+- Evaluations con resultado, muestra, diferencias, warnings y confianza;
+- Learning Memory con statement, scope, evidencia, supports, contradictions y revisiones humanas;
+- Reports con exportacion JSON, TXT y CSV.

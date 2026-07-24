@@ -64,6 +64,10 @@ from creator_intelligence_studio.application.services.analytics_lab_service impo
     AnalyticsLabService,
     build_analytics_lab_services,
 )
+from creator_intelligence_studio.application.services.experiment_service import (
+    ExperimentService,
+    build_experiment_services,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -120,6 +124,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_analytics_rep
 from creator_intelligence_studio.infrastructure.persistence.sqlite_analytics_lab_repository import (
     SQLiteAnalyticsLabRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_experiment_repository import (
+    SQLiteExperimentRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -159,6 +166,7 @@ class ServiceContext(BootstrapContext):
     subtitle_service: SubtitleService | None = None
     analytics_service: AnalyticsImportService | None = None
     analytics_lab_service: AnalyticsLabService | None = None
+    experiment_service: ExperimentService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -292,6 +300,14 @@ def _load_service_context() -> ServiceContext:
         paths=context.paths,
         logger=context.logger,
     )
+    experiment_repository = SQLiteExperimentRepository(database)
+    experiment_service, _, _, _, _ = build_experiment_services(
+        analytics_service=analytics_service,
+        analytics_lab_service=analytics_lab_service,
+        repository=experiment_repository,
+        paths=context.paths,
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -342,6 +358,7 @@ def _load_service_context() -> ServiceContext:
         subtitle_service=subtitle_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,
+        experiment_service=experiment_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -418,6 +435,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             clip_service=context.clip_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
+            experiment_service=context.experiment_service,
             render_service=context.render_service,
             subtitle_service=context.subtitle_service,
             personalization_service=context.personalization_service,

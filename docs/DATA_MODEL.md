@@ -587,3 +587,21 @@ Puntos clave:
 - los snapshots historicos no se sobrescriben silenciosamente;
 - los mappings pueden ser auto o manual y pueden ser por plataforma;
 - la trazabilidad mantiene `source_fingerprint`, `source_row_number` y reporte de importacion.
+## Migration v17
+
+La migracion v17 agrega:
+
+- `experiment_definitions`
+- `experiment_variables`
+- `experiment_guardrails`
+- `experiment_assignments`
+- `recommendation_records`
+- `recommendation_decisions`
+- `execution_records`
+- `experiment_evaluations`
+- `experiment_outcomes`
+- `learning_records`
+- `learning_reviews`
+- `experiment_reports`
+
+Estas tablas conservan recomendacion, decision, ejecucion, evaluacion, learning y reporte sin tocar analytics historico ni findings previos.

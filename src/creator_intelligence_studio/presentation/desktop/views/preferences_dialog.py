@@ -15,6 +15,7 @@ class PreferencesDialog(QDialog):
         self.data_edit = QLineEdit(workspace.ui_state.preferred_data_directory or "")
         self.models_edit = QLineEdit(workspace.ui_state.preferred_models_directory or "")
         self.exports_edit = QLineEdit(workspace.ui_state.preferred_exports_directory or "")
+        self.experiments_edit = QLineEdit(workspace.ui_state.report_export_folder or "")
         self.device_combo = QComboBox()
         self.device_combo.addItems(["auto", "cuda", "cpu"])
         self.device_combo.setCurrentText(workspace.ui_state.preferred_transcription_device)
@@ -24,10 +25,21 @@ class PreferencesDialog(QDialog):
         self.ranking_combo = QComboBox()
         self.ranking_combo.addItems(["balanced", "conservative", "aggressive"])
         self.ranking_combo.setCurrentText(workspace.ui_state.ranking_profile)
+        self.experiment_sample_edit = QLineEdit(str(workspace.ui_state.minimum_experiment_sample))
+        self.evaluation_window_edit = QLineEdit(workspace.ui_state.default_evaluation_window)
+        self.maximum_variants_edit = QLineEdit(str(workspace.ui_state.maximum_variants))
         self.confirm_checkbox = QCheckBox("Confirmar acciones destructivas")
         self.confirm_checkbox.setChecked(workspace.ui_state.confirm_destructive_actions)
         self.technical_checkbox = QCheckBox("Mostrar detalles tecnicos por defecto")
         self.technical_checkbox.setChecked(workspace.ui_state.show_technical_details)
+        self.guardrail_checkbox = QCheckBox("Requerir guardrails")
+        self.guardrail_checkbox.setChecked(workspace.ui_state.require_guardrail)
+        self.learning_checkbox = QCheckBox("Sugerir promocion de aprendizaje")
+        self.learning_checkbox.setChecked(workspace.ui_state.suggest_learning_promotion)
+        self.human_checkbox = QCheckBox("Requerir confirmacion humana")
+        self.human_checkbox.setChecked(workspace.ui_state.require_human_confirmation)
+        self.inconclusive_checkbox = QCheckBox("Incluir hallazgos inconclusos")
+        self.inconclusive_checkbox.setChecked(workspace.ui_state.include_inconclusive_findings)
         self.save_button = QPushButton("Guardar")
         self.cancel_button = QPushButton("Cancelar")
 
@@ -35,11 +47,19 @@ class PreferencesDialog(QDialog):
         form.addRow("Carpeta de datos", self.data_edit)
         form.addRow("Carpeta de modelos", self.models_edit)
         form.addRow("Carpeta de exportaciones", self.exports_edit)
+        form.addRow("Carpeta de exports de learning", self.experiments_edit)
         form.addRow("Dispositivo de transcripcion", self.device_combo)
         form.addRow("Perfil de transcripcion", self.transcription_combo)
         form.addRow("Perfil de ranking", self.ranking_combo)
+        form.addRow("Minimum experiment sample", self.experiment_sample_edit)
+        form.addRow("Default evaluation window", self.evaluation_window_edit)
+        form.addRow("Maximum variants", self.maximum_variants_edit)
         form.addRow(self.confirm_checkbox)
         form.addRow(self.technical_checkbox)
+        form.addRow(self.guardrail_checkbox)
+        form.addRow(self.learning_checkbox)
+        form.addRow(self.human_checkbox)
+        form.addRow(self.inconclusive_checkbox)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -55,11 +75,18 @@ class PreferencesDialog(QDialog):
             preferred_data_directory=self.data_edit.text().strip() or None,
             preferred_models_directory=self.models_edit.text().strip() or None,
             preferred_exports_directory=self.exports_edit.text().strip() or None,
+            report_export_folder=self.experiments_edit.text().strip() or None,
             preferred_transcription_device=self.device_combo.currentText(),
             transcription_profile=self.transcription_combo.currentText(),
             ranking_profile=self.ranking_combo.currentText(),
+            minimum_experiment_sample=int(self.experiment_sample_edit.text().strip() or 6),
+            default_evaluation_window=self.evaluation_window_edit.text().strip() or "latest",
+            maximum_variants=int(self.maximum_variants_edit.text().strip() or 2),
+            require_guardrail=self.guardrail_checkbox.isChecked(),
+            suggest_learning_promotion=self.learning_checkbox.isChecked(),
+            require_human_confirmation=self.human_checkbox.isChecked(),
+            include_inconclusive_findings=self.inconclusive_checkbox.isChecked(),
             confirm_destructive_actions=self.confirm_checkbox.isChecked(),
             show_technical_details=self.technical_checkbox.isChecked(),
         )
         super().accept()
-

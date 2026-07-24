@@ -333,3 +333,10 @@ Reglas:
 - `application/services/analytics_query_service.py`: consultas y exportacion normalizada.
 - `infrastructure/analytics`: CSV, XLSX, deteccion de schema, field mapping, validacion, normalizacion y reportes.
 - `infrastructure/persistence/sqlite_analytics_repository.py`: persistencia SQLite de plataformas, canales, publicaciones, metricas, snapshots, imports y mappings.
+## Experiments and Verifiable Learning
+
+- `domain/experiments`: entidades, errores, repositorios, value objects y tipos de decision/aprendizaje sin dependencia de GUI, SQLite, CSV, Excel, APIs o LLM.
+- `application/services/experiment_service.py`: registro de recomendaciones, decisiones, ejecucion, evaluacion, learning y reportes reproducibles.
+- `infrastructure/experiments`: calculo de confianza, deteccion de contradicciones, evaluacion, matching de outcomes y builder de reportes.
+- `infrastructure/persistence/sqlite_experiment_repository.py`: persistencia SQLite de experimentos, assignments, evaluaciones, aprendizajes y reportes.
+- `presentation/desktop/views/experiments_view.py` y `presentation/desktop/views/learning_memory_view.py`: interfaz operativa para la fase.

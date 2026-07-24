@@ -2192,6 +2192,330 @@ def migration_16(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_items_finding_id ON analytics_report_items(finding_id)")
 
 
+def migration_17(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_definitions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            experiment_type TEXT NOT NULL CHECK (
+                experiment_type IN (
+                    'single_variable_test',
+                    'before_after_observation',
+                    'cohort_comparison',
+                    'sequential_test',
+                    'manual_observation'
+                )
+            ),
+            platform TEXT,
+            content_type TEXT,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived', 'completed')),
+            hypothesis TEXT NOT NULL,
+            rationale TEXT NOT NULL,
+            primary_metric_key TEXT NOT NULL,
+            expected_direction TEXT NOT NULL,
+            minimum_sample_size INTEGER NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_variables (
+            id TEXT PRIMARY KEY,
+            experiment_id TEXT NOT NULL,
+            variable_key TEXT NOT NULL,
+            variable_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            control_value_json TEXT NOT NULL,
+            treatment_value_json TEXT NOT NULL,
+            allowed_values_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE,
+            UNIQUE (experiment_id, variable_key)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_guardrails (
+            id TEXT PRIMARY KEY,
+            experiment_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            comparison_operator TEXT NOT NULL,
+            threshold_value REAL,
+            allowed_change REAL,
+            description TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE,
+            UNIQUE (experiment_id, metric_key)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_assignments (
+            id TEXT PRIMARY KEY,
+            experiment_id TEXT NOT NULL,
+            publication_id TEXT,
+            planned_variant TEXT NOT NULL,
+            actual_variant TEXT,
+            assignment_status TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            executed_at TEXT,
+            notes TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            UNIQUE (experiment_id, publication_id, planned_variant)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_records (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            recommendation_type TEXT NOT NULL CHECK (
+                recommendation_type IN (
+                    'content_structure',
+                    'hook',
+                    'duration',
+                    'publication_timing',
+                    'title_direction',
+                    'thumbnail_direction',
+                    'copy',
+                    'caption',
+                    'text_overlay',
+                    'clip_selection',
+                    'platform_adaptation',
+                    'pacing',
+                    'call_to_action',
+                    'other'
+                )
+            ),
+            platform TEXT,
+            content_type TEXT,
+            title TEXT NOT NULL,
+            recommendation_text TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high')),
+            confidence_score REAL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_decisions (
+            id TEXT PRIMARY KEY,
+            recommendation_id TEXT NOT NULL,
+            decision TEXT NOT NULL CHECK (
+                decision IN (
+                    'accepted',
+                    'accepted_with_changes',
+                    'rejected',
+                    'postponed',
+                    'not_applicable',
+                    'needs_more_data'
+                )
+            ),
+            reason TEXT NOT NULL,
+            modified_value_json TEXT,
+            decided_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_id) REFERENCES recommendation_records(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS execution_records (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_id TEXT,
+            experiment_assignment_id TEXT,
+            publication_id TEXT,
+            execution_status TEXT NOT NULL CHECK (
+                execution_status IN ('planned', 'used_as_recommended', 'used_with_changes', 'not_used', 'unknown')
+            ),
+            executed_value_json TEXT NOT NULL,
+            deviation_from_recommendation_json TEXT NOT NULL,
+            executed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_id) REFERENCES recommendation_records(id) ON DELETE SET NULL,
+            FOREIGN KEY (experiment_assignment_id) REFERENCES experiment_assignments(id) ON DELETE SET NULL,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_evaluations (
+            id TEXT PRIMARY KEY,
+            experiment_id TEXT NOT NULL,
+            evaluation_status TEXT NOT NULL CHECK (
+                evaluation_status IN (
+                    'queued',
+                    'running',
+                    'evaluating',
+                    'completed',
+                    'completed_with_warnings',
+                    'interrupted',
+                    'failed',
+                    'cancelled'
+                )
+            ),
+            sample_size INTEGER NOT NULL,
+            control_count INTEGER NOT NULL,
+            treatment_count INTEGER NOT NULL,
+            primary_metric_key TEXT NOT NULL,
+            control_result REAL,
+            treatment_result REAL,
+            absolute_difference REAL,
+            relative_difference REAL,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high')),
+            uncertainty_json TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            evaluated_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_outcomes (
+            id TEXT PRIMARY KEY,
+            evaluation_id TEXT NOT NULL,
+            publication_id TEXT NOT NULL,
+            assignment_id TEXT,
+            variant TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            observed_value REAL,
+            comparable_window TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (evaluation_id) REFERENCES experiment_evaluations(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE CASCADE,
+            FOREIGN KEY (assignment_id) REFERENCES experiment_assignments(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS learning_records (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            learning_type TEXT NOT NULL CHECK (
+                learning_type IN (
+                    'observed_pattern',
+                    'provisional_learning',
+                    'confirmed_learning',
+                    'rejected_learning',
+                    'deprecated_learning',
+                    'needs_more_data'
+                )
+            ),
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            statement TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            supporting_example_count INTEGER NOT NULL,
+            contradicting_example_count INTEGER NOT NULL,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high')),
+            confidence_score REAL,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'provisional', 'confirmed', 'rejected', 'deprecated', 'needs_more_data')),
+            first_observed_at TEXT NOT NULL,
+            last_reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS learning_reviews (
+            id TEXT PRIMARY KEY,
+            learning_id TEXT NOT NULL,
+            decision TEXT NOT NULL CHECK (
+                decision IN ('confirm', 'reject', 'needs_more_data', 'deprecate', 'edit_statement')
+            ),
+            reason TEXT NOT NULL,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (learning_id) REFERENCES learning_records(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_reports (
+            id TEXT PRIMARY KEY,
+            experiment_id TEXT NOT NULL,
+            evaluation_id TEXT,
+            source_fingerprint TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted')),
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            output_json_path TEXT,
+            output_txt_path TEXT,
+            output_csv_path TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE,
+            FOREIGN KEY (evaluation_id) REFERENCES experiment_evaluations(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_definitions_creator_id ON experiment_definitions(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_definitions_status ON experiment_definitions(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_definitions_platform ON experiment_definitions(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_variables_experiment_id ON experiment_variables(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_guardrails_experiment_id ON experiment_guardrails(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_assignments_experiment_id ON experiment_assignments(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_assignments_publication_id ON experiment_assignments(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_records_creator_id ON recommendation_records(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_records_source_id ON recommendation_records(source_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_decisions_recommendation_id ON recommendation_decisions(recommendation_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_execution_records_creator_id ON execution_records(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_execution_records_recommendation_id ON execution_records(recommendation_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_execution_records_assignment_id ON execution_records(experiment_assignment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_execution_records_publication_id ON execution_records(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_evaluations_experiment_id ON experiment_evaluations(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_evaluations_status ON experiment_evaluations(evaluation_status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_evaluations_fingerprint ON experiment_evaluations(uncertainty_json)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_outcomes_evaluation_id ON experiment_outcomes(evaluation_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_outcomes_publication_id ON experiment_outcomes(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_learning_records_creator_id ON learning_records(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_learning_records_status ON learning_records(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_learning_reviews_learning_id ON learning_reviews(learning_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_reports_experiment_id ON experiment_reports(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_reports_status ON experiment_reports(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_reports_fingerprint ON experiment_reports(source_fingerprint)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -2228,6 +2552,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=14, name="subtitle_deliveries"),
     Migration(version=15, name="analytics_data_foundation"),
     Migration(version=16, name="analytics_lab"),
+    Migration(version=17, name="experiments_learning"),
 )
 
 
@@ -2297,6 +2622,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_15(connection)
                 elif migration.version == 16:
                     migration_16(connection)
+                elif migration.version == 17:
+                    migration_17(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

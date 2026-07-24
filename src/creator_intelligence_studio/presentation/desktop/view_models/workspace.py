@@ -56,6 +56,9 @@ from creator_intelligence_studio.application.services.analytics_import_service i
 from creator_intelligence_studio.application.services.analytics_lab_service import (
     AnalyticsLabService,
 )
+from creator_intelligence_studio.application.services.experiment_service import (
+    ExperimentService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -283,6 +286,7 @@ class WorkspaceViewModel:
         evaluation_service: OperationalEvaluationService | None = None,
         analytics_service: AnalyticsImportService | None = None,
         analytics_lab_service: AnalyticsLabService | None = None,
+        experiment_service: ExperimentService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -407,6 +411,7 @@ class WorkspaceViewModel:
         self.subtitle_service = subtitle_service
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
+        self.experiment_service = experiment_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1029,6 +1034,74 @@ class WorkspaceViewModel:
                             "creator_id": report.creator_id,
                             "period_start": report.period_start,
                             "period_end": report.period_end,
+                        },
+                    )
+                )
+        if self.experiment_service is not None and self.selected_creator_id is not None:
+            try:
+                experiments = self.experiment_service.list_experiments(self.selected_creator_id)
+            except Exception:
+                experiments = []
+            for experiment in experiments:
+                try:
+                    evaluations = self.experiment_service.list_experiment_evaluations(experiment.id)
+                except Exception:
+                    evaluations = []
+                for evaluation in evaluations:
+                    tasks.append(
+                        BackgroundTaskRecord(
+                            task_id=evaluation.id,
+                            title="Evaluacion de experimentos",
+                            status=evaluation.evaluation_status.value,
+                            stage_name=evaluation.primary_metric_key,
+                            video_id=None,
+                            video_title=experiment.name,
+                            action_id=experiment.primary_metric_key,
+                            progress_percent=100.0 if evaluation.evaluation_status.value in {"completed", "completed_with_warnings"} else 0.0,
+                            message=evaluation.warnings_json or evaluation.evaluation_status.value,
+                            error=None,
+                            cancellable=evaluation.evaluation_status.value in {"queued", "running", "evaluating"},
+                            created_at=to_iso_z(evaluation.created_at),
+                            updated_at=to_iso_z(evaluation.evaluated_at),
+                            interrupted_at=to_iso_z(evaluation.evaluated_at) if evaluation.evaluation_status.value == "interrupted" else None,
+                            completed_at=to_iso_z(evaluation.evaluated_at) if evaluation.evaluation_status.value in {"completed", "completed_with_warnings"} else None,
+                            payload={
+                                "kind": "experiment_evaluation",
+                                "evaluation": evaluation.to_dict(),
+                                "experiment": experiment.to_dict(),
+                                "creator_id": experiment.creator_id,
+                                "experiment_id": experiment.id,
+                            },
+                        )
+                    )
+            try:
+                reports = self.experiment_service.list_reports(self.selected_creator_id)
+            except Exception:
+                reports = []
+            for report in reports:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=report.id,
+                        title="Reporte de experimentos",
+                        status=report.status,
+                        stage_name="report",
+                        video_id=None,
+                        video_title=report.title,
+                        action_id=report.evaluation_id,
+                        progress_percent=100.0 if report.status in {"completed", "completed_with_warnings"} else 0.0,
+                        message=report.summary,
+                        error=None,
+                        cancellable=report.status in {"queued", "running"},
+                        created_at=to_iso_z(report.created_at),
+                        updated_at=to_iso_z(report.completed_at or report.created_at),
+                        interrupted_at=to_iso_z(report.completed_at) if report.status == "interrupted" else None,
+                        completed_at=to_iso_z(report.completed_at),
+                        payload={
+                            "kind": "experiment_report",
+                            "report": report.to_dict(),
+                            "creator_id": self.selected_creator_id,
+                            "experiment_id": report.experiment_id,
+                            "evaluation_id": report.evaluation_id,
                         },
                     )
                 )
@@ -2250,6 +2323,180 @@ class WorkspaceViewModel:
         if self.analytics_lab_service is None:
             raise RuntimeError("El servicio de analytics lab no esta disponible.")
         return self.analytics_lab_service.export_report(report_id, format_name)
+
+    def list_experiments(self, creator_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_experiments(creator_id)
+
+    def get_experiment(self, experiment_id: str):
+        if self.experiment_service is None:
+            return None
+        return self.experiment_service.get_experiment(experiment_id)
+
+    def create_experiment(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.create_experiment(**kwargs)
+
+    def update_experiment(self, experiment_id: str, **changes):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.update_experiment(experiment_id, **changes)
+
+    def archive_experiment(self, experiment_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.archive_experiment(experiment_id)
+
+    def add_experiment_variable(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.add_variable(**kwargs)
+
+    def add_experiment_guardrail(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.add_guardrail(**kwargs)
+
+    def assign_experiment_publication(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.assign_publication(**kwargs)
+
+    def record_experiment_execution(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.record_execution(**kwargs)
+
+    def evaluate_experiment(self, experiment_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.evaluate_experiment(experiment_id)
+
+    def get_experiment_evaluation(self, evaluation_id: str):
+        if self.experiment_service is None:
+            return None
+        return self.experiment_service.get_evaluation(evaluation_id)
+
+    def list_experiment_evaluations(self, experiment_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_evaluations(experiment_id)
+
+    def get_experiment_evaluation_detail(self, evaluation_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.get_evaluation_detail(evaluation_id)
+
+    def list_recommendations(self, creator_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_recommendations(creator_id)
+
+    def get_recommendation(self, recommendation_id: str):
+        if self.experiment_service is None:
+            return None
+        return self.experiment_service.get_recommendation(recommendation_id)
+
+    def list_recommendation_decisions(self, recommendation_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_recommendation_decisions(recommendation_id)
+
+    def list_experiment_assignments(self, experiment_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_assignments(experiment_id)
+
+    def create_recommendation(self, **kwargs):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.create_recommendation(**kwargs)
+
+    def decide_recommendation(self, recommendation_id: str, *, decision: str, reason: str, modified_value_json: str | None = None):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.decide_recommendation(recommendation_id, decision=decision, reason=reason, modified_value_json=modified_value_json)
+
+    def list_learnings(self, creator_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_learnings(creator_id)
+
+    def get_learning(self, learning_id: str):
+        if self.experiment_service is None:
+            return None
+        return self.experiment_service.get_learning(learning_id)
+
+    def confirm_learning(self, learning_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.confirm_learning(learning_id)
+
+    def reject_learning(self, learning_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.reject_learning(learning_id)
+
+    def needs_more_data_learning(self, learning_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.needs_more_data(learning_id)
+
+    def deprecate_learning(self, learning_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.deprecate_learning(learning_id)
+
+    def edit_learning_statement(self, learning_id: str, statement: str, reason: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.edit_learning_statement(learning_id, statement, reason)
+
+    def list_learning_reviews(self, learning_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_learning_reviews(learning_id)
+
+    def list_experiment_reports(self, creator_id: str):
+        if self.experiment_service is None:
+            return []
+        return self.experiment_service.list_reports(creator_id)
+
+    def get_experiment_report(self, report_id: str):
+        if self.experiment_service is None:
+            return None
+        return self.experiment_service.get_report(report_id)
+
+    def get_experiment_report_detail(self, report_id: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.get_report_detail(report_id)
+
+    def export_experiment_report(self, report_id: str, format_name: str):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.export_report(report_id, format_name)
+
+    def generate_experiment_report(self, experiment_id: str, evaluation_id: str | None = None):
+        if self.experiment_service is None:
+            raise RuntimeError("El servicio de experiments no esta disponible.")
+        return self.experiment_service.generate_report(experiment_id, evaluation_id)
+
+    def reveal_experiment_report(self, report_id: str):
+        if self.experiment_service is None:
+            return None
+        report = self.experiment_service.get_report(report_id)
+        if report is None:
+            return None
+        if report.output_json_path:
+            return Path(report.output_json_path)
+        if report.output_txt_path:
+            return Path(report.output_txt_path)
+        if report.output_csv_path:
+            return Path(report.output_csv_path)
+        return None
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

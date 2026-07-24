@@ -60,3 +60,8 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - refinamiento futuro de candidatos multimodales cuando exista una segunda fase de clips o edicion.
 - refinamiento futuro de datos de personalizacion cuando exista una fase explicita de entrenamiento por creador.
 - estrategia futura de personalizacion mas avanzada por creador.
+## Experiments and Verifiable Learning
+
+- La fase registra recomendacion, decision humana, ejecucion real, evaluacion y aprendizaje sin convertir correlacion en causalidad.
+- Las evaluaciones y los aprendizajes quedan trazables, revisables y separados de las reglas automaticas.
+- No se promueven reglas automaticamente ni se borra evidencia historica.

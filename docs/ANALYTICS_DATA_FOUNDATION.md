@@ -31,3 +31,7 @@ Base manual de analitica historica para Creator Intelligence Studio.
 - `tiktok`
 - `manual_other`
 
+## Next phase
+
+Analytics Lab consume estas publicaciones normalizadas para cohortes, comparaciones y findings sin sobreescribir snapshots.
+Experiments and Verifiable Learning consume recomendaciones, decisiones y evaluaciones como memoria estructurada.

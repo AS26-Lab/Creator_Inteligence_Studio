@@ -206,23 +206,30 @@ from creator_intelligence_studio.application.commands.analytics_lab_commands imp
     ShowAnalyticsFindingCommand,
     ShowAnalyticsReportCommand,
 )
-from creator_intelligence_studio.application.commands.analytics_commands import (
-    CreateAnalyticsChannelCommand,
-    DetectAnalyticsSchemaCommand,
-    ExportNormalizedAnalyticsCommand,
-    ImportAnalyticsCsvCommand,
-    ImportAnalyticsExcelCommand,
-    InspectAnalyticsFileCommand,
-    ListAnalyticsChannelsCommand,
-    ListAnalyticsImportsCommand,
-    ListAnalyticsMappingsCommand,
-    ListAnalyticsPlatformsCommand,
-    ListAnalyticsPublicationsCommand,
-    ListAnalyticsImportRowsCommand,
-    PublicationMetricsCommand,
-    SaveAnalyticsMappingCommand,
-    ShowAnalyticsImportCommand,
-    ShowAnalyticsPublicationCommand,
+from creator_intelligence_studio.application.commands.experiment_commands import (
+    AddExperimentGuardrailCommand,
+    AddExperimentVariableCommand,
+    ArchiveExperimentCommand,
+    AssignExperimentCommand,
+    ConfirmLearningCommand,
+    CreateExperimentCommand,
+    CreateRecommendationCommand,
+    DecideRecommendationCommand,
+    DeprecateLearningCommand,
+    EvaluateExperimentCommand,
+    ExportExperimentReportCommand,
+    GenerateExperimentReportCommand,
+    ListExperimentsCommand,
+    ListLearningsCommand,
+    ListRecommendationsCommand,
+    NeedsMoreDataLearningCommand,
+    RecordExecutionCommand,
+    RejectLearningCommand,
+    UpdateExperimentCommand,
+    ShowExperimentCommand,
+    ShowExperimentEvaluationCommand,
+    ShowLearningCommand,
+    ShowRecommendationCommand,
 )
 from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
@@ -291,6 +298,9 @@ from creator_intelligence_studio.application.services.analytics_import_service i
 )
 from creator_intelligence_studio.application.services.analytics_lab_service import (
     AnalyticsLabService,
+)
+from creator_intelligence_studio.application.services.experiment_service import (
+    ExperimentService,
 )
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
@@ -742,6 +752,167 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_report_export.add_argument("--report-id", required=True)
     analytics_report_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
     analytics_report_export.add_argument("--json", action="store_true")
+
+    experiments_parser = subparsers.add_parser("experiments", help="Experiments and Verifiable Learning")
+    experiments_sub = experiments_parser.add_subparsers(dest="action", required=True)
+
+    experiments_list = experiments_sub.add_parser("list", help="Listar experimentos")
+    experiments_list.add_argument("--creator-id", required=True)
+    experiments_list.add_argument("--json", action="store_true")
+
+    experiments_create = experiments_sub.add_parser("create", help="Crear experimento")
+    experiments_create.add_argument("--creator-id", required=True)
+    experiments_create.add_argument("--name", required=True)
+    experiments_create.add_argument("--description", required=True)
+    experiments_create.add_argument("--experiment-type", required=True)
+    experiments_create.add_argument("--hypothesis", required=True)
+    experiments_create.add_argument("--rationale", required=True)
+    experiments_create.add_argument("--primary-metric-key", required=True)
+    experiments_create.add_argument("--expected-direction", required=True)
+    experiments_create.add_argument("--minimum-sample-size", required=True, type=int)
+    experiments_create.add_argument("--platform")
+    experiments_create.add_argument("--content-type")
+    experiments_create.add_argument("--start-date")
+    experiments_create.add_argument("--end-date")
+    experiments_create.add_argument("--json", action="store_true")
+
+    experiments_show = experiments_sub.add_parser("show", help="Mostrar experimento")
+    experiments_show.add_argument("--experiment-id", required=True)
+    experiments_show.add_argument("--json", action="store_true")
+
+    experiments_update = experiments_sub.add_parser("update", help="Actualizar experimento")
+    experiments_update.add_argument("--experiment-id", required=True)
+    experiments_update.add_argument("--name")
+    experiments_update.add_argument("--description")
+    experiments_update.add_argument("--experiment-type")
+    experiments_update.add_argument("--status")
+    experiments_update.add_argument("--hypothesis")
+    experiments_update.add_argument("--rationale")
+    experiments_update.add_argument("--primary-metric-key")
+    experiments_update.add_argument("--expected-direction")
+    experiments_update.add_argument("--minimum-sample-size", type=int)
+    experiments_update.add_argument("--platform")
+    experiments_update.add_argument("--content-type")
+    experiments_update.add_argument("--start-date")
+    experiments_update.add_argument("--end-date")
+    experiments_update.add_argument("--json", action="store_true")
+
+    experiments_archive = experiments_sub.add_parser("archive", help="Archivar experimento")
+    experiments_archive.add_argument("--experiment-id", required=True)
+    experiments_archive.add_argument("--json", action="store_true")
+
+    experiments_variable_add = experiments_sub.add_parser("variable-add", help="Agregar variable")
+    experiments_variable_add.add_argument("--experiment-id", required=True)
+    experiments_variable_add.add_argument("--variable-key", required=True)
+    experiments_variable_add.add_argument("--variable-type", required=True)
+    experiments_variable_add.add_argument("--description", required=True)
+    experiments_variable_add.add_argument("--control-value-json", required=True)
+    experiments_variable_add.add_argument("--treatment-value-json", required=True)
+    experiments_variable_add.add_argument("--allowed-values-json", required=True)
+    experiments_variable_add.add_argument("--json", action="store_true")
+
+    experiments_guardrail_add = experiments_sub.add_parser("guardrail-add", help="Agregar guardrail")
+    experiments_guardrail_add.add_argument("--experiment-id", required=True)
+    experiments_guardrail_add.add_argument("--metric-key", required=True)
+    experiments_guardrail_add.add_argument("--comparison-operator", required=True)
+    experiments_guardrail_add.add_argument("--threshold-value", type=float)
+    experiments_guardrail_add.add_argument("--allowed-change", type=float)
+    experiments_guardrail_add.add_argument("--description", required=True)
+    experiments_guardrail_add.add_argument("--json", action="store_true")
+
+    experiments_assign = experiments_sub.add_parser("assign", help="Asignar publicacion")
+    experiments_assign.add_argument("--experiment-id", required=True)
+    experiments_assign.add_argument("--publication-id", required=True)
+    experiments_assign.add_argument("--variant", required=True)
+    experiments_assign.add_argument("--actual-variant")
+    experiments_assign.add_argument("--notes", default="")
+    experiments_assign.add_argument("--json", action="store_true")
+
+    experiments_execution = experiments_sub.add_parser("execution-record", help="Registrar ejecucion real")
+    experiments_execution.add_argument("--creator-id", required=True)
+    experiments_execution.add_argument("--recommendation-id")
+    experiments_execution.add_argument("--experiment-assignment-id")
+    experiments_execution.add_argument("--publication-id")
+    experiments_execution.add_argument("--execution-status", required=True)
+    experiments_execution.add_argument("--executed-value-json", required=True)
+    experiments_execution.add_argument("--deviation-from-recommendation-json", required=True)
+    experiments_execution.add_argument("--json", action="store_true")
+
+    experiments_evaluate = experiments_sub.add_parser("evaluate", help="Evaluar experimento")
+    experiments_evaluate.add_argument("--experiment-id", required=True)
+    experiments_evaluate.add_argument("--json", action="store_true")
+
+    experiments_evaluation_show = experiments_sub.add_parser("evaluation-show", help="Mostrar evaluacion")
+    experiments_evaluation_show.add_argument("--evaluation-id", required=True)
+    experiments_evaluation_show.add_argument("--json", action="store_true")
+
+    experiments_report = experiments_sub.add_parser("report", help="Generar reporte")
+    experiments_report.add_argument("--experiment-id", required=True)
+    experiments_report.add_argument("--evaluation-id")
+    experiments_report.add_argument("--json", action="store_true")
+
+    experiments_report_export = experiments_sub.add_parser("report-export", help="Exportar reporte")
+    experiments_report_export.add_argument("--report-id", required=True)
+    experiments_report_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
+    experiments_report_export.add_argument("--json", action="store_true")
+
+    recommendations_parser = subparsers.add_parser("recommendations", help="Recomendaciones rastreadas")
+    recommendations_sub = recommendations_parser.add_subparsers(dest="action", required=True)
+
+    recommendations_list = recommendations_sub.add_parser("list", help="Listar recomendaciones")
+    recommendations_list.add_argument("--creator-id", required=True)
+    recommendations_list.add_argument("--json", action="store_true")
+
+    recommendations_create = recommendations_sub.add_parser("create", help="Crear recomendacion")
+    recommendations_create.add_argument("--creator-id", required=True)
+    recommendations_create.add_argument("--source-type", required=True)
+    recommendations_create.add_argument("--source-id")
+    recommendations_create.add_argument("--recommendation-type", required=True)
+    recommendations_create.add_argument("--title", required=True)
+    recommendations_create.add_argument("--recommendation-text", required=True)
+    recommendations_create.add_argument("--evidence-json", required=True)
+    recommendations_create.add_argument("--confidence-level", required=True)
+    recommendations_create.add_argument("--platform")
+    recommendations_create.add_argument("--content-type")
+    recommendations_create.add_argument("--json", action="store_true")
+
+    recommendations_show = recommendations_sub.add_parser("show", help="Mostrar recomendacion")
+    recommendations_show.add_argument("--recommendation-id", required=True)
+    recommendations_show.add_argument("--json", action="store_true")
+
+    recommendations_decide = recommendations_sub.add_parser("decide", help="Decidir recomendacion")
+    recommendations_decide.add_argument("--recommendation-id", required=True)
+    recommendations_decide.add_argument("--decision", required=True)
+    recommendations_decide.add_argument("--reason", required=True)
+    recommendations_decide.add_argument("--modified-value-json")
+    recommendations_decide.add_argument("--json", action="store_true")
+
+    learnings_parser = subparsers.add_parser("learnings", help="Memoria estructurada de aprendizaje")
+    learnings_sub = learnings_parser.add_subparsers(dest="action", required=True)
+
+    learnings_list = learnings_sub.add_parser("list", help="Listar aprendizajes")
+    learnings_list.add_argument("--creator-id", required=True)
+    learnings_list.add_argument("--json", action="store_true")
+
+    learnings_show = learnings_sub.add_parser("show", help="Mostrar aprendizaje")
+    learnings_show.add_argument("--learning-id", required=True)
+    learnings_show.add_argument("--json", action="store_true")
+
+    learnings_confirm = learnings_sub.add_parser("confirm", help="Confirmar aprendizaje")
+    learnings_confirm.add_argument("--learning-id", required=True)
+    learnings_confirm.add_argument("--json", action="store_true")
+
+    learnings_reject = learnings_sub.add_parser("reject", help="Rechazar aprendizaje")
+    learnings_reject.add_argument("--learning-id", required=True)
+    learnings_reject.add_argument("--json", action="store_true")
+
+    learnings_more_data = learnings_sub.add_parser("needs-more-data", help="Marcar aprendizaje con mas datos")
+    learnings_more_data.add_argument("--learning-id", required=True)
+    learnings_more_data.add_argument("--json", action="store_true")
+
+    learnings_deprecate = learnings_sub.add_parser("deprecate", help="Depreciar aprendizaje")
+    learnings_deprecate.add_argument("--learning-id", required=True)
+    learnings_deprecate.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -2873,6 +3044,283 @@ def _handle_evaluation(args, service: OperationalEvaluationService, stdout, stde
     raise ValueError("Accion de evaluacion no reconocida.")
 
 
+def _handle_experiments(args, service: ExperimentService, stdout, stderr) -> int:
+    if args.action == "list":
+        command = ListExperimentsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_experiments(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "create":
+        command = CreateExperimentCommand(
+            args.creator_id,
+            args.name,
+            args.description,
+            args.experiment_type,
+            args.hypothesis,
+            args.rationale,
+            args.primary_metric_key,
+            args.expected_direction,
+            args.minimum_sample_size,
+            platform=args.platform,
+            content_type=args.content_type,
+            start_date=args.start_date,
+            end_date=args.end_date,
+        )
+        payload = service.create_experiment(
+            creator_id=command.creator_id,
+            name=command.name,
+            description=command.description,
+            experiment_type=command.experiment_type,
+            hypothesis=command.hypothesis,
+            rationale=command.rationale,
+            primary_metric_key=command.primary_metric_key,
+            expected_direction=command.expected_direction,
+            minimum_sample_size=command.minimum_sample_size,
+            platform=command.platform,
+            content_type=command.content_type,
+            start_date=command.start_date,
+            end_date=command.end_date,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "show":
+        command = ShowExperimentCommand(args.experiment_id)
+        payload = service.get_experiment(command.experiment_id)
+        if payload is None:
+            print("Experimento no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "update":
+        command = UpdateExperimentCommand(args.experiment_id)
+        changes = {
+            key: value
+            for key, value in {
+                "name": args.name,
+                "description": args.description,
+                "experiment_type": args.experiment_type,
+                "status": args.status,
+                "hypothesis": args.hypothesis,
+                "rationale": args.rationale,
+                "primary_metric_key": args.primary_metric_key,
+                "expected_direction": args.expected_direction,
+                "minimum_sample_size": args.minimum_sample_size,
+                "platform": args.platform,
+                "content_type": args.content_type,
+                "start_date": args.start_date,
+                "end_date": args.end_date,
+            }.items()
+            if value is not None
+        }
+        payload = service.update_experiment(command.experiment_id, **changes)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "archive":
+        command = ArchiveExperimentCommand(args.experiment_id)
+        payload = service.archive_experiment(command.experiment_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "variable-add":
+        command = AddExperimentVariableCommand(
+            args.experiment_id,
+            args.variable_key,
+            args.variable_type,
+            args.description,
+            args.control_value_json,
+            args.treatment_value_json,
+            args.allowed_values_json,
+        )
+        payload = service.add_variable(
+            experiment_id=command.experiment_id,
+            variable_key=command.variable_key,
+            variable_type=command.variable_type,
+            description=command.description,
+            control_value_json=command.control_value_json,
+            treatment_value_json=command.treatment_value_json,
+            allowed_values_json=command.allowed_values_json,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "guardrail-add":
+        command = AddExperimentGuardrailCommand(
+            args.experiment_id,
+            args.metric_key,
+            args.comparison_operator,
+            args.description,
+            threshold_value=args.threshold_value,
+            allowed_change=args.allowed_change,
+        )
+        payload = service.add_guardrail(
+            experiment_id=command.experiment_id,
+            metric_key=command.metric_key,
+            comparison_operator=command.comparison_operator,
+            threshold_value=command.threshold_value,
+            allowed_change=command.allowed_change,
+            description=command.description,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "assign":
+        command = AssignExperimentCommand(
+            args.experiment_id,
+            args.publication_id,
+            args.variant,
+            actual_variant=args.actual_variant,
+            notes=args.notes,
+        )
+        payload = service.assign_publication(
+            experiment_id=command.experiment_id,
+            publication_id=command.publication_id,
+            variant=command.variant,
+            actual_variant=command.actual_variant,
+            notes=command.notes,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "execution-record":
+        command = RecordExecutionCommand(
+            args.creator_id,
+            args.recommendation_id,
+            args.experiment_assignment_id,
+            args.publication_id,
+            args.execution_status,
+            args.executed_value_json,
+            args.deviation_from_recommendation_json,
+        )
+        payload = service.record_execution(
+            creator_id=command.creator_id,
+            recommendation_id=command.recommendation_id,
+            experiment_assignment_id=command.experiment_assignment_id,
+            publication_id=command.publication_id,
+            execution_status=command.execution_status,
+            executed_value_json=command.executed_value_json,
+            deviation_from_recommendation_json=command.deviation_from_recommendation_json,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "evaluate":
+        command = EvaluateExperimentCommand(args.experiment_id)
+        payload = service.evaluate_experiment(command.experiment_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "evaluation-show":
+        command = ShowExperimentEvaluationCommand(args.evaluation_id)
+        payload = service.get_evaluation_detail(command.evaluation_id)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "report":
+        command = GenerateExperimentReportCommand(args.experiment_id, evaluation_id=args.evaluation_id)
+        payload = service.generate_report(command.experiment_id, command.evaluation_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "report-export":
+        command = ExportExperimentReportCommand(args.report_id, args.format)
+        payload = {
+            "report_id": command.report_id,
+            "format": command.format,
+            "path": str(service.export_report(command.report_id, command.format)),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de experiments no reconocida.")
+
+
+def _handle_recommendations(args, service: ExperimentService, stdout, stderr) -> int:
+    if args.action == "list":
+        command = ListRecommendationsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_recommendations(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "create":
+        command = CreateRecommendationCommand(
+            args.creator_id,
+            args.source_type,
+            args.source_id,
+            args.recommendation_type,
+            args.title,
+            args.recommendation_text,
+            args.evidence_json,
+            args.confidence_level,
+            platform=args.platform,
+            content_type=args.content_type,
+        )
+        payload = service.create_recommendation(
+            creator_id=command.creator_id,
+            source_type=command.source_type,
+            source_id=command.source_id,
+            recommendation_type=command.recommendation_type,
+            title=command.title,
+            recommendation_text=command.recommendation_text,
+            evidence_json=command.evidence_json,
+            confidence_level=command.confidence_level,
+            platform=command.platform,
+            content_type=command.content_type,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "show":
+        command = ShowRecommendationCommand(args.recommendation_id)
+        payload = service.get_recommendation(command.recommendation_id)
+        if payload is None:
+            print("Recomendacion no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "decide":
+        command = DecideRecommendationCommand(
+            args.recommendation_id,
+            args.decision,
+            args.reason,
+            modified_value_json=args.modified_value_json,
+        )
+        payload = service.decide_recommendation(
+            command.recommendation_id,
+            decision=command.decision,
+            reason=command.reason,
+            modified_value_json=command.modified_value_json,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de recommendations no reconocida.")
+
+
+def _handle_learnings(args, service: ExperimentService, stdout, stderr) -> int:
+    if args.action == "list":
+        command = ListLearningsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_learnings(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "show":
+        command = ShowLearningCommand(args.learning_id)
+        payload = service.get_learning(command.learning_id)
+        if payload is None:
+            print("Aprendizaje no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "confirm":
+        command = ConfirmLearningCommand(args.learning_id)
+        payload = service.confirm_learning(command.learning_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "reject":
+        command = RejectLearningCommand(args.learning_id)
+        payload = service.reject_learning(command.learning_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "needs-more-data":
+        command = NeedsMoreDataLearningCommand(args.learning_id)
+        payload = service.needs_more_data(command.learning_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "deprecate":
+        command = DeprecateLearningCommand(args.learning_id)
+        payload = service.deprecate_learning(command.learning_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de learnings no reconocida.")
+
+
 def _handle_analytics(args, service: AnalyticsImportService, lab_service: AnalyticsLabService | None, stdout, stderr) -> int:
     if args.action == "platforms":
         command = ListAnalyticsPlatformsCommand()
@@ -3193,6 +3641,7 @@ def dispatch(
     clip_service: ClipRankingService,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
+    experiment_service: ExperimentService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -3238,6 +3687,18 @@ def dispatch(
             if analytics_service is None:
                 raise DomainError("El servicio de analytics no esta disponible.")
             return _handle_analytics(args, analytics_service, analytics_lab_service, stdout, stderr)
+        if args.entity == "experiments":
+            if experiment_service is None:
+                raise DomainError("El servicio de experiments no esta disponible.")
+            return _handle_experiments(args, experiment_service, stdout, stderr)
+        if args.entity == "recommendations":
+            if experiment_service is None:
+                raise DomainError("El servicio de experiments no esta disponible.")
+            return _handle_recommendations(args, experiment_service, stdout, stderr)
+        if args.entity == "learnings":
+            if experiment_service is None:
+                raise DomainError("El servicio de experiments no esta disponible.")
+            return _handle_learnings(args, experiment_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")

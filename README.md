@@ -80,6 +80,7 @@ La aplicacion ya permite:
 - renderizar localmente clips aprobados o colecciones con FFmpeg, con salida verificada y historial persistente;
 - generar, editar, importar y exportar subtitulos locales basados en transcripciones existentes;
 - preparar datasets de personalizacion por creador a partir del feedback humano;
+- registrar experimentos, decisiones humanas y aprendizajes verificables sin promover reglas automaticamente;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -102,6 +103,7 @@ La guia detallada del flujo esta en [`docs/PRODUCT_UX_WORKFLOW.md`](docs/PRODUCT
 La primera version de render local esta documentada en [`docs/CLIP_RENDERING.md`](docs/CLIP_RENDERING.md).
 La primera version de subtitulos locales esta documentada en [`docs/SUBTITLES.md`](docs/SUBTITLES.md).
 La base de analitica manual multiplataforma esta documentada en [`docs/ANALYTICS_DATA_FOUNDATION.md`](docs/ANALYTICS_DATA_FOUNDATION.md).
+La fase de experimentos y aprendizaje verificable esta documentada en [`docs/EXPERIMENTS_AND_LEARNING.md`](docs/EXPERIMENTS_AND_LEARNING.md).
 
 ## Base local
 

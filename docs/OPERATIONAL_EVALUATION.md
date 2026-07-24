@@ -76,3 +76,4 @@ The operational evaluation view shows scenarios, history, stages, metrics, asser
 - A passing run validates technical integrity and persistence, not recommendation quality or commercial usefulness.
 
 Analytics foundation checks can be added as controlled scenarios to validate CSV/XLSX import, schema detection, mapping reuse, duplicate handling, interruption/retry and normalized export without external APIs.
+Experiments and Learning scenarios can reuse the same harness with synthetic recommendations, decisions, evaluations, learning reviews and report exports, while keeping results verifiable and non-causal.

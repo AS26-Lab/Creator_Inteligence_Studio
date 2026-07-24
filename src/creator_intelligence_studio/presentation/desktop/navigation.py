@@ -25,6 +25,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("videos", "Videos"),
         NavigationItem("analytics", "Analytics"),
         NavigationItem("analytics_lab", "Analytics Lab"),
+        NavigationItem("experiments", "Experiments"),
         NavigationItem("workflow", "Workflow"),
         NavigationItem("tasks", "Task Center"),
         NavigationItem("onboarding", "Onboarding"),

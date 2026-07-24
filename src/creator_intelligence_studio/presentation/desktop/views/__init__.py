@@ -8,6 +8,7 @@ from .clip_ranking_view import ClipRankingView
 from .dashboard_view import DashboardView
 from .analytics_view import AnalyticsView
 from .analytics_lab_view import AnalyticsLabView
+from .experiments_view import ExperimentsView
 from .multimodal_analysis_view import MultimodalAnalysisView
 from .operational_evaluation_view import OperationalEvaluationView
 from .personalization_data_view import PersonalizationDataView
@@ -21,6 +22,7 @@ from .visual_analysis_view import VisualAnalysisView
 from .system_view import SystemView
 from .transcription_view import TranscriptionView
 from .subtitle_editor_view import SubtitleEditorView
+from .learning_memory_view import LearningMemoryView
 from .videos_view import VideosView
 
 __all__ = [
@@ -29,6 +31,7 @@ __all__ = [
     "AnalyticsView",
     "ClipRankingView",
     "DashboardView",
+    "ExperimentsView",
     "MultimodalAnalysisView",
     "AnalyticsLabView",
     "OperationalEvaluationView",
@@ -43,5 +46,6 @@ __all__ = [
     "SystemView",
     "TranscriptionView",
     "SubtitleEditorView",
+    "LearningMemoryView",
     "VideosView",
 ]

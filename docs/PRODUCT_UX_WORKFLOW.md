@@ -105,3 +105,4 @@ The initial UX preferences are local and reversible:
 - exportar datos normalizados.
 
 This flow records observed facts. It does not infer causality, predictions, or recommendations.
+Experiments and Learning adds the next operational loop: recommendation, human decision, real execution, evaluation and structured learning, still without automatic rule promotion or causal claims.
