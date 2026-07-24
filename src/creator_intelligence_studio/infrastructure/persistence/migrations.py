@@ -2012,6 +2012,186 @@ def migration_15(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_field_mappings_active ON analytics_field_mappings(is_active)")
 
 
+def migration_16(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_cohort_definitions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            date_from TEXT,
+            date_to TEXT,
+            duration_min_seconds REAL,
+            duration_max_seconds REAL,
+            topic TEXT,
+            format TEXT,
+            language TEXT,
+            filters_json TEXT NOT NULL,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_analysis_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            run_type TEXT NOT NULL CHECK (run_type IN ('cohort_analysis', 'publication_comparison', 'weekly_report')),
+            cohort_id TEXT,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted')),
+            configuration_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            publication_count INTEGER NOT NULL,
+            metric_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (cohort_id) REFERENCES analytics_cohort_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_comparison_results (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            publication_id TEXT,
+            cohort_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            observed_value REAL,
+            cohort_count INTEGER NOT NULL,
+            cohort_min REAL,
+            cohort_max REAL,
+            cohort_mean REAL,
+            cohort_median REAL,
+            percentile REAL,
+            lower_quartile REAL,
+            upper_quartile REAL,
+            robust_z_score REAL,
+            comparison_status TEXT NOT NULL CHECK (
+                comparison_status IN ('comparable', 'insufficient_sample', 'incomparable', 'no_data', 'outlier_dominated')
+            ),
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES analytics_analysis_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (cohort_id) REFERENCES analytics_cohort_definitions(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_findings (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            publication_id TEXT,
+            cohort_id TEXT,
+            finding_type TEXT NOT NULL CHECK (
+                finding_type IN ('fact', 'comparison', 'anomaly', 'pattern', 'inference', 'hypothesis', 'data_quality_warning')
+            ),
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('low', 'medium', 'high')),
+            confidence_score REAL,
+            sample_size INTEGER NOT NULL,
+            contradiction_count INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'confirmed', 'rejected', 'needs_more_data', 'not_useful')),
+            is_confirmed INTEGER NOT NULL DEFAULT 0,
+            confirmed_at TEXT,
+            rejected_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES analytics_analysis_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (cohort_id) REFERENCES analytics_cohort_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_report_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            report_type TEXT NOT NULL,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted')),
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            finding_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            output_json_path TEXT,
+            output_txt_path TEXT,
+            output_csv_path TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, report_type, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_report_items (
+            id TEXT PRIMARY KEY,
+            report_run_id TEXT NOT NULL,
+            item_index INTEGER NOT NULL,
+            section TEXT NOT NULL,
+            finding_id TEXT,
+            item_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (report_run_id) REFERENCES analytics_report_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (finding_id) REFERENCES analytics_findings(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_cohort_definitions_creator_id ON analytics_cohort_definitions(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_cohort_definitions_active ON analytics_cohort_definitions(is_active)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_cohort_definitions_platform ON analytics_cohort_definitions(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_analysis_runs_creator_id ON analytics_analysis_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_analysis_runs_cohort_id ON analytics_analysis_runs(cohort_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_analysis_runs_type ON analytics_analysis_runs(run_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_analysis_runs_status ON analytics_analysis_runs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_analysis_runs_fingerprint ON analytics_analysis_runs(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_comparison_results_run_id ON analytics_comparison_results(analysis_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_comparison_results_publication_id ON analytics_comparison_results(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_comparison_results_cohort_id ON analytics_comparison_results(cohort_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_comparison_results_metric_key ON analytics_comparison_results(metric_key)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_creator_id ON analytics_findings(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_run_id ON analytics_findings(analysis_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_cohort_id ON analytics_findings(cohort_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_publication_id ON analytics_findings(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_type ON analytics_findings(finding_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_findings_status ON analytics_findings(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_runs_creator_id ON analytics_report_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_runs_type ON analytics_report_runs(report_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_runs_status ON analytics_report_runs(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_runs_fingerprint ON analytics_report_runs(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_items_report_id ON analytics_report_items(report_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_report_items_finding_id ON analytics_report_items(finding_id)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -2047,6 +2227,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=13, name="subtitles"),
     Migration(version=14, name="subtitle_deliveries"),
     Migration(version=15, name="analytics_data_foundation"),
+    Migration(version=16, name="analytics_lab"),
 )
 
 
@@ -2114,6 +2295,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_14(connection)
                 elif migration.version == 15:
                     migration_15(connection)
+                elif migration.version == 16:
+                    migration_16(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

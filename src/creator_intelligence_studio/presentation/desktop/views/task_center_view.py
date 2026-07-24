@@ -74,6 +74,12 @@ class TaskCenterView(QWidget):
     def _is_analytics_import_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "analytics_import")
 
+    def _is_analytics_lab_analysis_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "analytics_lab_analysis")
+
+    def _is_analytics_lab_report_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "analytics_lab_report")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -128,6 +134,22 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte disponible en: {report}")
             return
+        if self._is_analytics_lab_report_task(task):
+            report = self.workspace.reveal_analytics_lab_report(task.task_id)
+            if report is None:
+                QMessageBox.information(self, "Task Center", "El reporte no tiene una salida disponible.")
+            else:
+                QMessageBox.information(self, "Task Center", f"Reporte disponible en: {report}")
+            return
+        if self._is_analytics_lab_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            run = payload.get("run") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Corrida disponible: {run.get('run_type', '')} / {run.get('status', task.status)}",
+            )
+            return
         if task.video_id is None:
             return
         self.workspace.select_video(task.video_id)
@@ -141,6 +163,8 @@ class TaskCenterView(QWidget):
             self.workspace.cancel_delivery(task.task_id)
         elif self._is_analytics_import_task(task):
             self.workspace.cancel_analytics_import(task.task_id)
+        elif self._is_analytics_lab_analysis_task(task) or self._is_analytics_lab_report_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -159,6 +183,27 @@ class TaskCenterView(QWidget):
             return
         if self._is_analytics_import_task(task):
             self.workspace.retry_analytics_import(task.task_id)
+            self.refresh()
+            return
+        if self._is_analytics_lab_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            run = payload.get("run") or {}
+            cohort_id = payload.get("cohort_id") or run.get("cohort_id")
+            run_type = payload.get("run_type") or run.get("run_type")
+            publication_id = payload.get("publication_id")
+            if cohort_id and run_type == "publication_comparison" and publication_id:
+                self.workspace.compare_analytics_publication(str(publication_id), str(cohort_id))
+            elif cohort_id:
+                self.workspace.analyze_analytics_lab_cohort(str(cohort_id))
+            self.refresh()
+            return
+        if self._is_analytics_lab_report_task(task):
+            payload = getattr(task, "payload", {})
+            period_start = payload.get("period_start")
+            period_end = payload.get("period_end")
+            creator_id = payload.get("creator_id") or self.workspace.selected_creator_id
+            if creator_id and period_start and period_end:
+                self.workspace.generate_analytics_lab_weekly_report(str(creator_id), str(period_start), str(period_end))
             self.refresh()
             return
         if task.title == "Render de clip":

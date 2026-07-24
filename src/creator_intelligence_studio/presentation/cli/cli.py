@@ -190,6 +190,22 @@ from creator_intelligence_studio.application.commands.analytics_commands import 
     ShowAnalyticsImportCommand,
     ShowAnalyticsPublicationCommand,
 )
+from creator_intelligence_studio.application.commands.analytics_lab_commands import (
+    AnalyzeAnalyticsCohortCommand,
+    ConfirmAnalyticsFindingCommand,
+    CreateAnalyticsCohortCommand,
+    ExportAnalyticsReportCommand,
+    GenerateAnalyticsWeeklyReportCommand,
+    ListAnalyticsCohortsCommand,
+    ListAnalyticsFindingsCommand,
+    ListAnalyticsReportsCommand,
+    CompareAnalyticsPublicationCommand,
+    RejectAnalyticsFindingCommand,
+    ShowAnalyticsAnalysisCommand,
+    ShowAnalyticsCohortCommand,
+    ShowAnalyticsFindingCommand,
+    ShowAnalyticsReportCommand,
+)
 from creator_intelligence_studio.application.commands.analytics_commands import (
     CreateAnalyticsChannelCommand,
     DetectAnalyticsSchemaCommand,
@@ -272,6 +288,9 @@ from creator_intelligence_studio.application.services.operational_evaluation_ser
 )
 from creator_intelligence_studio.application.services.analytics_import_service import (
     AnalyticsImportService,
+)
+from creator_intelligence_studio.application.services.analytics_lab_service import (
+    AnalyticsLabService,
 )
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
@@ -650,6 +669,79 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_export.add_argument("--creator-id", required=True)
     analytics_export.add_argument("--format", required=True, choices=["csv", "json"])
     analytics_export.add_argument("--json", action="store_true")
+
+    analytics_cohorts = analytics_sub.add_parser("cohorts", help="Listar cohortes")
+    analytics_cohorts.add_argument("--creator-id", required=True)
+    analytics_cohorts.add_argument("--json", action="store_true")
+
+    analytics_cohort_create = analytics_sub.add_parser("cohort-create", help="Crear cohorte")
+    analytics_cohort_create.add_argument("--creator-id", required=True)
+    analytics_cohort_create.add_argument("--name", required=True)
+    analytics_cohort_create.add_argument("--description", required=True)
+    analytics_cohort_create.add_argument("--platform")
+    analytics_cohort_create.add_argument("--content-type")
+    analytics_cohort_create.add_argument("--date-from")
+    analytics_cohort_create.add_argument("--date-to")
+    analytics_cohort_create.add_argument("--duration-min-seconds", type=float)
+    analytics_cohort_create.add_argument("--duration-max-seconds", type=float)
+    analytics_cohort_create.add_argument("--topic")
+    analytics_cohort_create.add_argument("--format")
+    analytics_cohort_create.add_argument("--language")
+    analytics_cohort_create.add_argument("--channel-id")
+    analytics_cohort_create.add_argument("--linked", action="store_true")
+    analytics_cohort_create.add_argument("--json", action="store_true")
+
+    analytics_cohort_show = analytics_sub.add_parser("cohort-show", help="Mostrar cohorte")
+    analytics_cohort_show.add_argument("--cohort-id", required=True)
+    analytics_cohort_show.add_argument("--json", action="store_true")
+
+    analytics_cohort_analyze = analytics_sub.add_parser("cohort-analyze", help="Analizar cohorte")
+    analytics_cohort_analyze.add_argument("--cohort-id", required=True)
+    analytics_cohort_analyze.add_argument("--json", action="store_true")
+
+    analytics_compare = analytics_sub.add_parser("compare-publication", help="Comparar publicacion con cohorte")
+    analytics_compare.add_argument("--publication-id", required=True)
+    analytics_compare.add_argument("--cohort-id", required=True)
+    analytics_compare.add_argument("--json", action="store_true")
+
+    analytics_analysis_show = analytics_sub.add_parser("analysis-show", help="Mostrar corrida de analisis")
+    analytics_analysis_show.add_argument("--run-id", required=True)
+    analytics_analysis_show.add_argument("--json", action="store_true")
+
+    analytics_findings = analytics_sub.add_parser("findings", help="Listar findings")
+    analytics_findings.add_argument("--creator-id", required=True)
+    analytics_findings.add_argument("--json", action="store_true")
+
+    analytics_finding_show = analytics_sub.add_parser("finding-show", help="Mostrar finding")
+    analytics_finding_show.add_argument("--finding-id", required=True)
+    analytics_finding_show.add_argument("--json", action="store_true")
+
+    analytics_finding_confirm = analytics_sub.add_parser("finding-confirm", help="Confirmar finding")
+    analytics_finding_confirm.add_argument("--finding-id", required=True)
+    analytics_finding_confirm.add_argument("--json", action="store_true")
+
+    analytics_finding_reject = analytics_sub.add_parser("finding-reject", help="Rechazar finding")
+    analytics_finding_reject.add_argument("--finding-id", required=True)
+    analytics_finding_reject.add_argument("--json", action="store_true")
+
+    analytics_weekly = analytics_sub.add_parser("weekly-report", help="Generar reporte semanal")
+    analytics_weekly.add_argument("--creator-id", required=True)
+    analytics_weekly.add_argument("--from", dest="period_start", required=True)
+    analytics_weekly.add_argument("--to", dest="period_end", required=True)
+    analytics_weekly.add_argument("--json", action="store_true")
+
+    analytics_reports = analytics_sub.add_parser("reports", help="Listar reportes")
+    analytics_reports.add_argument("--creator-id", required=True)
+    analytics_reports.add_argument("--json", action="store_true")
+
+    analytics_report_show = analytics_sub.add_parser("report-show", help="Mostrar reporte")
+    analytics_report_show.add_argument("--report-id", required=True)
+    analytics_report_show.add_argument("--json", action="store_true")
+
+    analytics_report_export = analytics_sub.add_parser("report-export", help="Exportar reporte")
+    analytics_report_export.add_argument("--report-id", required=True)
+    analytics_report_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
+    analytics_report_export.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -2781,7 +2873,7 @@ def _handle_evaluation(args, service: OperationalEvaluationService, stdout, stde
     raise ValueError("Accion de evaluacion no reconocida.")
 
 
-def _handle_analytics(args, service: AnalyticsImportService, stdout, stderr) -> int:
+def _handle_analytics(args, service: AnalyticsImportService, lab_service: AnalyticsLabService | None, stdout, stderr) -> int:
     if args.action == "platforms":
         command = ListAnalyticsPlatformsCommand()
         payload = [platform.to_dict() for platform in service.list_platforms()]
@@ -2930,6 +3022,145 @@ def _handle_analytics(args, service: AnalyticsImportService, stdout, stderr) -> 
         payload = service.export_normalized_data(creator_id=command.creator_id, format_name=command.format)
         print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
         return 0
+    if args.action == "cohorts":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ListAnalyticsCohortsCommand(args.creator_id)
+        payload = [item.to_dict() for item in lab_service.list_cohorts(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "cohort-create":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = CreateAnalyticsCohortCommand(
+            args.creator_id,
+            args.name,
+            args.description,
+            platform=args.platform,
+            content_type=args.content_type,
+            date_from=args.date_from,
+            date_to=args.date_to,
+            duration_min_seconds=args.duration_min_seconds,
+            duration_max_seconds=args.duration_max_seconds,
+            topic=args.topic,
+            format=args.format,
+            language=args.language,
+            channel_id=args.channel_id,
+            linked=args.linked,
+        )
+        payload = lab_service.create_cohort(
+            creator_id=command.creator_id,
+            name=command.name,
+            description=command.description,
+            platform=command.platform,
+            content_type=command.content_type,
+            date_from=command.date_from,
+            date_to=command.date_to,
+            duration_min_seconds=command.duration_min_seconds,
+            duration_max_seconds=command.duration_max_seconds,
+            topic=command.topic,
+            format=command.format,
+            language=command.language,
+            channel_id=command.channel_id,
+            linked=command.linked,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "cohort-show":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ShowAnalyticsCohortCommand(args.cohort_id)
+        payload = lab_service.get_cohort(command.cohort_id)
+        if payload is None:
+            print("Cohorte no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "cohort-analyze":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = AnalyzeAnalyticsCohortCommand(args.cohort_id)
+        payload = lab_service.analyze_cohort(command.cohort_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "compare-publication":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = CompareAnalyticsPublicationCommand(args.publication_id, args.cohort_id)
+        payload = lab_service.compare_publication(command.publication_id, command.cohort_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "analysis-show":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ShowAnalyticsAnalysisCommand(args.run_id)
+        payload = lab_service.get_analysis_detail(command.run_id)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "findings":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ListAnalyticsFindingsCommand(args.creator_id)
+        payload = [item.to_dict() for item in lab_service.list_findings(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "finding-show":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ShowAnalyticsFindingCommand(args.finding_id)
+        payload = lab_service.get_finding(command.finding_id)
+        if payload is None:
+            print("Finding no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "finding-confirm":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ConfirmAnalyticsFindingCommand(args.finding_id)
+        payload = lab_service.confirm_finding(command.finding_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "finding-reject":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = RejectAnalyticsFindingCommand(args.finding_id)
+        payload = lab_service.reject_finding(command.finding_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "weekly-report":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = GenerateAnalyticsWeeklyReportCommand(args.creator_id, args.period_start, args.period_end)
+        payload = lab_service.generate_weekly_report(
+            creator_id=command.creator_id,
+            period_start=command.period_start,
+            period_end=command.period_end,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "reports":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ListAnalyticsReportsCommand(args.creator_id)
+        payload = [item.to_dict() for item in lab_service.list_reports(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "report-show":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ShowAnalyticsReportCommand(args.report_id)
+        payload = lab_service.get_report_detail(command.report_id)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "report-export":
+        if lab_service is None:
+            raise DomainError("El servicio de analytics lab no esta disponible.")
+        command = ExportAnalyticsReportCommand(args.report_id, args.format)
+        path = lab_service.export_report(command.report_id, command.format)
+        payload = {"report_id": command.report_id, "format": command.format, "path": str(path)}
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
     raise ValueError("Accion de analytics no reconocida.")
 
 
@@ -2961,6 +3192,7 @@ def dispatch(
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
     analytics_service: AnalyticsImportService | None = None,
+    analytics_lab_service: AnalyticsLabService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -3005,7 +3237,7 @@ def dispatch(
         if args.entity == "analytics":
             if analytics_service is None:
                 raise DomainError("El servicio de analytics no esta disponible.")
-            return _handle_analytics(args, analytics_service, stdout, stderr)
+            return _handle_analytics(args, analytics_service, analytics_lab_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")

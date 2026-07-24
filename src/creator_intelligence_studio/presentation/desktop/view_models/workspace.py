@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -51,6 +52,9 @@ from creator_intelligence_studio.application.services.clip_rendering_service imp
 )
 from creator_intelligence_studio.application.services.analytics_import_service import (
     AnalyticsImportService,
+)
+from creator_intelligence_studio.application.services.analytics_lab_service import (
+    AnalyticsLabService,
 )
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
@@ -278,6 +282,7 @@ class WorkspaceViewModel:
         model_service: PersonalizationTrainingService | None = None,
         evaluation_service: OperationalEvaluationService | None = None,
         analytics_service: AnalyticsImportService | None = None,
+        analytics_lab_service: AnalyticsLabService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -401,6 +406,7 @@ class WorkspaceViewModel:
         self.render_service = render_service
         self.subtitle_service = subtitle_service
         self.analytics_service = analytics_service
+        self.analytics_lab_service = analytics_lab_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -955,6 +961,75 @@ class WorkspaceViewModel:
                         interrupted_at=to_iso_z(import_record.completed_at) if import_record.status.value == "interrupted" else None,
                         completed_at=to_iso_z(import_record.completed_at),
                         payload={"import": import_record.to_dict(), "kind": "analytics_import"},
+                    )
+                )
+        if self.analytics_lab_service is not None and self.selected_creator_id is not None:
+            try:
+                analysis_runs = self.analytics_lab_service.list_analysis_runs(self.selected_creator_id)
+            except Exception:
+                analysis_runs = []
+            for run in analysis_runs:
+                configuration = {}
+                try:
+                    configuration = json.loads(run.configuration_json) if run.configuration_json else {}
+                except Exception:
+                    configuration = {}
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=run.id,
+                        title="Analisis de Analytics Lab",
+                        status=run.status.value,
+                        stage_name=run.run_type.value,
+                        video_id=None,
+                        video_title=run.cohort_id or run.run_type.value,
+                        action_id=run.cohort_id,
+                        progress_percent=100.0 if run.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=run.error_message or run.status.value,
+                        error=run.error_message,
+                        cancellable=run.status.value in {"queued", "running"},
+                        created_at=to_iso_z(run.created_at),
+                        updated_at=to_iso_z(run.completed_at or run.created_at),
+                        interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(run.completed_at),
+                        payload={
+                            "kind": "analytics_lab_analysis",
+                            "run": run.to_dict(),
+                            "creator_id": run.creator_id,
+                            "cohort_id": run.cohort_id,
+                            "run_type": run.run_type.value,
+                            "publication_id": configuration.get("publication_id"),
+                        },
+                    )
+                )
+            try:
+                reports = self.analytics_lab_service.list_reports(self.selected_creator_id)
+            except Exception:
+                reports = []
+            for report in reports:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=report.id,
+                        title="Reporte semanal de Analytics Lab",
+                        status=report.status.value,
+                        stage_name=report.report_type,
+                        video_id=None,
+                        video_title=report.title,
+                        action_id=report.report_type,
+                        progress_percent=100.0 if report.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=report.summary or report.status.value,
+                        error=None,
+                        cancellable=report.status.value in {"queued", "running"},
+                        created_at=to_iso_z(report.created_at),
+                        updated_at=to_iso_z(report.completed_at or report.created_at),
+                        interrupted_at=to_iso_z(report.completed_at) if report.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(report.completed_at),
+                        payload={
+                            "kind": "analytics_lab_report",
+                            "report": report.to_dict(),
+                            "creator_id": report.creator_id,
+                            "period_start": report.period_start,
+                            "period_end": report.period_end,
+                        },
                     )
                 )
         return sorted(tasks, key=lambda item: item.updated_at, reverse=True)
@@ -2066,6 +2141,115 @@ class WorkspaceViewModel:
         if self.analytics_service is None:
             return None
         return self.analytics_service.get_import_report_path(import_id)
+
+    def list_analytics_lab_cohorts(self, creator_id: str):
+        if self.analytics_lab_service is None:
+            return []
+        return self.analytics_lab_service.list_cohorts(creator_id)
+
+    def create_analytics_lab_cohort(self, **kwargs):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.create_cohort(**kwargs)
+
+    def update_analytics_lab_cohort(self, cohort_id: str, **changes):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.update_cohort(cohort_id, **changes)
+
+    def archive_analytics_lab_cohort(self, cohort_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.archive_cohort(cohort_id)
+
+    def get_analytics_lab_cohort(self, cohort_id: str):
+        if self.analytics_lab_service is None:
+            return None
+        return self.analytics_lab_service.get_cohort(cohort_id)
+
+    def analyze_analytics_lab_cohort(self, cohort_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.analyze_cohort(cohort_id)
+
+    def compare_analytics_publication(self, publication_id: str, cohort_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.compare_publication(publication_id, cohort_id)
+
+    def get_analytics_lab_analysis(self, run_id: str):
+        if self.analytics_lab_service is None:
+            return None
+        return self.analytics_lab_service.get_analysis_run(run_id)
+
+    def list_analytics_lab_analysis_runs(self, creator_id: str):
+        if self.analytics_lab_service is None:
+            return []
+        return self.analytics_lab_service.list_analysis_runs(creator_id)
+
+    def get_analytics_lab_analysis_detail(self, run_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.get_analysis_detail(run_id)
+
+    def list_analytics_lab_findings(self, creator_id: str, *, filters=None):
+        if self.analytics_lab_service is None:
+            return []
+        return self.analytics_lab_service.list_findings(creator_id, filters=filters)
+
+    def get_analytics_lab_finding(self, finding_id: str):
+        if self.analytics_lab_service is None:
+            return None
+        return self.analytics_lab_service.get_finding(finding_id)
+
+    def confirm_analytics_lab_finding(self, finding_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.confirm_finding(finding_id)
+
+    def reject_analytics_lab_finding(self, finding_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.reject_finding(finding_id)
+
+    def generate_analytics_lab_weekly_report(self, creator_id: str, period_start: str, period_end: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.generate_weekly_report(creator_id=creator_id, period_start=period_start, period_end=period_end)
+
+    def list_analytics_lab_reports(self, creator_id: str):
+        if self.analytics_lab_service is None:
+            return []
+        return self.analytics_lab_service.list_reports(creator_id)
+
+    def get_analytics_lab_report(self, report_id: str):
+        if self.analytics_lab_service is None:
+            return None
+        return self.analytics_lab_service.get_report(report_id)
+
+    def reveal_analytics_lab_report(self, report_id: str):
+        if self.analytics_lab_service is None:
+            return None
+        report = self.analytics_lab_service.get_report(report_id)
+        if report is None:
+            return None
+        if report.output_json_path:
+            return Path(report.output_json_path)
+        if report.output_txt_path:
+            return Path(report.output_txt_path)
+        if report.output_csv_path:
+            return Path(report.output_csv_path)
+        return None
+
+    def get_analytics_lab_report_detail(self, report_id: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.get_report_detail(report_id)
+
+    def export_analytics_lab_report(self, report_id: str, format_name: str):
+        if self.analytics_lab_service is None:
+            raise RuntimeError("El servicio de analytics lab no esta disponible.")
+        return self.analytics_lab_service.export_report(report_id, format_name)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

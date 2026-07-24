@@ -32,6 +32,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     CreatorsView,
     DashboardView,
     AnalyticsView,
+    AnalyticsLabView,
     OnboardingView,
     MultimodalAnalysisView,
     OperationalEvaluationView,
@@ -64,6 +65,7 @@ class MainWindow(QMainWindow):
             "projects",
             "videos",
             "analytics",
+            "analytics_lab",
             "workflow",
             "tasks",
             "onboarding",
@@ -152,6 +154,7 @@ class MainWindow(QMainWindow):
             open_workflow_callback=lambda: self.show_page("workflow"),
         )
         self.analytics_view = AnalyticsView(workspace)
+        self.analytics_lab_view = AnalyticsLabView(workspace)
         self.workflow_view = WorkflowView(workspace)
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
@@ -170,6 +173,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.projects_view)
         self.stack.addWidget(self.videos_view)
         self.stack.addWidget(self.analytics_view)
+        self.stack.addWidget(self.analytics_lab_view)
         self.stack.addWidget(self.workflow_view)
         self.stack.addWidget(self.task_center_view)
         self.stack.addWidget(self.onboarding_view)
@@ -239,6 +243,7 @@ class MainWindow(QMainWindow):
         self.projects_view.refresh()
         self.videos_view.refresh()
         self.analytics_view.refresh()
+        self.analytics_lab_view.refresh()
         self.workflow_view.refresh()
         self.task_center_view.refresh()
         self.onboarding_view.refresh()
@@ -354,6 +359,8 @@ class MainWindow(QMainWindow):
             self.multimodal_view.refresh()
         elif current_key == "analytics":
             self.analytics_view.refresh()
+        elif current_key == "analytics_lab":
+            self.analytics_lab_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "subtitles":
