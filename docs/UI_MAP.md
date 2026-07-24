@@ -271,3 +271,14 @@ flowchart LR
 - no modifica algoritmos ni modelos existentes;
 - `excluded` se audita, pero no cuenta como leakage entrenable;
 - una evaluacion aprobada demuestra integridad tecnica, no calidad comercial.
+
+### Analytics
+
+- importacion CSV/XLSX;
+- selector de creador, canal y plataforma;
+- schema detection;
+- mapping sugerido y mapping manual;
+- preview de filas;
+- publicaciones normalizadas;
+- metrics visibles sin asumir equivalencia entre plataformas;
+- Task Center para imports persistidos.

@@ -71,6 +71,9 @@ class TaskCenterView(QWidget):
     def _is_delivery_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "subtitle_delivery")
 
+    def _is_analytics_import_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "analytics_import")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -118,6 +121,13 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Resultado disponible en: {path}")
             return
+        if self._is_analytics_import_task(task):
+            report = self.workspace.reveal_analytics_import_report(task.task_id)
+            if report is None:
+                QMessageBox.information(self, "Task Center", "La importacion no tiene un reporte disponible.")
+            else:
+                QMessageBox.information(self, "Task Center", f"Reporte disponible en: {report}")
+            return
         if task.video_id is None:
             return
         self.workspace.select_video(task.video_id)
@@ -129,6 +139,8 @@ class TaskCenterView(QWidget):
             return
         if self._is_delivery_task(task):
             self.workspace.cancel_delivery(task.task_id)
+        elif self._is_analytics_import_task(task):
+            self.workspace.cancel_analytics_import(task.task_id)
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -143,6 +155,10 @@ class TaskCenterView(QWidget):
             self.workspace.select_video(task.video_id)
         if self._is_delivery_task(task):
             self.workspace.retry_delivery(task.task_id)
+            self.refresh()
+            return
+        if self._is_analytics_import_task(task):
+            self.workspace.retry_analytics_import(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

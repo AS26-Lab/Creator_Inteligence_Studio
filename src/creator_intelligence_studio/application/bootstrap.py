@@ -56,6 +56,10 @@ from creator_intelligence_studio.application.services.operational_evaluation_ser
     OperationalEvaluationService,
     build_operational_evaluation_service,
 )
+from creator_intelligence_studio.application.services.analytics_import_service import (
+    AnalyticsImportService,
+    build_analytics_services,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -106,6 +110,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_personalizati
 from creator_intelligence_studio.infrastructure.persistence.sqlite_operational_evaluation_repository import (
     SQLiteOperationalEvaluationRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_analytics_repository import (
+    SQLiteAnalyticsRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -143,6 +150,7 @@ class ServiceContext(BootstrapContext):
     clip_service: ClipRankingService | None = None
     render_service: ClipRenderService | None = None
     subtitle_service: SubtitleService | None = None
+    analytics_service: AnalyticsImportService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -260,6 +268,15 @@ def _load_service_context() -> ServiceContext:
         subtitle_service=subtitle_service,
         logger=context.logger,
     )
+    analytics_repository = SQLiteAnalyticsRepository(database)
+    analytics_service, _ = build_analytics_services(
+        settings=context.settings,
+        paths=context.paths,
+        catalog_service=service,
+        repository=analytics_repository,
+        database=database,
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -308,6 +325,7 @@ def _load_service_context() -> ServiceContext:
         clip_service=clip_service,
         render_service=render_service,
         subtitle_service=subtitle_service,
+        analytics_service=analytics_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -382,6 +400,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             visual_service=context.visual_service,
             multimodal_service=context.multimodal_service,
             clip_service=context.clip_service,
+            analytics_service=context.analytics_service,
             render_service=context.render_service,
             subtitle_service=context.subtitle_service,
             personalization_service=context.personalization_service,

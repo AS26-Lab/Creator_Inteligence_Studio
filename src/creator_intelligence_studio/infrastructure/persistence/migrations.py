@@ -1798,6 +1798,239 @@ def migration_14(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_clip_render_delivery_artifacts_type ON clip_render_delivery_artifacts(delivery_id, artifact_type)")
 
 
+def migration_15(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_platforms (
+            id TEXT PRIMARY KEY,
+            platform_key TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'disabled')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_channels (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform_id TEXT NOT NULL,
+            external_channel_id TEXT,
+            channel_name TEXT NOT NULL,
+            channel_url TEXT,
+            timezone_name TEXT NOT NULL DEFAULT 'UTC',
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (platform_id) REFERENCES analytics_platforms(id) ON DELETE RESTRICT,
+            UNIQUE (creator_id, platform_id, channel_name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_publications (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            channel_id TEXT,
+            video_asset_id TEXT,
+            external_publication_id TEXT,
+            platform TEXT NOT NULL,
+            content_type TEXT NOT NULL CHECK (
+                content_type IN (
+                    'longform_video',
+                    'short_video',
+                    'reel',
+                    'tiktok',
+                    'live_replay',
+                    'community_post',
+                    'other'
+                )
+            ),
+            title TEXT NOT NULL,
+            description TEXT,
+            published_at TEXT NOT NULL,
+            duration_seconds REAL,
+            url TEXT,
+            thumbnail_path TEXT,
+            status TEXT NOT NULL,
+            source_type TEXT NOT NULL CHECK (source_type IN ('csv', 'xlsx', 'manual')),
+            source_fingerprint TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (channel_id) REFERENCES analytics_channels(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_metric_definitions (
+            id TEXT PRIMARY KEY,
+            metric_key TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            category TEXT NOT NULL CHECK (
+                category IN ('discovery', 'attention', 'conversion', 'interaction', 'relation', 'context')
+            ),
+            unit TEXT NOT NULL,
+            value_type TEXT NOT NULL CHECK (value_type IN ('numeric', 'text', 'category')),
+            aggregation_type TEXT NOT NULL CHECK (aggregation_type IN ('latest', 'sum', 'avg', 'max', 'min', 'count')),
+            higher_is_better INTEGER,
+            description TEXT NOT NULL,
+            aliases_json TEXT NOT NULL,
+            applicability_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_imports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            channel_id TEXT,
+            platform TEXT NOT NULL,
+            source_filename TEXT NOT NULL,
+            source_path TEXT,
+            source_fingerprint TEXT NOT NULL,
+            source_type TEXT NOT NULL CHECK (source_type IN ('csv', 'xlsx', 'manual')),
+            schema_version TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN ('queued', 'running', 'verifying', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'interrupted')
+            ),
+            total_rows INTEGER NOT NULL,
+            accepted_rows INTEGER NOT NULL,
+            rejected_rows INTEGER NOT NULL,
+            warning_rows INTEGER NOT NULL,
+            duplicate_rows INTEGER NOT NULL,
+            source_sheet_name TEXT,
+            timezone_name TEXT,
+            delimiter TEXT,
+            mapping_json TEXT NOT NULL,
+            report_path TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE RESTRICT,
+            FOREIGN KEY (channel_id) REFERENCES analytics_channels(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_import_rows (
+            id TEXT PRIMARY KEY,
+            import_id TEXT NOT NULL,
+            row_number INTEGER NOT NULL,
+            raw_json TEXT NOT NULL,
+            normalized_json TEXT,
+            status TEXT NOT NULL CHECK (status IN ('accepted', 'accepted_with_warnings', 'rejected', 'duplicate', 'skipped')),
+            publication_id TEXT,
+            warning_codes_json TEXT NOT NULL,
+            error_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            row_fingerprint TEXT NOT NULL,
+            FOREIGN KEY (import_id) REFERENCES analytics_imports(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            UNIQUE (import_id, row_number, row_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_metric_snapshots (
+            id TEXT PRIMARY KEY,
+            publication_id TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT NOT NULL,
+            source_import_id TEXT NOT NULL,
+            source_row_number INTEGER,
+            is_derived INTEGER NOT NULL DEFAULT 0,
+            quality_status TEXT NOT NULL CHECK (
+                quality_status IN ('accepted', 'accepted_with_warnings', 'rejected', 'duplicate', 'skipped')
+            ),
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            row_fingerprint TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL UNIQUE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_import_id) REFERENCES analytics_imports(id) ON DELETE RESTRICT,
+            FOREIGN KEY (metric_key) REFERENCES analytics_metric_definitions(metric_key) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analytics_field_mappings (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT,
+            platform TEXT NOT NULL,
+            mapping_name TEXT NOT NULL,
+            source_field TEXT NOT NULL,
+            target_field TEXT NOT NULL,
+            transformation TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 1.0,
+            mapping_origin TEXT NOT NULL CHECK (mapping_origin IN ('auto', 'manual')),
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_channels_creator_id ON analytics_channels(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_channels_platform_id ON analytics_channels(platform_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_publications_creator_id ON analytics_publications(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_publications_channel_id ON analytics_publications(channel_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_publications_platform ON analytics_publications(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_publications_video_asset_id ON analytics_publications(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_publications_published_at ON analytics_publications(published_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_metric_definitions_category ON analytics_metric_definitions(category)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_imports_creator_id ON analytics_imports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_imports_channel_id ON analytics_imports(channel_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_imports_status ON analytics_imports(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_import_rows_import_id ON analytics_import_rows(import_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_import_rows_status ON analytics_import_rows(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_metric_snapshots_publication_id ON analytics_metric_snapshots(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_metric_snapshots_metric_key ON analytics_metric_snapshots(metric_key)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_metric_snapshots_snapshot_date ON analytics_metric_snapshots(snapshot_date)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_metric_snapshots_import_id ON analytics_metric_snapshots(source_import_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_field_mappings_creator_platform ON analytics_field_mappings(creator_id, platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_analytics_field_mappings_active ON analytics_field_mappings(is_active)")
+
+
+def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
+    table_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
+    ).fetchone()
+    if not table_exists:
+        return
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(analytics_metric_definitions)").fetchall()
+    }
+    if "applicability_json" not in columns:
+        connection.execute(
+            "ALTER TABLE analytics_metric_definitions ADD COLUMN applicability_json TEXT NOT NULL DEFAULT '[]'"
+        )
+        connection.execute(
+            "UPDATE analytics_metric_definitions SET applicability_json = '[]' WHERE applicability_json IS NULL OR applicability_json = ''"
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -1813,6 +2046,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=12, name="clip_rendering"),
     Migration(version=13, name="subtitles"),
     Migration(version=14, name="subtitle_deliveries"),
+    Migration(version=15, name="analytics_data_foundation"),
 )
 
 
@@ -1878,6 +2112,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_13(connection)
                 elif migration.version == 14:
                     migration_14(connection)
+                elif migration.version == 15:
+                    migration_15(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(
@@ -1891,3 +2127,4 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             raise MigrationError(
                 f"No se pudo aplicar la migracion {migration.version}: {migration.name}"
             ) from exc
+    _ensure_analytics_v15_compatibility(connection)

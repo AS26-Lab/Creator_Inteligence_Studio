@@ -91,3 +91,17 @@ The initial UX preferences are local and reversible:
 - This workflow does not auto-train a model.
 - A successful run proves technical coherence, not predictive or commercial quality.
 - Existing data is not moved automatically when a new folder preference is selected.
+
+## Analytics workflow
+
+- seleccionar creador;
+- seleccionar o crear canal;
+- elegir plataforma;
+- inspeccionar archivo CSV o XLSX;
+- revisar schema y mappings sugeridos;
+- corregir mappings manualmente si hace falta;
+- importar;
+- revisar publicaciones y snapshots;
+- exportar datos normalizados.
+
+This flow records observed facts. It does not infer causality, predictions, or recommendations.

@@ -565,3 +565,25 @@ No se deben mezclar creadores ni usar datos de otro creador como entrenamiento.
 ## Migration v11
 
 La migracion v11 agrega la auditoria de `operational_evaluation_runs`, `operational_evaluation_stages`, `operational_evaluation_metrics`, `operational_evaluation_assertions` y `operational_evaluation_artifacts`. Estas tablas registran escenarios, tiempos, cache, assertions y artefactos administrados sin tocar las fuentes de usuario.
+
+## Analytics foundation
+
+La fase de analytics manual agrega:
+
+- `analytics_platforms`;
+- `analytics_channels`;
+- `analytics_publications`;
+- `analytics_metric_definitions`;
+- `analytics_metric_snapshots`;
+- `analytics_imports`;
+- `analytics_import_rows`;
+- `analytics_field_mappings`.
+
+Puntos clave:
+
+- `platform` y `content_type` son distintos;
+- las metricas faltantes no equivalen a cero;
+- `raw` y `normalized` se conservan separados;
+- los snapshots historicos no se sobrescriben silenciosamente;
+- los mappings pueden ser auto o manual y pueden ser por plataforma;
+- la trazabilidad mantiene `source_fingerprint`, `source_row_number` y reporte de importacion.

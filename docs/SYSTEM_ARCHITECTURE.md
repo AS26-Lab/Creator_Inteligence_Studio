@@ -325,3 +325,11 @@ Reglas:
 - `application/services/operational_evaluation_service.py`: orquestacion de escenarios, tiempos, assertions, cache, reportes, retry, cancelacion y limpieza.
 - `infrastructure/operational_evaluation`: generacion de assets demo, temporizador de etapas, muestreo de recursos, motor de assertions, builder de reportes y orquestador.
 - `infrastructure/persistence/sqlite_operational_evaluation_repository.py`: persistencia local de runs, stages, metricas, assertions y artefactos.
+
+### Analytics foundation
+
+- `domain/analytics`: entidades, errores, repositorios, services y value objects sin dependencia de GUI, SQLite, CSV o Excel.
+- `application/services/analytics_import_service.py`: importacion, normalizacion, deduplicacion, persistencia y reportes.
+- `application/services/analytics_query_service.py`: consultas y exportacion normalizada.
+- `infrastructure/analytics`: CSV, XLSX, deteccion de schema, field mapping, validacion, normalizacion y reportes.
+- `infrastructure/persistence/sqlite_analytics_repository.py`: persistencia SQLite de plataformas, canales, publicaciones, metricas, snapshots, imports y mappings.

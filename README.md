@@ -101,6 +101,7 @@ La accion recomendada depende del estado real del video y no ejecuta tareas cost
 La guia detallada del flujo esta en [`docs/PRODUCT_UX_WORKFLOW.md`](docs/PRODUCT_UX_WORKFLOW.md).
 La primera version de render local esta documentada en [`docs/CLIP_RENDERING.md`](docs/CLIP_RENDERING.md).
 La primera version de subtitulos locales esta documentada en [`docs/SUBTITLES.md`](docs/SUBTITLES.md).
+La base de analitica manual multiplataforma esta documentada en [`docs/ANALYTICS_DATA_FOUNDATION.md`](docs/ANALYTICS_DATA_FOUNDATION.md).
 
 ## Base local
 

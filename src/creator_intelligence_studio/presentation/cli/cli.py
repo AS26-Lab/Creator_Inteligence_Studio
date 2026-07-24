@@ -172,6 +172,42 @@ from creator_intelligence_studio.application.commands.video_commands import (
     RegisterVideoCommand,
     VerifyVideoAvailabilityCommand,
 )
+from creator_intelligence_studio.application.commands.analytics_commands import (
+    CreateAnalyticsChannelCommand,
+    DetectAnalyticsSchemaCommand,
+    ExportNormalizedAnalyticsCommand,
+    ImportAnalyticsCsvCommand,
+    ImportAnalyticsExcelCommand,
+    InspectAnalyticsFileCommand,
+    ListAnalyticsChannelsCommand,
+    ListAnalyticsImportsCommand,
+    ListAnalyticsMappingsCommand,
+    ListAnalyticsPlatformsCommand,
+    ListAnalyticsImportRowsCommand,
+    ListAnalyticsPublicationsCommand,
+    PublicationMetricsCommand,
+    SaveAnalyticsMappingCommand,
+    ShowAnalyticsImportCommand,
+    ShowAnalyticsPublicationCommand,
+)
+from creator_intelligence_studio.application.commands.analytics_commands import (
+    CreateAnalyticsChannelCommand,
+    DetectAnalyticsSchemaCommand,
+    ExportNormalizedAnalyticsCommand,
+    ImportAnalyticsCsvCommand,
+    ImportAnalyticsExcelCommand,
+    InspectAnalyticsFileCommand,
+    ListAnalyticsChannelsCommand,
+    ListAnalyticsImportsCommand,
+    ListAnalyticsMappingsCommand,
+    ListAnalyticsPlatformsCommand,
+    ListAnalyticsPublicationsCommand,
+    ListAnalyticsImportRowsCommand,
+    PublicationMetricsCommand,
+    SaveAnalyticsMappingCommand,
+    ShowAnalyticsImportCommand,
+    ShowAnalyticsPublicationCommand,
+)
 from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     VideoVerificationReport,
@@ -233,6 +269,9 @@ from creator_intelligence_studio.application.services.personalization_training_s
 from creator_intelligence_studio.application.services.operational_evaluation_service import (
     OperationalEvaluationComparisonReport,
     OperationalEvaluationService,
+)
+from creator_intelligence_studio.application.services.analytics_import_service import (
+    AnalyticsImportService,
 )
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
@@ -519,6 +558,98 @@ def build_parser() -> argparse.ArgumentParser:
     subtitles_delete = subtitles_sub.add_parser("delete", help="Eliminar un track")
     subtitles_delete.add_argument("--track-id", required=True)
     subtitles_delete.add_argument("--json", action="store_true")
+
+    analytics_parser = subparsers.add_parser("analytics", help="Analitica manual y aprendizaje")
+    analytics_sub = analytics_parser.add_subparsers(dest="action", required=True)
+
+    analytics_platforms = analytics_sub.add_parser("platforms", help="Listar plataformas")
+    analytics_platforms.add_argument("--json", action="store_true")
+
+    analytics_channels = analytics_sub.add_parser("channels", help="Listar canales")
+    analytics_channels.add_argument("--creator-id", required=True)
+    analytics_channels.add_argument("--json", action="store_true")
+
+    analytics_channel_create = analytics_sub.add_parser("channel-create", help="Crear canal")
+    analytics_channel_create.add_argument("--creator-id", required=True)
+    analytics_channel_create.add_argument("--platform", required=True)
+    analytics_channel_create.add_argument("--name", required=True)
+    analytics_channel_create.add_argument("--external-channel-id")
+    analytics_channel_create.add_argument("--channel-url")
+    analytics_channel_create.add_argument("--timezone")
+    analytics_channel_create.add_argument("--primary", action="store_true")
+
+    analytics_imports = analytics_sub.add_parser("imports", help="Listar importaciones")
+    analytics_imports.add_argument("--creator-id", required=True)
+    analytics_imports.add_argument("--json", action="store_true")
+
+    analytics_import_csv = analytics_sub.add_parser("import-csv", help="Importar CSV")
+    analytics_import_csv.add_argument("--creator-id", required=True)
+    analytics_import_csv.add_argument("--file", required=True)
+    analytics_import_csv.add_argument("--channel-id")
+    analytics_import_csv.add_argument("--platform")
+    analytics_import_csv.add_argument("--mapping-name")
+    analytics_import_csv.add_argument("--delimiter")
+    analytics_import_csv.add_argument("--json", action="store_true")
+
+    analytics_import_excel = analytics_sub.add_parser("import-excel", help="Importar Excel")
+    analytics_import_excel.add_argument("--creator-id", required=True)
+    analytics_import_excel.add_argument("--file", required=True)
+    analytics_import_excel.add_argument("--channel-id")
+    analytics_import_excel.add_argument("--platform")
+    analytics_import_excel.add_argument("--sheet-name")
+    analytics_import_excel.add_argument("--mapping-name")
+    analytics_import_excel.add_argument("--json", action="store_true")
+
+    analytics_inspect = analytics_sub.add_parser("inspect-file", help="Inspeccionar archivo")
+    analytics_inspect.add_argument("--file", required=True)
+    analytics_inspect.add_argument("--sheet-name")
+    analytics_inspect.add_argument("--json", action="store_true")
+
+    analytics_detect = analytics_sub.add_parser("detect-schema", help="Detectar schema")
+    analytics_detect.add_argument("--file", required=True)
+    analytics_detect.add_argument("--sheet-name")
+    analytics_detect.add_argument("--json", action="store_true")
+
+    analytics_mappings = analytics_sub.add_parser("mappings", help="Listar mappings")
+    analytics_mappings.add_argument("--creator-id", required=True)
+    analytics_mappings.add_argument("--json", action="store_true")
+
+    analytics_mapping_save = analytics_sub.add_parser("mapping-save", help="Guardar mapping")
+    analytics_mapping_save.add_argument("--creator-id")
+    analytics_mapping_save.add_argument("--platform", required=True)
+    analytics_mapping_save.add_argument("--mapping-name", required=True)
+    analytics_mapping_save.add_argument("--source-field", required=True)
+    analytics_mapping_save.add_argument("--target-field", required=True)
+    analytics_mapping_save.add_argument("--transformation", default="identity")
+    analytics_mapping_save.add_argument("--confidence", type=float, default=1.0)
+    analytics_mapping_save.add_argument("--inactive", action="store_true")
+    analytics_mapping_save.add_argument("--json", action="store_true")
+
+    analytics_publications = analytics_sub.add_parser("publications", help="Listar publicaciones")
+    analytics_publications.add_argument("--creator-id", required=True)
+    analytics_publications.add_argument("--json", action="store_true")
+
+    analytics_publication_show = analytics_sub.add_parser("publication-show", help="Mostrar una publicacion")
+    analytics_publication_show.add_argument("--publication-id", required=True)
+    analytics_publication_show.add_argument("--json", action="store_true")
+
+    analytics_publication_metrics = analytics_sub.add_parser("publication-metrics", help="Mostrar metricas de una publicacion")
+    analytics_publication_metrics.add_argument("--publication-id", required=True)
+    analytics_publication_metrics.add_argument("--json", action="store_true")
+
+    analytics_import_show = analytics_sub.add_parser("import-show", help="Mostrar una importacion")
+    analytics_import_show.add_argument("--import-id", required=True)
+    analytics_import_show.add_argument("--json", action="store_true")
+
+    analytics_import_rows = analytics_sub.add_parser("import-rows", help="Listar filas de una importacion")
+    analytics_import_rows.add_argument("--import-id", required=True)
+    analytics_import_rows.add_argument("--status")
+    analytics_import_rows.add_argument("--json", action="store_true")
+
+    analytics_export = analytics_sub.add_parser("export-normalized", help="Exportar datos normalizados")
+    analytics_export.add_argument("--creator-id", required=True)
+    analytics_export.add_argument("--format", required=True, choices=["csv", "json"])
+    analytics_export.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -2650,6 +2781,158 @@ def _handle_evaluation(args, service: OperationalEvaluationService, stdout, stde
     raise ValueError("Accion de evaluacion no reconocida.")
 
 
+def _handle_analytics(args, service: AnalyticsImportService, stdout, stderr) -> int:
+    if args.action == "platforms":
+        command = ListAnalyticsPlatformsCommand()
+        payload = [platform.to_dict() for platform in service.list_platforms()]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "channels":
+        command = ListAnalyticsChannelsCommand(args.creator_id)
+        payload = [channel.to_dict() for channel in service.list_channels(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "channel-create":
+        command = CreateAnalyticsChannelCommand(
+            args.creator_id,
+            args.platform,
+            args.name,
+            external_channel_id=args.external_channel_id,
+            channel_url=args.channel_url,
+            timezone_name=args.timezone,
+            is_primary=args.primary,
+        )
+        channel = service.create_channel(
+            creator_id=command.creator_id,
+            platform=command.platform,
+            name=command.name,
+            external_channel_id=command.external_channel_id,
+            channel_url=command.channel_url,
+            timezone_name=command.timezone_name,
+            is_primary=command.is_primary,
+        )
+        print(json.dumps(channel.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "imports":
+        command = ListAnalyticsImportsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_imports(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "import-csv":
+        command = ImportAnalyticsCsvCommand(
+            args.creator_id,
+            Path(args.file),
+            channel_id=args.channel_id,
+            platform=args.platform,
+            mapping_name=args.mapping_name,
+            delimiter=args.delimiter,
+        )
+        result = service.import_csv(
+            creator_id=command.creator_id,
+            file=command.file,
+            channel_id=command.channel_id,
+            platform=command.platform,
+            mapping_name=command.mapping_name,
+            delimiter=command.delimiter,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "import-excel":
+        command = ImportAnalyticsExcelCommand(
+            args.creator_id,
+            Path(args.file),
+            channel_id=args.channel_id,
+            platform=args.platform,
+            sheet_name=args.sheet_name,
+            mapping_name=args.mapping_name,
+        )
+        result = service.import_excel(
+            creator_id=command.creator_id,
+            file=command.file,
+            channel_id=command.channel_id,
+            platform=command.platform,
+            sheet_name=command.sheet_name,
+            mapping_name=command.mapping_name,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "inspect-file":
+        command = InspectAnalyticsFileCommand(Path(args.file), sheet_name=args.sheet_name)
+        payload = service.inspect_file(command.file, sheet_name=command.sheet_name)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "detect-schema":
+        command = DetectAnalyticsSchemaCommand(Path(args.file), sheet_name=args.sheet_name)
+        payload = service.detect_schema(command.file, sheet_name=command.sheet_name)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "mappings":
+        command = ListAnalyticsMappingsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_mappings(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "mapping-save":
+        command = SaveAnalyticsMappingCommand(
+            args.creator_id,
+            args.platform,
+            args.mapping_name,
+            args.source_field,
+            args.target_field,
+            transformation=args.transformation,
+            confidence=args.confidence,
+            active=not args.inactive,
+        )
+        payload = service.save_mapping(
+            creator_id=command.creator_id,
+            platform=command.platform,
+            mapping_name=command.mapping_name,
+            source_field=command.source_field,
+            target_field=command.target_field,
+            transformation=command.transformation,
+            confidence=command.confidence,
+            active=command.active,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "publications":
+        command = ListAnalyticsPublicationsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_publications(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "publication-show":
+        command = ShowAnalyticsPublicationCommand(args.publication_id)
+        publication = service.get_publication(command.publication_id)
+        if publication is None:
+            print("Publicacion no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(publication.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "publication-metrics":
+        command = PublicationMetricsCommand(args.publication_id)
+        payload = {metric_key: snapshot.to_dict() for metric_key, snapshot in service.get_latest_metrics(command.publication_id).items()}
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "import-show":
+        command = ShowAnalyticsImportCommand(args.import_id)
+        import_record = service.get_import(command.import_id)
+        if import_record is None:
+            print("Importacion no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(import_record.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "import-rows":
+        command = ListAnalyticsImportRowsCommand(args.import_id)
+        payload = [item.to_dict() for item in service.get_import_rows(command.import_id, status=args.status)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export-normalized":
+        command = ExportNormalizedAnalyticsCommand(args.creator_id, args.format)
+        payload = service.export_normalized_data(creator_id=command.creator_id, format_name=command.format)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de analytics no reconocida.")
+
+
 def build_evaluation_text(report) -> str:
     lines = [
         f"Escenario: {report.scenario.id}",
@@ -2677,6 +2960,7 @@ def dispatch(
     visual_service: VisualAnalysisService,
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
+    analytics_service: AnalyticsImportService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -2718,6 +3002,10 @@ def dispatch(
             return _handle_multimodal(args, multimodal_service, stdout, stderr)
         if args.entity == "clips":
             return _handle_clips(args, clip_service, stdout, stderr)
+        if args.entity == "analytics":
+            if analytics_service is None:
+                raise DomainError("El servicio de analytics no esta disponible.")
+            return _handle_analytics(args, analytics_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")

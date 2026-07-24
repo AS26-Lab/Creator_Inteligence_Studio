@@ -49,6 +49,9 @@ from creator_intelligence_studio.application.services.clip_rendering_service imp
     ClipRenderOperationReport,
     ClipRenderService,
 )
+from creator_intelligence_studio.application.services.analytics_import_service import (
+    AnalyticsImportService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -274,6 +277,7 @@ class WorkspaceViewModel:
         personalization_service: PersonalizationDatasetService | None = None,
         model_service: PersonalizationTrainingService | None = None,
         evaluation_service: OperationalEvaluationService | None = None,
+        analytics_service: AnalyticsImportService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -396,6 +400,7 @@ class WorkspaceViewModel:
             )
         self.render_service = render_service
         self.subtitle_service = subtitle_service
+        self.analytics_service = analytics_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -924,8 +929,34 @@ class WorkspaceViewModel:
                             interrupted_at=to_iso_z(delivery.cancelled_at) if delivery.status.value == "interrupted" else None,
                             completed_at=to_iso_z(delivery.completed_at),
                             payload={"delivery": delivery.to_dict(), "kind": "subtitle_delivery"},
-                        )
                     )
+                )
+        if self.analytics_service is not None and self.selected_creator_id is not None:
+            try:
+                imports = self.analytics_service.list_imports(self.selected_creator_id)
+            except Exception:
+                imports = []
+            for import_record in imports:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=import_record.id,
+                        title="Importacion de analytics",
+                        status=import_record.status.value,
+                        stage_name=import_record.status.value,
+                        video_id=None,
+                        video_title=import_record.source_filename,
+                        action_id=import_record.channel_id,
+                        progress_percent=100.0 if import_record.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=import_record.error_message or import_record.status.value,
+                        error=import_record.error_message,
+                        cancellable=import_record.status.value in {"queued", "running", "verifying"},
+                        created_at=to_iso_z(import_record.created_at),
+                        updated_at=to_iso_z(import_record.updated_at),
+                        interrupted_at=to_iso_z(import_record.completed_at) if import_record.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(import_record.completed_at),
+                        payload={"import": import_record.to_dict(), "kind": "analytics_import"},
+                    )
+                )
         return sorted(tasks, key=lambda item: item.updated_at, reverse=True)
 
     def _update_tasks(self, tasks: tuple[BackgroundTaskRecord, ...]) -> None:
@@ -1940,6 +1971,101 @@ class WorkspaceViewModel:
         if self.subtitle_service is None:
             return []
         return self.subtitle_service.get_subtitle_edit_history(track_id)
+
+    def list_analytics_platforms(self):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.list_platforms()
+
+    def list_analytics_channels(self, creator_id: str):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.list_channels(creator_id)
+
+    def create_analytics_channel(self, **kwargs):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.create_channel(**kwargs)
+
+    def list_analytics_imports(self, creator_id: str):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.list_imports(creator_id)
+
+    def get_analytics_import(self, import_id: str):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.get_import(import_id)
+
+    def list_analytics_import_rows(self, import_id: str, status: str | None = None):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.get_import_rows(import_id, status=status)
+
+    def detect_analytics_schema(self, file_path: str, *, sheet_name: str | None = None):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.detect_schema(Path(file_path), sheet_name=sheet_name)
+
+    def inspect_analytics_file(self, file_path: str, *, sheet_name: str | None = None):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.inspect_file(Path(file_path), sheet_name=sheet_name)
+
+    def import_analytics_csv(self, *, creator_id: str, file_path: str, channel_id: str | None = None, platform: str | None = None, mapping_name: str | None = None, delimiter: str | None = None):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.import_csv(creator_id=creator_id, file=Path(file_path), channel_id=channel_id, platform=platform, mapping_name=mapping_name, delimiter=delimiter)
+
+    def import_analytics_excel(self, *, creator_id: str, file_path: str, channel_id: str | None = None, platform: str | None = None, sheet_name: str | None = None, mapping_name: str | None = None):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.import_excel(creator_id=creator_id, file=Path(file_path), channel_id=channel_id, platform=platform, sheet_name=sheet_name, mapping_name=mapping_name)
+
+    def list_analytics_mappings(self, creator_id: str):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.list_mappings(creator_id)
+
+    def save_analytics_mapping(self, **kwargs):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.save_mapping(**kwargs)
+
+    def list_analytics_publications(self, creator_id: str, *, filters=None):
+        if self.analytics_service is None:
+            return []
+        return self.analytics_service.list_publications(creator_id, filters=filters)
+
+    def get_analytics_publication(self, publication_id: str):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.get_publication(publication_id)
+
+    def get_analytics_latest_metrics(self, publication_id: str):
+        if self.analytics_service is None:
+            return {}
+        return self.analytics_service.get_latest_metrics(publication_id)
+
+    def export_normalized_analytics(self, creator_id: str, format_name: str = "json"):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.export_normalized_data(creator_id=creator_id, format_name=format_name)
+
+    def cancel_analytics_import(self, import_id: str):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.cancel_import(import_id)
+
+    def retry_analytics_import(self, import_id: str):
+        if self.analytics_service is None:
+            raise RuntimeError("El servicio de analytics no esta disponible.")
+        return self.analytics_service.retry_import(import_id)
+
+    def reveal_analytics_import_report(self, import_id: str):
+        if self.analytics_service is None:
+            return None
+        return self.analytics_service.get_import_report_path(import_id)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

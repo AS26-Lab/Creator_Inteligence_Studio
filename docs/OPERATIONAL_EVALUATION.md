@@ -74,3 +74,5 @@ The operational evaluation view shows scenarios, history, stages, metrics, asser
 - `excluded` dataset rows are audited separately and do not count as train/validation/test leakage.
 - The controlled binary baseline scenario does not require neutral examples to pass readiness.
 - A passing run validates technical integrity and persistence, not recommendation quality or commercial usefulness.
+
+Analytics foundation checks can be added as controlled scenarios to validate CSV/XLSX import, schema detection, mapping reuse, duplicate handling, interruption/retry and normalized export without external APIs.

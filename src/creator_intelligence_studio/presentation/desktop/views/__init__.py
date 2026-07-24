@@ -6,6 +6,7 @@ from .acoustic_analysis_view import AcousticAnalysisView
 from .creators_view import CreatorsView
 from .clip_ranking_view import ClipRankingView
 from .dashboard_view import DashboardView
+from .analytics_view import AnalyticsView
 from .multimodal_analysis_view import MultimodalAnalysisView
 from .operational_evaluation_view import OperationalEvaluationView
 from .personalization_data_view import PersonalizationDataView
@@ -24,6 +25,7 @@ from .videos_view import VideosView
 __all__ = [
     "AcousticAnalysisView",
     "CreatorsView",
+    "AnalyticsView",
     "ClipRankingView",
     "DashboardView",
     "MultimodalAnalysisView",
