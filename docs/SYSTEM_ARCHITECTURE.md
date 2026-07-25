@@ -66,6 +66,7 @@ flowchart TD
 - `Clip Rendering`
 - `Personalization Data`
 - `Creator Memory`
+- `Creative Packaging`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -98,6 +99,9 @@ flowchart TD
 - `presentation/desktop/views/clip_ranking_view.py` y `presentation/desktop/views/task_center_view.py` tambien exponen entregas de subtitulos sidecar o burn-in como tareas persistidas.
 - `application/services/clip_rendering_service.py` coordina jobs de render, entregas de subtitulos, manifests y verificacion de salida.
 - `infrastructure/clip_rendering/subtitle_rendering.py` centraliza estilos, escape ASS y hashes de configuracion de subtitulos.
+- `presentation/desktop/views/thumbnail_lab_view.py` expone titulo, miniatura, referencia, concepto, prompt y review.
+- `application/services/creative_packaging_service.py` coordina el analisis creativo de packaging y las exportaciones asociadas.
+- `infrastructure/creative_packaging/` centraliza heuristicas deterministas para titulos, miniaturas, pares, conceptos, prompts y referencias.
 - `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
 - `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
 

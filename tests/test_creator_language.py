@@ -172,7 +172,7 @@ class CreatorLanguageAnalysisTests(unittest.TestCase):
         self.assertIn("opening", narrative)
         self.assertIn("closing", narrative)
 
-    def test_migration_v19_analysis_profile_retrieval_and_export(self) -> None:
+    def test_migration_v20_analysis_profile_retrieval_and_export(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fixture = _build_fixture(Path(temp_dir))
             workspace = fixture.workspace
@@ -292,7 +292,7 @@ class CreatorLanguageAnalysisTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
-            self.assertEqual(versions[-1], 19)
+            self.assertEqual(versions[-1], 20)
             self.assertIn("creator_language_corpora", tables)
             self.assertIn("creator_language_profile_snapshots", tables)
             self.assertEqual(len(fixture.language_service.list_corpora(fixture.creator_a.id)), 1)

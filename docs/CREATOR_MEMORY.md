@@ -63,6 +63,8 @@ Retrieval is local and deterministic. Ranking prefers:
 - creators remain isolated;
 - evidence is kept minimal but traceable.
 
+Thumbnail Lab and Titles Foundation consults this memory for brand fit, approved and rejected examples, style rules, limits, and objectives before proposing concepts or prompts.
+
 ## Next phase
 
 Creator Language Analysis / Narrative Profile.

@@ -17,6 +17,7 @@ flowchart LR
     Home --> Clips[Clips]
     Home --> Personalization[Datos de personalizacion]
     Home --> CreatorMemory[Creator Memory]
+    Home --> Packaging[Thumbnail Lab]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -224,6 +225,15 @@ flowchart LR
 - Modelos.
 - Creator Memory;
 - Creator Language;
+
+### Thumbnail Lab
+
+- titulo y miniatura como piezas separadas y como par;
+- perfil de marca derivado y editable;
+- referencias manuales y advertencias de copia;
+- conceptos, prompts y brief para diseñador;
+- review opcional cuando el usuario vuelve con una miniatura terminada;
+- historial de versiones, decisiones y experimentos vinculados.
 
 ## Estados vacios
 

@@ -312,7 +312,7 @@ class MediaInspectionServiceTests(unittest.TestCase):
                 tables = connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='video_inspections'"
                 ).fetchall()
-            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+            self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
             self.assertEqual(len(tables), 1)
 
     def test_inspect_video_reuses_cache_and_force_reinspect(self) -> None:

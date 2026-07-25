@@ -68,6 +68,12 @@ from creator_intelligence_studio.application.services.creator_language_service i
     CreatorLanguageProfileDetail,
     CreatorLanguageService,
 )
+from creator_intelligence_studio.application.services.creative_packaging_service import (
+    CreativePackagingAnalysisDetail,
+    CreativePackagingExportResult,
+    CreativePackagingService,
+    PackagingBrandProfileDetail,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -298,6 +304,7 @@ class WorkspaceViewModel:
         experiment_service: ExperimentService | None = None,
         creator_memory_service: CreatorMemoryService | None = None,
         creator_language_service: CreatorLanguageService | None = None,
+        creative_packaging_service: CreativePackagingService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -425,6 +432,7 @@ class WorkspaceViewModel:
         self.experiment_service = experiment_service
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
+        self.creative_packaging_service = creative_packaging_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -2809,6 +2817,351 @@ class WorkspaceViewModel:
         if self.creator_language_service is None:
             return []
         return self.creator_language_service.list_analysis_runs(creator_id, corpus_id)
+
+    def list_packaging_assets(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_assets(creator_id)
+
+    def get_packaging_asset(self, asset_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_asset(asset_id)
+
+    def create_packaging_title_version(self, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.create_title_version(**kwargs)
+
+    def list_packaging_title_versions(self, packaging_asset_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_title_versions(packaging_asset_id)
+
+    def get_packaging_title_version(self, title_version_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_title_version(title_version_id)
+
+    def analyze_packaging_title(self, title_version_id: str, *, force_recompute: bool = False):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Analisis de titulo",
+            status="running",
+            stage_name="analyzing",
+            video_title=title_version_id,
+            action_id=title_version_id,
+            progress_percent=5.0,
+            message="Analizando titulo creativo",
+            cancellable=True,
+            payload={"kind": "packaging_title_analysis", "title_version_id": title_version_id},
+        )
+        try:
+            detail = self.creative_packaging_service.analyze_title(title_version_id, force_recompute=force_recompute)
+        except Exception:
+            self.fail_background_task(task.task_id, "Analisis de titulo fallido")
+            raise
+        self.complete_background_task(task.task_id, "Analisis de titulo completado")
+        return detail
+
+    def create_packaging_thumbnail_version(self, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.create_thumbnail_version(**kwargs)
+
+    def list_packaging_thumbnail_versions(self, packaging_asset_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_thumbnail_versions(packaging_asset_id)
+
+    def get_packaging_thumbnail_version(self, thumbnail_version_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_thumbnail_version(thumbnail_version_id)
+
+    def analyze_packaging_thumbnail(self, thumbnail_version_id: str, *, force_recompute: bool = False):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Analisis de miniatura",
+            status="running",
+            stage_name="analyzing",
+            video_title=thumbnail_version_id,
+            action_id=thumbnail_version_id,
+            progress_percent=5.0,
+            message="Analizando miniatura creativa",
+            cancellable=True,
+            payload={"kind": "packaging_thumbnail_analysis", "thumbnail_version_id": thumbnail_version_id},
+        )
+        try:
+            detail = self.creative_packaging_service.analyze_thumbnail(thumbnail_version_id, force_recompute=force_recompute)
+        except Exception:
+            self.fail_background_task(task.task_id, "Analisis de miniatura fallido")
+            raise
+        self.complete_background_task(task.task_id, "Analisis de miniatura completado")
+        return detail
+
+    def list_packaging_reference_assets(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_reference_assets(creator_id)
+
+    def add_packaging_reference_asset(self, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.add_reference_asset(**kwargs)
+
+    def review_packaging_reference_asset(self, reference_id: str, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.review_reference_asset(reference_id, **kwargs)
+
+    def build_packaging_brand_profile(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Perfil de marca de packaging",
+            status="running",
+            stage_name="building",
+            video_title=creator_id,
+            action_id=creator_id,
+            progress_percent=10.0,
+            message="Construyendo perfil de marca",
+            cancellable=True,
+            payload={"kind": "packaging_brand_profile", "creator_id": creator_id},
+        )
+        try:
+            profile = self.creative_packaging_service.build_brand_profile(creator_id)
+        except Exception:
+            self.fail_background_task(task.task_id, "Perfil de marca fallido")
+            raise
+        self.complete_background_task(task.task_id, "Perfil de marca completado")
+        return profile
+
+    def list_packaging_brand_profiles(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_brand_profiles(creator_id)
+
+    def get_packaging_brand_profile_detail(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_brand_profile_detail(creator_id)
+
+    def evaluate_packaging_pair(self, title_version_id: str, thumbnail_version_id: str, *, publication_id: str | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Evaluacion de par",
+            status="running",
+            stage_name="evaluating",
+            video_title=title_version_id,
+            action_id=thumbnail_version_id,
+            progress_percent=10.0,
+            message="Evaluando titulo y miniatura",
+            cancellable=True,
+            payload={"kind": "packaging_pair_evaluation", "title_version_id": title_version_id, "thumbnail_version_id": thumbnail_version_id},
+        )
+        try:
+            evaluation = self.creative_packaging_service.evaluate_pair(
+                title_version_id=title_version_id,
+                thumbnail_version_id=thumbnail_version_id,
+                publication_id=publication_id,
+            )
+        except Exception:
+            self.fail_background_task(task.task_id, "Evaluacion de par fallida")
+            raise
+        self.complete_background_task(task.task_id, "Evaluacion de par completada")
+        return evaluation
+
+    def list_packaging_pair_evaluations(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_pair_evaluations(creator_id)
+
+    def get_packaging_pair_evaluation(self, evaluation_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_pair_evaluation(evaluation_id)
+
+    def extract_packaging_frame_candidates(self, creator_id: str, video_asset_id: str, timestamps: list[float] | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Extraccion de frames",
+            status="running",
+            stage_name="extracting_frames",
+            video_id=video_asset_id,
+            video_title=video_asset_id,
+            action_id=video_asset_id,
+            progress_percent=10.0,
+            message="Extrayendo frames candidatos",
+            cancellable=True,
+            payload={"kind": "packaging_frame_candidates", "creator_id": creator_id, "video_asset_id": video_asset_id},
+        )
+        try:
+            candidates = self.creative_packaging_service.extract_frame_candidates(creator_id=creator_id, video_asset_id=video_asset_id, timestamps=timestamps)
+        except Exception:
+            self.fail_background_task(task.task_id, "Extraccion de frames fallida")
+            raise
+        self.complete_background_task(task.task_id, "Extraccion de frames completada")
+        return candidates
+
+    def list_packaging_frame_candidates(self, creator_id: str, video_asset_id: str | None = None):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_frame_candidates(creator_id, video_asset_id=video_asset_id)
+
+    def build_packaging_concepts(self, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        creator_id = kwargs.get("creator_id") or self.selected_creator_id
+        task = self.register_background_task(
+            title="Construccion de concepto",
+            status="running",
+            stage_name="building_concepts",
+            video_title=creator_id or "",
+            action_id=kwargs.get("concept_type"),
+            progress_percent=10.0,
+            message="Construyendo concepto creativo",
+            cancellable=True,
+            payload={"kind": "packaging_concept_build", "creator_id": creator_id, "kwargs": dict(kwargs)},
+        )
+        try:
+            concept = self.creative_packaging_service.build_concepts(**kwargs)
+        except Exception:
+            self.fail_background_task(task.task_id, "Construccion de concepto fallida")
+            raise
+        self.complete_background_task(task.task_id, "Construccion de concepto completada")
+        return concept
+
+    def list_packaging_concepts(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_concepts(creator_id)
+
+    def get_packaging_concept(self, concept_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_concept(concept_id)
+
+    def build_packaging_prompt(self, *, concept_id: str, target_tool: str, title: str | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Construccion de prompt",
+            status="running",
+            stage_name="building_prompt",
+            action_id=concept_id,
+            progress_percent=10.0,
+            message="Construyendo prompt creativo",
+            cancellable=True,
+            payload={"kind": "packaging_prompt_build", "concept_id": concept_id, "target_tool": target_tool, "title": title},
+        )
+        try:
+            prompt = self.creative_packaging_service.build_prompt(concept_id=concept_id, target_tool=target_tool, title=title)
+        except Exception:
+            self.fail_background_task(task.task_id, "Construccion de prompt fallida")
+            raise
+        self.complete_background_task(task.task_id, "Construccion de prompt completada")
+        return prompt
+
+    def list_packaging_prompts(self, concept_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_prompts(concept_id)
+
+    def list_packaging_prompt_references(self, prompt_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_prompt_references(prompt_id)
+
+    def review_packaging_thumbnail(self, *, thumbnail_version_id: str, title_version_id: str | None = None, publication_id: str | None = None, concept_id: str | None = None, prompt_id: str | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Revision de miniatura",
+            status="running",
+            stage_name="reviewing",
+            action_id=thumbnail_version_id,
+            progress_percent=10.0,
+            message="Revisando miniatura creativa",
+            cancellable=True,
+            payload={
+                "kind": "packaging_thumbnail_review",
+                "thumbnail_version_id": thumbnail_version_id,
+                "title_version_id": title_version_id,
+                "publication_id": publication_id,
+                "concept_id": concept_id,
+                "prompt_id": prompt_id,
+            },
+        )
+        try:
+            review = self.creative_packaging_service.review_thumbnail(
+                thumbnail_version_id=thumbnail_version_id,
+                title_version_id=title_version_id,
+                publication_id=publication_id,
+                concept_id=concept_id,
+                prompt_id=prompt_id,
+            )
+        except Exception:
+            self.fail_background_task(task.task_id, "Revision de miniatura fallida")
+            raise
+        self.complete_background_task(task.task_id, "Revision de miniatura completada")
+        return review
+
+    def list_packaging_reviews(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_thumbnail_reviews(creator_id)
+
+    def get_packaging_review(self, review_id: str):
+        if self.creative_packaging_service is None:
+            return None
+        return self.creative_packaging_service.get_thumbnail_review(review_id)
+
+    def record_packaging_decision(self, **kwargs):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.record_decision(**kwargs)
+
+    def list_packaging_decisions(self, creator_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_decisions(creator_id)
+
+    def link_packaging_experiment(self, *, packaging_asset_id: str, experiment_id: str, assignment_id: str | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        return self.creative_packaging_service.link_experiment(packaging_asset_id=packaging_asset_id, experiment_id=experiment_id, assignment_id=assignment_id)
+
+    def list_packaging_experiment_links(self, packaging_asset_id: str):
+        if self.creative_packaging_service is None:
+            return []
+        return self.creative_packaging_service.list_experiment_links(packaging_asset_id)
+
+    def export_packaging(self, *, creator_id: str, format_name: str, summary: bool = False, destination: Path | None = None):
+        if self.creative_packaging_service is None:
+            raise RuntimeError("El servicio de packaging no esta disponible.")
+        task = self.register_background_task(
+            title="Export de packaging",
+            status="running",
+            stage_name="export",
+            video_title=creator_id,
+            action_id=format_name,
+            progress_percent=10.0,
+            message="Exportando packaging",
+            cancellable=True,
+            payload={"kind": "packaging_export", "creator_id": creator_id, "format": format_name, "summary": summary},
+        )
+        try:
+            result = self.creative_packaging_service.export(creator_id=creator_id, format_name=format_name, summary=summary, destination=destination)
+        except Exception:
+            self.fail_background_task(task.task_id, "Export de packaging fallido")
+            raise
+        self.complete_background_task(task.task_id, "Export de packaging completado")
+        return result
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

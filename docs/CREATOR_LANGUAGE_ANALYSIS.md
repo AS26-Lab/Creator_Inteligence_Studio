@@ -54,6 +54,8 @@ The analysis describes observed patterns, not intentions or inner state. It may 
 - private text is minimized;
 - no full-corpus logs by default.
 
+Thumbnail Lab and Titles Foundation reuses the same language and narrative signals to check whether titles and thumbnail text fit the creator's voice, structure, and platform style.
+
 ## Next phase
 
 Assisted Writing Foundation / Style-Grounded Drafting.

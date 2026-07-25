@@ -205,7 +205,7 @@ class CreatorMemoryTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
-            self.assertEqual(versions[-1], 19)
+            self.assertEqual(versions[-1], 20)
             self.assertIn("creator_profiles", tables)
             self.assertIn("creator_traits", tables)
             self.assertIn("creator_profile_snapshots", tables)

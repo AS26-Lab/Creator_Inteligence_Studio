@@ -27,6 +27,8 @@ from .system_view import SystemView
 from .transcription_view import TranscriptionView
 from .subtitle_editor_view import SubtitleEditorView
 from .learning_memory_view import LearningMemoryView
+from .thumbnail_lab_view import ThumbnailLabView
+from .packaging_history_view import PackagingHistoryView
 from .videos_view import VideosView
 
 __all__ = [
@@ -55,5 +57,7 @@ __all__ = [
     "TranscriptionView",
     "SubtitleEditorView",
     "LearningMemoryView",
+    "ThumbnailLabView",
+    "PackagingHistoryView",
     "VideosView",
 ]

@@ -95,6 +95,33 @@ class TaskCenterView(QWidget):
     def _is_creator_language_export_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "creator_language_export")
 
+    def _is_packaging_title_analysis_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_title_analysis")
+
+    def _is_packaging_thumbnail_analysis_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_thumbnail_analysis")
+
+    def _is_packaging_brand_profile_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_brand_profile")
+
+    def _is_packaging_pair_evaluation_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_pair_evaluation")
+
+    def _is_packaging_frame_candidates_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_frame_candidates")
+
+    def _is_packaging_concept_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_concept_build")
+
+    def _is_packaging_prompt_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_prompt_build")
+
+    def _is_packaging_review_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_thumbnail_review")
+
+    def _is_packaging_export_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "packaging_export")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -184,6 +211,42 @@ class TaskCenterView(QWidget):
             payload = getattr(task, "payload", {})
             QMessageBox.information(self, "Task Center", f"Export de lenguaje: {payload.get('format', task.task_id)} / {task.status}")
             return
+        if self._is_packaging_title_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Analisis de titulo: {payload.get('title_version_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_thumbnail_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Analisis de miniatura: {payload.get('thumbnail_version_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_brand_profile_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Brand profile: {payload.get('creator_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_pair_evaluation_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Par evaluado: {payload.get('title_version_id', task.task_id)} / {payload.get('thumbnail_version_id', '')}")
+            return
+        if self._is_packaging_frame_candidates_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Frames candidatos: {payload.get('video_asset_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_concept_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Concepto: {payload.get('creator_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_prompt_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Prompt: {payload.get('concept_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_review_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Revision de miniatura: {payload.get('thumbnail_version_id', task.task_id)} / {task.status}")
+            return
+        if self._is_packaging_export_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Export de packaging: {payload.get('format', task.task_id)} / {task.status}")
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -209,6 +272,8 @@ class TaskCenterView(QWidget):
         elif self._is_analytics_lab_analysis_task(task) or self._is_analytics_lab_report_task(task) or self._is_experiment_evaluation_task(task) or self._is_experiment_report_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_creator_language_analysis_task(task) or self._is_creator_language_snapshot_task(task) or self._is_creator_language_export_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_packaging_title_analysis_task(task) or self._is_packaging_thumbnail_analysis_task(task) or self._is_packaging_brand_profile_task(task) or self._is_packaging_pair_evaluation_task(task) or self._is_packaging_frame_candidates_task(task) or self._is_packaging_concept_task(task) or self._is_packaging_prompt_task(task) or self._is_packaging_review_task(task) or self._is_packaging_export_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
@@ -287,6 +352,83 @@ class TaskCenterView(QWidget):
             format_name = payload.get("format") or "json"
             if creator_id:
                 self.workspace.export_creator_language(creator_id=str(creator_id), format_name=str(format_name))
+            self.refresh()
+            return
+        if self._is_packaging_title_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            title_version_id = payload.get("title_version_id")
+            if title_version_id:
+                self.workspace.analyze_packaging_title(str(title_version_id), force_recompute=True)
+            self.refresh()
+            return
+        if self._is_packaging_thumbnail_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            thumbnail_version_id = payload.get("thumbnail_version_id")
+            if thumbnail_version_id:
+                self.workspace.analyze_packaging_thumbnail(str(thumbnail_version_id), force_recompute=True)
+            self.refresh()
+            return
+        if self._is_packaging_brand_profile_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            if creator_id:
+                self.workspace.build_packaging_brand_profile(str(creator_id))
+            self.refresh()
+            return
+        if self._is_packaging_pair_evaluation_task(task):
+            payload = getattr(task, "payload", {})
+            title_version_id = payload.get("title_version_id")
+            thumbnail_version_id = payload.get("thumbnail_version_id")
+            publication_id = payload.get("publication_id")
+            if title_version_id and thumbnail_version_id:
+                self.workspace.evaluate_packaging_pair(str(title_version_id), str(thumbnail_version_id), publication_id=str(publication_id) if publication_id else None)
+            self.refresh()
+            return
+        if self._is_packaging_frame_candidates_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            video_asset_id = payload.get("video_asset_id")
+            timestamps = payload.get("timestamps")
+            if creator_id and video_asset_id:
+                self.workspace.extract_packaging_frame_candidates(str(creator_id), str(video_asset_id), timestamps=timestamps if isinstance(timestamps, list) else None)
+            self.refresh()
+            return
+        if self._is_packaging_concept_task(task):
+            payload = getattr(task, "payload", {})
+            kwargs = payload.get("kwargs") or {}
+            if isinstance(kwargs, dict) and kwargs.get("creator_id"):
+                self.workspace.build_packaging_concepts(**kwargs)
+            self.refresh()
+            return
+        if self._is_packaging_prompt_task(task):
+            payload = getattr(task, "payload", {})
+            concept_id = payload.get("concept_id")
+            target_tool = payload.get("target_tool")
+            title = payload.get("title")
+            if concept_id and target_tool:
+                self.workspace.build_packaging_prompt(concept_id=str(concept_id), target_tool=str(target_tool), title=str(title) if title else None)
+            self.refresh()
+            return
+        if self._is_packaging_review_task(task):
+            payload = getattr(task, "payload", {})
+            thumbnail_version_id = payload.get("thumbnail_version_id")
+            if thumbnail_version_id:
+                self.workspace.review_packaging_thumbnail(
+                    thumbnail_version_id=str(thumbnail_version_id),
+                    title_version_id=str(payload.get("title_version_id")) if payload.get("title_version_id") else None,
+                    publication_id=str(payload.get("publication_id")) if payload.get("publication_id") else None,
+                    concept_id=str(payload.get("concept_id")) if payload.get("concept_id") else None,
+                    prompt_id=str(payload.get("prompt_id")) if payload.get("prompt_id") else None,
+                )
+            self.refresh()
+            return
+        if self._is_packaging_export_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            format_name = payload.get("format") or "json"
+            summary = bool(payload.get("summary"))
+            if creator_id:
+                self.workspace.export_packaging(creator_id=str(creator_id), format_name=str(format_name), summary=summary)
             self.refresh()
             return
         if task.title == "Render de clip":

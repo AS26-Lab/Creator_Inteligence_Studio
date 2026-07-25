@@ -135,6 +135,13 @@
 - `error_code` y `error_message`.
 - `created_at` y `updated_at` UTC.
 
+### `packaging_assets` y tablas asociadas
+
+- `packaging_assets` para agrupar titulos, miniaturas, pares, conceptos y prompts por creador y publicacion o video.
+- `title_versions` y `thumbnail_versions` para conservar versiones inmutables.
+- `packaging_reference_assets` y `packaging_brand_profiles` para referencias y perfil de marca derivado.
+- `title_analysis_runs`, `thumbnail_analysis_runs`, `packaging_pair_evaluations`, `thumbnail_frame_candidates`, `creative_concepts`, `creative_prompts`, `creative_prompt_references`, `thumbnail_reviews`, `packaging_decisions` y `packaging_experiment_links` para analisis, revision y trazabilidad.
+
 ## Relaciones
 
 ```mermaid

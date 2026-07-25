@@ -3026,6 +3026,454 @@ def migration_19(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_20(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_assets (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            asset_type TEXT NOT NULL CHECK (
+                asset_type IN (
+                    'title',
+                    'thumbnail',
+                    'title_thumbnail_pair',
+                    'frame_candidate',
+                    'creative_concept',
+                    'creative_prompt',
+                    'reference_image',
+                    'designer_brief',
+                    'thumbnail_review'
+                )
+            ),
+            platform TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            topic TEXT,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS title_versions (
+            id TEXT PRIMARY KEY,
+            packaging_asset_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            title_text TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            language TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            topic TEXT,
+            is_published INTEGER NOT NULL DEFAULT 0,
+            is_selected INTEGER NOT NULL DEFAULT 0,
+            creator_approval_status TEXT NOT NULL,
+            creator_feedback TEXT,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE CASCADE,
+            UNIQUE (packaging_asset_id, version_number),
+            UNIQUE (packaging_asset_id, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS thumbnail_versions (
+            id TEXT PRIMARY KEY,
+            packaging_asset_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            image_path TEXT,
+            source_type TEXT NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            file_fingerprint TEXT,
+            concept_id TEXT,
+            is_published INTEGER NOT NULL DEFAULT 0,
+            is_selected INTEGER NOT NULL DEFAULT 0,
+            creator_approval_status TEXT NOT NULL,
+            creator_feedback TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (concept_id) REFERENCES creative_concepts(id) ON DELETE SET NULL,
+            UNIQUE (packaging_asset_id, version_number),
+            UNIQUE (packaging_asset_id, file_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_reference_assets (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            reference_type TEXT NOT NULL,
+            image_path TEXT,
+            text_content TEXT,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            source_type TEXT NOT NULL,
+            source_creator_name TEXT,
+            source_url TEXT,
+            usage_permission TEXT NOT NULL,
+            represents_creator INTEGER NOT NULL DEFAULT 0,
+            approval_status TEXT NOT NULL,
+            reference_purpose TEXT NOT NULL,
+            notes TEXT,
+            file_fingerprint TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_brand_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            brand_summary TEXT NOT NULL,
+            visual_identity_json TEXT NOT NULL,
+            preferred_composition_json TEXT NOT NULL,
+            preferred_palette_json TEXT NOT NULL,
+            typography_guidance_json TEXT NOT NULL,
+            subject_guidance_json TEXT NOT NULL,
+            expression_guidance_json TEXT NOT NULL,
+            approved_patterns_json TEXT NOT NULL,
+            rejected_patterns_json TEXT NOT NULL,
+            prohibited_elements_json TEXT NOT NULL,
+            platform_differences_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, profile_version),
+            UNIQUE (creator_id, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS title_analysis_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            title_version_id TEXT NOT NULL,
+            analyzer_version TEXT NOT NULL,
+            status TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            brand_profile_version INTEGER,
+            source_fingerprint TEXT NOT NULL,
+            warning_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (title_version_id) REFERENCES title_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_memory_snapshot_id) REFERENCES creator_profile_snapshots(id) ON DELETE SET NULL,
+            FOREIGN KEY (creator_language_snapshot_id) REFERENCES creator_language_profile_snapshots(id) ON DELETE SET NULL,
+            FOREIGN KEY (creator_id, brand_profile_version) REFERENCES packaging_brand_profiles(creator_id, profile_version) ON DELETE SET NULL,
+            UNIQUE (creator_id, source_fingerprint, analyzer_version)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS title_analysis_metrics (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES title_analysis_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS thumbnail_analysis_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            thumbnail_version_id TEXT NOT NULL,
+            analyzer_version TEXT NOT NULL,
+            status TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            brand_profile_version INTEGER,
+            source_fingerprint TEXT NOT NULL,
+            warning_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (thumbnail_version_id) REFERENCES thumbnail_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_memory_snapshot_id) REFERENCES creator_profile_snapshots(id) ON DELETE SET NULL,
+            FOREIGN KEY (creator_language_snapshot_id) REFERENCES creator_language_profile_snapshots(id) ON DELETE SET NULL,
+            FOREIGN KEY (creator_id, brand_profile_version) REFERENCES packaging_brand_profiles(creator_id, profile_version) ON DELETE SET NULL,
+            UNIQUE (creator_id, source_fingerprint, analyzer_version)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS thumbnail_analysis_metrics (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES thumbnail_analysis_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_pair_evaluations (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            title_version_id TEXT NOT NULL,
+            thumbnail_version_id TEXT NOT NULL,
+            publication_id TEXT,
+            status TEXT NOT NULL,
+            visual_quality_score REAL,
+            content_alignment_score REAL,
+            creator_brand_alignment_score REAL,
+            audience_fit_score REAL,
+            platform_fit_score REAL,
+            historical_fit_score REAL,
+            niche_fit_score REAL,
+            differentiation_score REAL,
+            clarity_score REAL,
+            curiosity_score REAL,
+            hierarchy_score REAL,
+            complement_score REAL,
+            authenticity_score REAL,
+            promise_alignment_score REAL,
+            evidence_json TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            risks_json TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            recommendation_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (title_version_id) REFERENCES title_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (thumbnail_version_id) REFERENCES thumbnail_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            UNIQUE (title_version_id, thumbnail_version_id, publication_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS thumbnail_frame_candidates (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            video_asset_id TEXT NOT NULL,
+            timestamp_seconds REAL NOT NULL,
+            frame_path TEXT NOT NULL,
+            frame_fingerprint TEXT NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            sharpness_score REAL,
+            brightness_score REAL,
+            contrast_score REAL,
+            face_presence INTEGER,
+            motion_blur_score REAL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            creator_decision TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE CASCADE,
+            UNIQUE (video_asset_id, timestamp_seconds, frame_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creative_concepts (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            concept_type TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            topic TEXT,
+            title TEXT NOT NULL,
+            premise TEXT NOT NULL,
+            subject_description TEXT NOT NULL,
+            action_description TEXT NOT NULL,
+            composition_description TEXT NOT NULL,
+            emotion_description TEXT NOT NULL,
+            background_description TEXT NOT NULL,
+            color_guidance TEXT NOT NULL,
+            text_guidance TEXT NOT NULL,
+            visual_hierarchy TEXT NOT NULL,
+            relation_to_title TEXT NOT NULL,
+            brand_alignment_notes TEXT NOT NULL,
+            audience_fit_notes TEXT NOT NULL,
+            platform_fit_notes TEXT NOT NULL,
+            differentiation_notes TEXT NOT NULL,
+            authenticity_notes TEXT NOT NULL,
+            risks_json TEXT NOT NULL,
+            reference_requirements_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creative_prompts (
+            id TEXT PRIMARY KEY,
+            concept_id TEXT NOT NULL,
+            target_tool TEXT NOT NULL,
+            prompt_text TEXT NOT NULL,
+            negative_guidance TEXT,
+            reference_instructions_json TEXT NOT NULL,
+            tool_usage_notes_json TEXT NOT NULL,
+            expected_output_notes TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            creator_approval_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (concept_id) REFERENCES creative_concepts(id) ON DELETE CASCADE,
+            UNIQUE (concept_id, version_number)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creative_prompt_references (
+            id TEXT PRIMARY KEY,
+            prompt_id TEXT NOT NULL,
+            reference_asset_id TEXT,
+            reference_role TEXT NOT NULL,
+            required_level TEXT NOT NULL,
+            instruction TEXT NOT NULL,
+            risk_notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (prompt_id) REFERENCES creative_prompts(id) ON DELETE CASCADE,
+            FOREIGN KEY (reference_asset_id) REFERENCES packaging_reference_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS thumbnail_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            thumbnail_version_id TEXT NOT NULL,
+            title_version_id TEXT,
+            publication_id TEXT,
+            review_type TEXT NOT NULL,
+            overall_status TEXT NOT NULL,
+            visual_quality_json TEXT NOT NULL,
+            content_alignment_json TEXT NOT NULL,
+            brand_alignment_json TEXT NOT NULL,
+            audience_fit_json TEXT NOT NULL,
+            platform_fit_json TEXT NOT NULL,
+            historical_fit_json TEXT NOT NULL,
+            niche_fit_json TEXT NOT NULL,
+            differentiation_json TEXT NOT NULL,
+            strengths_json TEXT NOT NULL,
+            weaknesses_json TEXT NOT NULL,
+            keep_json TEXT NOT NULL,
+            change_json TEXT NOT NULL,
+            risks_json TEXT NOT NULL,
+            final_recommendation TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (thumbnail_version_id) REFERENCES thumbnail_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (title_version_id) REFERENCES title_versions(id) ON DELETE SET NULL,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_decisions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            reason TEXT,
+            modified_value_json TEXT,
+            decided_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_experiment_links (
+            id TEXT PRIMARY KEY,
+            packaging_asset_id TEXT NOT NULL,
+            experiment_id TEXT NOT NULL,
+            assignment_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE,
+            FOREIGN KEY (assignment_id) REFERENCES experiment_assignments(id) ON DELETE SET NULL,
+            UNIQUE (packaging_asset_id, experiment_id, assignment_id)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_assets_creator_id ON packaging_assets(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_assets_publication_id ON packaging_assets(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_assets_video_asset_id ON packaging_assets(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_assets_asset_type ON packaging_assets(asset_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_title_versions_packaging_asset_id ON title_versions(packaging_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_title_versions_source_fingerprint ON title_versions(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_versions_packaging_asset_id ON thumbnail_versions(packaging_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_versions_fingerprint ON thumbnail_versions(file_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_reference_assets_creator_id ON packaging_reference_assets(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_reference_assets_type ON packaging_reference_assets(reference_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_brand_profiles_creator_id ON packaging_brand_profiles(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_brand_profiles_fingerprint ON packaging_brand_profiles(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_title_analysis_runs_creator_id ON title_analysis_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_title_analysis_runs_title_version_id ON title_analysis_runs(title_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_title_analysis_metrics_run_id ON title_analysis_metrics(analysis_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_analysis_runs_creator_id ON thumbnail_analysis_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_analysis_runs_thumbnail_version_id ON thumbnail_analysis_runs(thumbnail_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_analysis_metrics_run_id ON thumbnail_analysis_metrics(analysis_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_pair_evaluations_creator_id ON packaging_pair_evaluations(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_pair_evaluations_title_version_id ON packaging_pair_evaluations(title_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_pair_evaluations_thumbnail_version_id ON packaging_pair_evaluations(thumbnail_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_frame_candidates_creator_id ON thumbnail_frame_candidates(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_frame_candidates_video_asset_id ON thumbnail_frame_candidates(video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creative_concepts_creator_id ON creative_concepts(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creative_prompts_concept_id ON creative_prompts(concept_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creative_prompt_references_prompt_id ON creative_prompt_references(prompt_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_thumbnail_reviews_creator_id ON thumbnail_reviews(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_decisions_creator_id ON packaging_decisions(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_experiment_links_packaging_asset_id ON packaging_experiment_links(packaging_asset_id)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -3065,6 +3513,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=17, name="experiments_learning"),
     Migration(version=18, name="creator_memory"),
     Migration(version=19, name="creator_language"),
+    Migration(version=20, name="creative_packaging"),
 )
 
 
@@ -3140,6 +3589,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_18(connection)
                 elif migration.version == 19:
                     migration_19(connection)
+                elif migration.version == 20:
+                    migration_20(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

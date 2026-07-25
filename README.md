@@ -107,6 +107,7 @@ La primera version de subtitulos locales esta documentada en [`docs/SUBTITLES.md
 La base de analitica manual multiplataforma esta documentada en [`docs/ANALYTICS_DATA_FOUNDATION.md`](docs/ANALYTICS_DATA_FOUNDATION.md).
 La fase de experimentos y aprendizaje verificable esta documentada en [`docs/EXPERIMENTS_AND_LEARNING.md`](docs/EXPERIMENTS_AND_LEARNING.md).
 La fase de Creator Memory / Creator Profile Foundation esta documentada en [`docs/CREATOR_MEMORY.md`](docs/CREATOR_MEMORY.md).
+La fase de Thumbnail Lab and Titles Foundation esta documentada en [`docs/THUMBNAIL_LAB_AND_TITLES.md`](docs/THUMBNAIL_LAB_AND_TITLES.md).
 
 ## Base local
 

@@ -107,6 +107,16 @@ The initial UX preferences are local and reversible:
 This flow records observed facts. It does not infer causality, predictions, or recommendations.
 Experiments and Learning adds the next operational loop: recommendation, human decision, real execution, evaluation and structured learning, still without automatic rule promotion or causal claims.
 
+## Thumbnail Lab workflow
+
+- elegir creator y asset de publicacion o video;
+- revisar titulos existentes y miniaturas existentes;
+- evaluar par titulo + miniatura;
+- construir perfil de marca y referencias manuales;
+- proponer conceptos, prompts y brief para diseñador;
+- exportar el prompt sin obligar a volver al programa;
+- revisar una miniatura devuelta y registrar instrucciones de revision.
+
 ## Creator language workflow
 
 - seleccionar creador;

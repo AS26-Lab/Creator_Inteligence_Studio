@@ -29,3 +29,5 @@ La fase separa siempre recomendacion, decision, ejecucion, resultado, interpreta
 
 La siguiente fase es Creator Memory / Creator Profile Foundation, que reutiliza aprendizajes y evidencia para construir memoria creativa versionada por creador sin convertirla en generacion automatica.
 Creator Language / Narrative Profile se ubica despues como capa local de analisis linguistico y narrativo, y solo propone candidatos revisables hacia Creator Memory.
+
+Thumbnail Lab and Titles Foundation can link packaging versions, decisions, experiments, and outcomes so that later learning can retain what was approved, rejected, or selected.

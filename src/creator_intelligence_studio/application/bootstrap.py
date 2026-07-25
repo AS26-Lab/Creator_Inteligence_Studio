@@ -75,6 +75,10 @@ from creator_intelligence_studio.application.services.creator_language_service i
     CreatorLanguageService,
     build_creator_language_service,
 )
+from creator_intelligence_studio.application.services.creative_packaging_service import (
+    CreativePackagingService,
+    build_creative_packaging_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -140,6 +144,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_memor
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_language_repository import (
     SQLiteCreatorLanguageRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_creative_packaging_repository import (
+    SQLiteCreativePackagingRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -182,6 +189,7 @@ class ServiceContext(BootstrapContext):
     experiment_service: ExperimentService | None = None
     creator_memory_service: CreatorMemoryService | None = None
     creator_language_service: CreatorLanguageService | None = None
+    creative_packaging_service: CreativePackagingService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -340,6 +348,18 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         logger=context.logger,
     )
+    creative_packaging_service = build_creative_packaging_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteCreativePackagingRepository(database),
+        database=database,
+        catalog_service=service,
+        analytics_repository=analytics_repository,
+        creator_memory_service=creator_memory_service,
+        creator_language_service=creator_language_service,
+        experiment_service=experiment_service,
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -393,6 +413,7 @@ def _load_service_context() -> ServiceContext:
         experiment_service=experiment_service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creative_packaging_service=creative_packaging_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -472,6 +493,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             experiment_service=context.experiment_service,
             creator_memory_service=context.creator_memory_service,
             creator_language_service=context.creator_language_service,
+            packaging_service=context.creative_packaging_service,
             render_service=context.render_service,
             subtitle_service=context.subtitle_service,
             personalization_service=context.personalization_service,

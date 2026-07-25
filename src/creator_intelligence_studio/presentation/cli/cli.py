@@ -333,6 +333,9 @@ from creator_intelligence_studio.application.services.creator_memory_service imp
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
 )
+from creator_intelligence_studio.application.services.creative_packaging_service import (
+    CreativePackagingService,
+)
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
 )
@@ -1174,6 +1177,231 @@ def build_parser() -> argparse.ArgumentParser:
     creator_memory_feedback.add_argument("--reason", required=True)
     creator_memory_feedback.add_argument("--corrected-value-json")
     creator_memory_feedback.add_argument("--json", action="store_true")
+
+    packaging_parser = subparsers.add_parser("packaging", help="Thumbnail Lab and Titles Foundation")
+    packaging_sub = packaging_parser.add_subparsers(dest="action", required=True)
+
+    packaging_assets = packaging_sub.add_parser("assets", help="Listar assets de packaging")
+    packaging_assets.add_argument("--creator-id", required=True)
+    packaging_assets.add_argument("--json", action="store_true")
+
+    packaging_asset_show = packaging_sub.add_parser("asset-show", help="Mostrar asset de packaging")
+    packaging_asset_show.add_argument("--asset-id", required=True)
+    packaging_asset_show.add_argument("--json", action="store_true")
+
+    packaging_brand_profile = packaging_sub.add_parser("brand-profile", help="Mostrar perfil de marca")
+    packaging_brand_profile.add_argument("--creator-id", required=True)
+    packaging_brand_profile.add_argument("--json", action="store_true")
+
+    packaging_brand_build = packaging_sub.add_parser("brand-profile-build", help="Construir perfil de marca")
+    packaging_brand_build.add_argument("--creator-id", required=True)
+    packaging_brand_build.add_argument("--json", action="store_true")
+
+    packaging_brand_history = packaging_sub.add_parser("brand-profile-history", help="Historial de perfil de marca")
+    packaging_brand_history.add_argument("--creator-id", required=True)
+    packaging_brand_history.add_argument("--json", action="store_true")
+
+    packaging_references = packaging_sub.add_parser("references", help="Listar referencias")
+    packaging_references.add_argument("--creator-id", required=True)
+    packaging_references.add_argument("--json", action="store_true")
+
+    packaging_reference_add = packaging_sub.add_parser("reference-add", help="Agregar referencia")
+    packaging_reference_add.add_argument("--creator-id", required=True)
+    packaging_reference_add.add_argument("--reference-type", required=True)
+    packaging_reference_add.add_argument("--image-path")
+    packaging_reference_add.add_argument("--text-content")
+    packaging_reference_add.add_argument("--platform")
+    packaging_reference_add.add_argument("--content-type")
+    packaging_reference_add.add_argument("--topic")
+    packaging_reference_add.add_argument("--source-type", required=True)
+    packaging_reference_add.add_argument("--source-creator-name")
+    packaging_reference_add.add_argument("--source-url")
+    packaging_reference_add.add_argument("--usage-permission", required=True)
+    packaging_reference_add.add_argument("--represents-creator", action="store_true")
+    packaging_reference_add.add_argument("--approval-status", default="pending")
+    packaging_reference_add.add_argument("--reference-purpose", required=True)
+    packaging_reference_add.add_argument("--notes")
+    packaging_reference_add.add_argument("--json", action="store_true")
+
+    packaging_reference_show = packaging_sub.add_parser("reference-show", help="Mostrar referencia")
+    packaging_reference_show.add_argument("--reference-id", required=True)
+    packaging_reference_show.add_argument("--json", action="store_true")
+
+    packaging_reference_review = packaging_sub.add_parser("reference-review", help="Revisar referencia")
+    packaging_reference_review.add_argument("--reference-id", required=True)
+    packaging_reference_review.add_argument("--approval-status", required=True)
+    packaging_reference_review.add_argument("--notes")
+    packaging_reference_review.add_argument("--json", action="store_true")
+
+    packaging_titles = packaging_sub.add_parser("titles", help="Listar titulos")
+    packaging_titles.add_argument("--creator-id", required=True)
+    packaging_titles.add_argument("--json", action="store_true")
+
+    packaging_title_create = packaging_sub.add_parser("title-create", help="Crear titulo")
+    packaging_title_create.add_argument("--creator-id", required=True)
+    packaging_title_create.add_argument("--title-text", required=True)
+    packaging_title_create.add_argument("--platform", required=True)
+    packaging_title_create.add_argument("--content-type", required=True)
+    packaging_title_create.add_argument("--source-type", default="manual")
+    packaging_title_create.add_argument("--language", default="es")
+    packaging_title_create.add_argument("--topic")
+    packaging_title_create.add_argument("--publication-id")
+    packaging_title_create.add_argument("--video-asset-id")
+    packaging_title_create.add_argument("--packaging-asset-id")
+    packaging_title_create.add_argument("--is-published", action="store_true")
+    packaging_title_create.add_argument("--is-selected", action="store_true")
+    packaging_title_create.add_argument("--creator-approval-status", default="pending")
+    packaging_title_create.add_argument("--creator-feedback")
+    packaging_title_create.add_argument("--json", action="store_true")
+
+    packaging_title_show = packaging_sub.add_parser("title-show", help="Mostrar titulo")
+    packaging_title_show.add_argument("--title-id", required=True)
+    packaging_title_show.add_argument("--json", action="store_true")
+
+    packaging_title_analyze = packaging_sub.add_parser("title-analyze", help="Analizar titulo")
+    packaging_title_analyze.add_argument("--title-id", required=True)
+    packaging_title_analyze.add_argument("--json", action="store_true")
+
+    packaging_title_compare = packaging_sub.add_parser("title-compare", help="Comparar titulos")
+    packaging_title_compare.add_argument("--base-title-id", required=True)
+    packaging_title_compare.add_argument("--compare-title-id", required=True)
+    packaging_title_compare.add_argument("--json", action="store_true")
+
+    packaging_thumbnails = packaging_sub.add_parser("thumbnails", help="Listar miniaturas")
+    packaging_thumbnails.add_argument("--creator-id", required=True)
+    packaging_thumbnails.add_argument("--json", action="store_true")
+
+    packaging_thumbnail_create = packaging_sub.add_parser("thumbnail-create", help="Crear miniatura")
+    packaging_thumbnail_create.add_argument("--creator-id", required=True)
+    packaging_thumbnail_create.add_argument("--image-path")
+    packaging_thumbnail_create.add_argument("--source-type", default="manual")
+    packaging_thumbnail_create.add_argument("--platform", required=True)
+    packaging_thumbnail_create.add_argument("--content-type", required=True)
+    packaging_thumbnail_create.add_argument("--topic")
+    packaging_thumbnail_create.add_argument("--publication-id")
+    packaging_thumbnail_create.add_argument("--video-asset-id")
+    packaging_thumbnail_create.add_argument("--packaging-asset-id")
+    packaging_thumbnail_create.add_argument("--concept-id")
+    packaging_thumbnail_create.add_argument("--is-published", action="store_true")
+    packaging_thumbnail_create.add_argument("--is-selected", action="store_true")
+    packaging_thumbnail_create.add_argument("--creator-approval-status", default="pending")
+    packaging_thumbnail_create.add_argument("--creator-feedback")
+    packaging_thumbnail_create.add_argument("--json", action="store_true")
+
+    packaging_thumbnail_show = packaging_sub.add_parser("thumbnail-show", help="Mostrar miniatura")
+    packaging_thumbnail_show.add_argument("--thumbnail-id", required=True)
+    packaging_thumbnail_show.add_argument("--json", action="store_true")
+
+    packaging_thumbnail_analyze = packaging_sub.add_parser("thumbnail-analyze", help="Analizar miniatura")
+    packaging_thumbnail_analyze.add_argument("--thumbnail-id", required=True)
+    packaging_thumbnail_analyze.add_argument("--json", action="store_true")
+
+    packaging_pair_evaluate = packaging_sub.add_parser("pair-evaluate", help="Evaluar titulo y miniatura")
+    packaging_pair_evaluate.add_argument("--title-id", required=True)
+    packaging_pair_evaluate.add_argument("--thumbnail-id", required=True)
+    packaging_pair_evaluate.add_argument("--publication-id")
+    packaging_pair_evaluate.add_argument("--json", action="store_true")
+
+    packaging_pair_show = packaging_sub.add_parser("pair-show", help="Mostrar evaluacion de par")
+    packaging_pair_show.add_argument("--evaluation-id", required=True)
+    packaging_pair_show.add_argument("--json", action="store_true")
+
+    packaging_frames = packaging_sub.add_parser("frames", help="Listar frames candidatos")
+    packaging_frames.add_argument("--creator-id", required=True)
+    packaging_frames.add_argument("--video-id")
+    packaging_frames.add_argument("--json", action="store_true")
+
+    packaging_frame_extract = packaging_sub.add_parser("frame-extract", help="Extraer frames candidatos")
+    packaging_frame_extract.add_argument("--creator-id", required=True)
+    packaging_frame_extract.add_argument("--video-id", required=True)
+    packaging_frame_extract.add_argument("--timestamps-json")
+    packaging_frame_extract.add_argument("--json", action="store_true")
+
+    packaging_frame_review = packaging_sub.add_parser("frame-review", help="Revisar frame candidato")
+    packaging_frame_review.add_argument("--creator-id", required=True)
+    packaging_frame_review.add_argument("--frame-id", required=True)
+    packaging_frame_review.add_argument("--decision", required=True)
+    packaging_frame_review.add_argument("--json", action="store_true")
+
+    packaging_concepts = packaging_sub.add_parser("concepts", help="Listar conceptos")
+    packaging_concepts.add_argument("--creator-id", required=True)
+    packaging_concepts.add_argument("--json", action="store_true")
+
+    packaging_concept_create = packaging_sub.add_parser("concept-create", help="Crear concepto")
+    packaging_concept_create.add_argument("--creator-id", required=True)
+    packaging_concept_create.add_argument("--publication-id")
+    packaging_concept_create.add_argument("--video-asset-id")
+    packaging_concept_create.add_argument("--concept-type", default="curiosity_driven")
+    packaging_concept_create.add_argument("--platform", required=True)
+    packaging_concept_create.add_argument("--content-type", required=True)
+    packaging_concept_create.add_argument("--topic")
+    packaging_concept_create.add_argument("--title")
+    packaging_concept_create.add_argument("--objective")
+    packaging_concept_create.add_argument("--audience")
+    packaging_concept_create.add_argument("--json", action="store_true")
+
+    packaging_concept_build = packaging_sub.add_parser("concept-build", help="Construir concepto")
+    packaging_concept_build.add_argument("--creator-id", required=True)
+    packaging_concept_build.add_argument("--platform", required=True)
+    packaging_concept_build.add_argument("--content-type", required=True)
+    packaging_concept_build.add_argument("--topic")
+    packaging_concept_build.add_argument("--title")
+    packaging_concept_build.add_argument("--objective")
+    packaging_concept_build.add_argument("--audience")
+    packaging_concept_build.add_argument("--concept-type", default="curiosity_driven")
+    packaging_concept_build.add_argument("--publication-id")
+    packaging_concept_build.add_argument("--video-asset-id")
+    packaging_concept_build.add_argument("--references-json")
+    packaging_concept_build.add_argument("--constraints-json")
+    packaging_concept_build.add_argument("--json", action="store_true")
+
+    packaging_concept_show = packaging_sub.add_parser("concept-show", help="Mostrar concepto")
+    packaging_concept_show.add_argument("--concept-id", required=True)
+    packaging_concept_show.add_argument("--json", action="store_true")
+
+    packaging_prompt_build = packaging_sub.add_parser("prompt-build", help="Construir prompt")
+    packaging_prompt_build.add_argument("--concept-id", required=True)
+    packaging_prompt_build.add_argument("--target-tool", required=True)
+    packaging_prompt_build.add_argument("--title")
+    packaging_prompt_build.add_argument("--json", action="store_true")
+
+    packaging_prompt_show = packaging_sub.add_parser("prompt-show", help="Mostrar prompt")
+    packaging_prompt_show.add_argument("--prompt-id", required=True)
+    packaging_prompt_show.add_argument("--json", action="store_true")
+
+    packaging_prompt_refs = packaging_sub.add_parser("prompt-references", help="Listar referencias del prompt")
+    packaging_prompt_refs.add_argument("--prompt-id", required=True)
+    packaging_prompt_refs.add_argument("--json", action="store_true")
+
+    packaging_prompt_export = packaging_sub.add_parser("prompt-export", help="Exportar prompt")
+    packaging_prompt_export.add_argument("--prompt-id", required=True)
+    packaging_prompt_export.add_argument("--json", action="store_true")
+
+    packaging_review = packaging_sub.add_parser("review-thumbnail", help="Revisar miniatura")
+    packaging_review.add_argument("--thumbnail-id", required=True)
+    packaging_review.add_argument("--title-id")
+    packaging_review.add_argument("--publication-id")
+    packaging_review.add_argument("--concept-id")
+    packaging_review.add_argument("--prompt-id")
+    packaging_review.add_argument("--json", action="store_true")
+
+    packaging_review_show = packaging_sub.add_parser("review-show", help="Mostrar revision")
+    packaging_review_show.add_argument("--review-id", required=True)
+    packaging_review_show.add_argument("--json", action="store_true")
+
+    packaging_revision = packaging_sub.add_parser("review-revision-instructions", help="Mostrar instrucciones de revision")
+    packaging_revision.add_argument("--review-id", required=True)
+    packaging_revision.add_argument("--json", action="store_true")
+
+    packaging_decisions = packaging_sub.add_parser("decisions", help="Listar decisiones")
+    packaging_decisions.add_argument("--creator-id", required=True)
+    packaging_decisions.add_argument("--json", action="store_true")
+
+    packaging_export = packaging_sub.add_parser("export", help="Exportar packaging")
+    packaging_export.add_argument("--creator-id", required=True)
+    packaging_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
+    packaging_export.add_argument("--summary", action="store_true")
+    packaging_export.add_argument("--json", action="store_true")
 
     creator_language_parser = subparsers.add_parser("creator-language", help="Creator Language Analysis")
     creator_language_sub = creator_language_parser.add_subparsers(dest="action", required=True)
@@ -4121,6 +4349,305 @@ def _handle_creator_language(args, service: CreatorLanguageService, stdout, stde
     raise ValueError("Accion de creator-language no reconocida.")
 
 
+def _handle_packaging(args, service: CreativePackagingService, stdout, stderr) -> int:
+    if args.action == "assets":
+        payload = [item.to_dict() for item in service.list_assets(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "asset-show":
+        asset = service.get_asset(args.asset_id)
+        if asset is None:
+            print("Asset no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(asset.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "brand-profile":
+        detail = service.get_brand_profile_detail(args.creator_id)
+        print(json.dumps(detail.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "brand-profile-build":
+        payload = service.build_brand_profile(args.creator_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "brand-profile-history":
+        payload = [item.to_dict() for item in service.list_brand_profiles(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "references":
+        payload = [item.to_dict() for item in service.list_reference_assets(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "reference-add":
+        payload = service.add_reference_asset(
+            creator_id=args.creator_id,
+            reference_type=args.reference_type,
+            image_path=args.image_path,
+            text_content=args.text_content,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            source_type=args.source_type,
+            source_creator_name=args.source_creator_name,
+            source_url=args.source_url,
+            usage_permission=args.usage_permission,
+            represents_creator=args.represents_creator,
+            approval_status=args.approval_status,
+            reference_purpose=args.reference_purpose,
+            notes=args.notes,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "reference-show":
+        payload = service.get_reference_asset(args.reference_id)
+        if payload is None:
+            print("Referencia no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "reference-review":
+        payload = service.review_reference_asset(args.reference_id, approval_status=args.approval_status, notes=args.notes)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "titles":
+        payload = [title.to_dict() for asset in service.list_assets(args.creator_id) for title in service.list_title_versions(asset.id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "title-create":
+        payload = service.create_title_version(
+            creator_id=args.creator_id,
+            title_text=args.title_text,
+            platform=args.platform,
+            content_type=args.content_type,
+            source_type=args.source_type,
+            language=args.language,
+            topic=args.topic,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            packaging_asset_id=args.packaging_asset_id,
+            is_published=args.is_published,
+            is_selected=args.is_selected,
+            creator_approval_status=args.creator_approval_status,
+            creator_feedback=args.creator_feedback,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "title-show":
+        payload = service.get_title_version(args.title_id)
+        if payload is None:
+            print("Titulo no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "title-analyze":
+        payload = service.analyze_title(args.title_id, force_recompute=True)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "title-compare":
+        base = service.get_title_version(args.base_title_id)
+        compare = service.get_title_version(args.compare_title_id)
+        if base is None or compare is None:
+            print("Titulo no encontrado.", file=stderr)
+            return 1
+        base_detail = service.analyze_title(base.id, force_recompute=False)
+        compare_detail = service.analyze_title(compare.id, force_recompute=False)
+        base_metrics = {item.metric_key: item.numeric_value for item in base_detail.metrics}
+        compare_metrics = {item.metric_key: item.numeric_value for item in compare_detail.metrics}
+        comparison = {
+            metric_key: {
+                "base": base_metrics.get(metric_key),
+                "compare": compare_metrics.get(metric_key),
+                "delta": (
+                    compare_metrics.get(metric_key) - base_metrics.get(metric_key)
+                    if isinstance(base_metrics.get(metric_key), (int, float)) and isinstance(compare_metrics.get(metric_key), (int, float))
+                    else None
+                ),
+            }
+            for metric_key in sorted(set(base_metrics) | set(compare_metrics))
+        }
+        print(
+            json.dumps(
+                {"base": base_detail.to_dict(), "compare": compare_detail.to_dict(), "comparison": comparison},
+                ensure_ascii=False,
+                indent=2,
+                default=_json_default,
+            ),
+            file=stdout,
+        )
+        return 0
+    if args.action == "thumbnails":
+        payload = [thumbnail.to_dict() for asset in service.list_assets(args.creator_id) for thumbnail in service.list_thumbnail_versions(asset.id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "thumbnail-create":
+        payload = service.create_thumbnail_version(
+            creator_id=args.creator_id,
+            image_path=args.image_path,
+            source_type=args.source_type,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            packaging_asset_id=args.packaging_asset_id,
+            concept_id=args.concept_id,
+            is_published=args.is_published,
+            is_selected=args.is_selected,
+            creator_approval_status=args.creator_approval_status,
+            creator_feedback=args.creator_feedback,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "thumbnail-show":
+        payload = service.get_thumbnail_version(args.thumbnail_id)
+        if payload is None:
+            print("Miniatura no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "thumbnail-analyze":
+        payload = service.analyze_thumbnail(args.thumbnail_id, force_recompute=True)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "pair-evaluate":
+        payload = service.evaluate_pair(
+            title_version_id=args.title_id,
+            thumbnail_version_id=args.thumbnail_id,
+            publication_id=args.publication_id,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "pair-show":
+        payload = service.get_pair_evaluation(args.evaluation_id)
+        if payload is None:
+            print("Evaluacion no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "frames":
+        payload = [item.to_dict() for item in service.list_frame_candidates(args.creator_id, video_asset_id=args.video_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "frame-extract":
+        timestamps = json.loads(args.timestamps_json) if args.timestamps_json else None
+        payload = [item.to_dict() for item in service.extract_frame_candidates(creator_id=args.creator_id, video_asset_id=args.video_id, timestamps=timestamps)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "frame-review":
+        service.record_decision(
+            creator_id=args.creator_id,
+            target_type="thumbnail_frame_candidate",
+            target_id=args.frame_id,
+            decision=args.decision,
+            reason="CLI review",
+        )
+        print(json.dumps({"frame_id": args.frame_id, "decision": args.decision}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "concepts":
+        payload = [item.to_dict() for item in service.list_concepts(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "concept-create":
+        payload = service.build_concepts(
+            creator_id=args.creator_id,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            title=args.title,
+            objective=args.objective,
+            audience=args.audience,
+            concept_type=args.concept_type,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "concept-build":
+        references = json.loads(args.references_json) if args.references_json else None
+        constraints = json.loads(args.constraints_json) if args.constraints_json else None
+        payload = service.build_concepts(
+            creator_id=args.creator_id,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            title=args.title,
+            objective=args.objective,
+            audience=args.audience,
+            concept_type=args.concept_type,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            references=references,
+            constraints=constraints,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "concept-show":
+        payload = service.get_concept(args.concept_id)
+        if payload is None:
+            print("Concepto no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "prompt-build":
+        payload = service.build_prompt(concept_id=args.concept_id, target_tool=args.target_tool, title=args.title)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "prompt-show":
+        payload = service.get_prompt(args.prompt_id)
+        if payload is None:
+            print("Prompt no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "prompt-references":
+        payload = [item.to_dict() for item in service.list_prompt_references(args.prompt_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "prompt-export":
+        prompt = service.get_prompt(args.prompt_id)
+        if prompt is None:
+            print("Prompt no encontrado.", file=stderr)
+            return 1
+        payload = {
+            "prompt": prompt.to_dict(),
+            "references": [item.to_dict() for item in service.list_prompt_references(args.prompt_id)],
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "review-thumbnail":
+        payload = service.review_thumbnail(
+            thumbnail_version_id=args.thumbnail_id,
+            title_version_id=args.title_id,
+            publication_id=args.publication_id,
+            concept_id=args.concept_id,
+            prompt_id=args.prompt_id,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "review-show":
+        payload = service.get_thumbnail_review(args.review_id)
+        if payload is None:
+            print("Revision no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "review-revision-instructions":
+        payload = service.get_thumbnail_review(args.review_id)
+        if payload is None:
+            print("Revision no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "decisions":
+        payload = [item.to_dict() for item in service.list_decisions(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export":
+        payload = service.export(creator_id=args.creator_id, format_name=args.format, summary=args.summary)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de packaging no reconocida.")
+
+
 def _handle_analytics(args, service: AnalyticsImportService, lab_service: AnalyticsLabService | None, stdout, stderr) -> int:
     if args.action == "platforms":
         command = ListAnalyticsPlatformsCommand()
@@ -4444,6 +4971,7 @@ def dispatch(
     experiment_service: ExperimentService | None = None,
     creator_memory_service: CreatorMemoryService | None = None,
     creator_language_service: CreatorLanguageService | None = None,
+    packaging_service: CreativePackagingService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -4509,6 +5037,10 @@ def dispatch(
             if creator_language_service is None:
                 raise DomainError("El servicio de creator language no esta disponible.")
             return _handle_creator_language(args, creator_language_service, stdout, stderr)
+        if args.entity == "packaging":
+            if packaging_service is None:
+                raise DomainError("El servicio de packaging no esta disponible.")
+            return _handle_packaging(args, packaging_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")
