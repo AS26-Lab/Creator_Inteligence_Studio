@@ -107,6 +107,17 @@ The initial UX preferences are local and reversible:
 This flow records observed facts. It does not infer causality, predictions, or recommendations.
 Experiments and Learning adds the next operational loop: recommendation, human decision, real execution, evaluation and structured learning, still without automatic rule promotion or causal claims.
 
+## Creator language workflow
+
+- seleccionar creador;
+- crear corpus a partir de transcripciones, subtitulos, publicaciones o texto manual local;
+- revisar metricas de lenguaje, vocabulario, frases, narrativa, ritmo y pausas;
+- comparar diferencias por plataforma y tipo de contenido cuando la muestra es comparable;
+- revisar candidates propuestos para Creator Memory;
+- revisar snapshots y versionado del perfil narrativo.
+
+This workflow stays local, deterministic, and human-reviewed. It does not generate text or mutate Creator Memory automatically.
+
 ## Creator memory workflow
 
 - abrir perfil del creador;

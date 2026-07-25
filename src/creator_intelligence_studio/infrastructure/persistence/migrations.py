@@ -2742,6 +2742,290 @@ def migration_18(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_memory_feedback_creator_id ON creator_memory_feedback(creator_id)")
 
 
+def migration_19(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_corpora (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            language TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'draft')),
+            source_count INTEGER NOT NULL,
+            token_count INTEGER NOT NULL,
+            duration_seconds REAL,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_corpus_sources (
+            id TEXT PRIMARY KEY,
+            corpus_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            video_asset_id TEXT,
+            publication_id TEXT,
+            transcription_id TEXT,
+            segment_id TEXT,
+            start_seconds REAL,
+            end_seconds REAL,
+            text_snapshot TEXT NOT NULL,
+            language TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            include_status TEXT NOT NULL CHECK (include_status IN ('included', 'excluded', 'pending')),
+            exclusion_reason TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (corpus_id) REFERENCES creator_language_corpora(id) ON DELETE CASCADE,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE SET NULL,
+            FOREIGN KEY (segment_id) REFERENCES transcription_segments(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_corpora_creator_id ON creator_language_corpora(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_corpora_fingerprint ON creator_language_corpora(source_fingerprint)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_corpus_sources_corpus_id ON creator_language_corpus_sources(corpus_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_corpus_sources_source_id ON creator_language_corpus_sources(source_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_corpus_sources_include_status ON creator_language_corpus_sources(include_status)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_analysis_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            corpus_id TEXT NOT NULL,
+            analysis_version TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN ('queued', 'running', 'analyzing', 'building_profile', 'completed', 'completed_with_warnings', 'interrupted', 'failed', 'cancelled')
+            ),
+            configuration_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            source_count INTEGER NOT NULL,
+            token_count INTEGER NOT NULL,
+            sentence_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (corpus_id) REFERENCES creator_language_corpora(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, source_fingerprint, analysis_version)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_analysis_runs_creator_id ON creator_language_analysis_runs(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_analysis_runs_corpus_id ON creator_language_analysis_runs(corpus_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_analysis_runs_fingerprint ON creator_language_analysis_runs(source_fingerprint)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_metrics (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            metric_group TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            sample_size INTEGER NOT NULL,
+            confidence_level TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES creator_language_analysis_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_metrics_run_id ON creator_language_metrics(analysis_run_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_metrics_metric_key ON creator_language_metrics(metric_key)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_patterns (
+            id TEXT PRIMARY KEY,
+            analysis_run_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            pattern_type TEXT NOT NULL,
+            pattern_key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            frequency_count INTEGER NOT NULL,
+            supporting_example_count INTEGER NOT NULL,
+            contradicting_example_count INTEGER NOT NULL,
+            confidence_level TEXT NOT NULL,
+            confidence_score REAL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (analysis_run_id) REFERENCES creator_language_analysis_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (analysis_run_id, pattern_key)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_patterns_creator_id ON creator_language_patterns(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_patterns_run_id ON creator_language_patterns(analysis_run_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_patterns_type ON creator_language_patterns(pattern_type)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_pattern_evidence (
+            id TEXT PRIMARY KEY,
+            pattern_id TEXT NOT NULL,
+            corpus_source_id TEXT NOT NULL,
+            start_seconds REAL,
+            end_seconds REAL,
+            quoted_text TEXT NOT NULL,
+            normalized_text TEXT NOT NULL,
+            supports_pattern INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (pattern_id) REFERENCES creator_language_patterns(id) ON DELETE CASCADE,
+            FOREIGN KEY (corpus_source_id) REFERENCES creator_language_corpus_sources(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_pattern_evidence_pattern_id ON creator_language_pattern_evidence(pattern_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_pattern_evidence_source_id ON creator_language_pattern_evidence(corpus_source_id)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_narrative_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            analysis_run_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            opening_profile_json TEXT NOT NULL,
+            development_profile_json TEXT NOT NULL,
+            explanation_profile_json TEXT NOT NULL,
+            humor_profile_json TEXT NOT NULL,
+            pacing_profile_json TEXT NOT NULL,
+            closing_profile_json TEXT NOT NULL,
+            platform_differences_json TEXT NOT NULL,
+            content_type_differences_json TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (analysis_run_id) REFERENCES creator_language_analysis_runs(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, profile_version)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_narrative_profiles_creator_id ON creator_narrative_profiles(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_narrative_profiles_run_id ON creator_narrative_profiles(analysis_run_id)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_candidates (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            analysis_run_id TEXT NOT NULL,
+            candidate_type TEXT NOT NULL,
+            target_memory_type TEXT NOT NULL,
+            proposed_key TEXT NOT NULL,
+            proposed_value_json TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            evidence_json TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            review_reason TEXT,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (analysis_run_id) REFERENCES creator_language_analysis_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_candidates_creator_id ON creator_language_candidates(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_candidates_run_id ON creator_language_candidates(analysis_run_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_candidates_status ON creator_language_candidates(status)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_language_profile_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, profile_version),
+            UNIQUE (creator_id, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_profile_snapshots_creator_id ON creator_language_profile_snapshots(creator_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_language_profile_snapshots_fingerprint ON creator_language_profile_snapshots(source_fingerprint)"
+    )
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -2780,6 +3064,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=16, name="analytics_lab"),
     Migration(version=17, name="experiments_learning"),
     Migration(version=18, name="creator_memory"),
+    Migration(version=19, name="creator_language"),
 )
 
 
@@ -2853,6 +3138,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_17(connection)
                 elif migration.version == 18:
                     migration_18(connection)
+                elif migration.version == 19:
+                    migration_19(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

@@ -28,3 +28,4 @@ Registro controlado de recomendacion, decision humana, ejecucion real, evaluacio
 La fase separa siempre recomendacion, decision, ejecucion, resultado, interpretacion, aprendizaje provisional y regla confirmada.
 
 La siguiente fase es Creator Memory / Creator Profile Foundation, que reutiliza aprendizajes y evidencia para construir memoria creativa versionada por creador sin convertirla en generacion automatica.
+Creator Language / Narrative Profile se ubica despues como capa local de analisis linguistico y narrativo, y solo propone candidatos revisables hacia Creator Memory.

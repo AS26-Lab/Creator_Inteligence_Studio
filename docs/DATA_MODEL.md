@@ -622,3 +622,19 @@ La migracion v18 agrega:
 - `creator_memory_feedback`
 
 Estas tablas construyen la memoria estructurada del creador con evidencia, contradicciones, revisiones humanas y snapshots versionados sin alterar analytics, experiments ni learning records.
+
+## Migration v19
+
+La migracion v19 agrega:
+
+- `creator_language_corpora`
+- `creator_language_corpus_sources`
+- `creator_language_analysis_runs`
+- `creator_language_metrics`
+- `creator_language_patterns`
+- `creator_language_pattern_evidence`
+- `creator_narrative_profiles`
+- `creator_language_candidates`
+- `creator_language_profile_snapshots`
+
+Estas tablas conservan corpus seleccionados, fuentes con `text_snapshot`, corridas deterministas, metricas heuristicas, patrones narrativos, evidencia, candidatos revisables y snapshots versionados sin alterar transcripciones, creator memory ni analytics previos.

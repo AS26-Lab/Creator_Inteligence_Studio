@@ -11,6 +11,8 @@ from .analytics_lab_view import AnalyticsLabView
 from .experiments_view import ExperimentsView
 from .creator_memory_view import CreatorMemoryView
 from .creator_profile_view import CreatorProfileView
+from .creator_language_view import CreatorLanguageView
+from .narrative_profile_view import NarrativeProfileView
 from .multimodal_analysis_view import MultimodalAnalysisView
 from .operational_evaluation_view import OperationalEvaluationView
 from .personalization_data_view import PersonalizationDataView
@@ -42,6 +44,8 @@ __all__ = [
     "ProjectsView",
     "CreatorMemoryView",
     "CreatorProfileView",
+    "CreatorLanguageView",
+    "NarrativeProfileView",
     "TaskCenterView",
     "WorkflowView",
     "OnboardingView",

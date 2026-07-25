@@ -62,6 +62,12 @@ from creator_intelligence_studio.application.services.experiment_service import 
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
+from creator_intelligence_studio.application.services.creator_language_service import (
+    CreatorLanguageAnalysisDetail,
+    CreatorLanguageExportResult,
+    CreatorLanguageProfileDetail,
+    CreatorLanguageService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -291,6 +297,7 @@ class WorkspaceViewModel:
         analytics_lab_service: AnalyticsLabService | None = None,
         experiment_service: ExperimentService | None = None,
         creator_memory_service: CreatorMemoryService | None = None,
+        creator_language_service: CreatorLanguageService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -417,6 +424,7 @@ class WorkspaceViewModel:
         self.analytics_lab_service = analytics_lab_service
         self.experiment_service = experiment_service
         self.creator_memory_service = creator_memory_service
+        self.creator_language_service = creator_language_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -2635,6 +2643,172 @@ class WorkspaceViewModel:
         if self.creator_memory_service is None:
             return []
         return self.creator_memory_service.list_feedback(creator_id)
+
+    def list_creator_language_corpora(self, creator_id: str):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_corpora(creator_id)
+
+    def list_creator_language_corpus_sources(self, corpus_id: str):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_corpus_sources(corpus_id)
+
+    def create_creator_language_corpus(self, **kwargs):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.create_corpus(**kwargs)
+
+    def update_creator_language_corpus(self, corpus_id: str, **changes):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.update_corpus(corpus_id, **changes)
+
+    def archive_creator_language_corpus(self, corpus_id: str):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.archive_corpus(corpus_id)
+
+    def add_creator_language_corpus_source(self, **kwargs):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.add_corpus_source(**kwargs)
+
+    def remove_creator_language_corpus_source(self, source_id: str, *, reason: str | None = None):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.remove_corpus_source(source_id, reason=reason)
+
+    def analyze_creator_language_corpus(self, corpus_id: str, *, force_recompute: bool = False, configuration: dict[str, object] | None = None) -> CreatorLanguageAnalysisDetail:
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        task = self.register_background_task(
+            title="Analisis de Creator Language",
+            status="running",
+            stage_name="analyzing",
+            video_title=corpus_id,
+            action_id=corpus_id,
+            progress_percent=5.0,
+            message="Analizando corpus narrativo",
+            cancellable=True,
+            payload={"kind": "creator_language_analysis", "corpus_id": corpus_id},
+        )
+        try:
+            detail = self.creator_language_service.analyze_corpus(corpus_id, force_recompute=force_recompute, configuration=configuration)
+        except Exception:
+            self.fail_background_task(task.task_id, "Analisis de creator language fallido")
+            raise
+        self.complete_background_task(task.task_id, "Analisis de creator language completado")
+        return detail
+
+    def interrupt_creator_language_analysis(self, run_id: str):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.record_corpus_analysis_interrupt(run_id)
+
+    def retry_creator_language_analysis(self, run_id: str):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.retry_corpus_analysis(run_id)
+
+    def get_creator_language_analysis(self, run_id: str):
+        if self.creator_language_service is None:
+            return None
+        return self.creator_language_service.get_analysis_detail(run_id)
+
+    def list_creator_language_metrics(self, run_id: str):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_metrics(run_id)
+
+    def list_creator_language_patterns(self, creator_id: str, run_id: str | None = None):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_patterns(creator_id, run_id)
+
+    def get_creator_language_profile(self, creator_id: str):
+        if self.creator_language_service is None:
+            return None
+        return self.creator_language_service.get_profile(creator_id)
+
+    def get_creator_language_profile_detail(self, creator_id: str):
+        if self.creator_language_service is None:
+            return None
+        return self.creator_language_service.get_profile_detail(creator_id)
+
+    def list_creator_language_profile_history(self, creator_id: str):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_profile_history(creator_id)
+
+    def compare_creator_language_profiles(self, creator_id: str, base_profile_version: int, compare_profile_version: int):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.compare_profile_versions(creator_id, base_profile_version, compare_profile_version)
+
+    def list_creator_language_candidates(self, creator_id: str):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_candidates(creator_id)
+
+    def review_creator_language_candidate(self, candidate_id: str, *, decision: str, reason: str | None = None, modified_value_json: str | None = None):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        return self.creator_language_service.review_candidate(candidate_id, decision=decision, reason=reason, modified_value_json=modified_value_json)
+
+    def retrieve_creator_language_context(self, creator_id: str, query_filters):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.retrieve_creator_context(creator_id, query_filters)
+
+    def create_creator_language_profile_snapshot(self, creator_id: str):
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        task = self.register_background_task(
+            title="Snapshot de Creator Language",
+            status="running",
+            stage_name="snapshot",
+            video_title=creator_id,
+            action_id=creator_id,
+            progress_percent=5.0,
+            message="Creando snapshot del perfil narrativo",
+            cancellable=True,
+            payload={"kind": "creator_language_profile_snapshot", "creator_id": creator_id},
+        )
+        try:
+            snapshot = self.creator_language_service.create_profile_snapshot(creator_id)
+        except Exception:
+            self.fail_background_task(task.task_id, "Snapshot de creator language fallido")
+            raise
+        self.complete_background_task(task.task_id, "Snapshot de creator language completado")
+        return snapshot
+
+    def export_creator_language(self, *, creator_id: str, format_name: str, summary: bool = False, destination: Path | None = None) -> CreatorLanguageExportResult:
+        if self.creator_language_service is None:
+            raise RuntimeError("El servicio de creator language no esta disponible.")
+        task = self.register_background_task(
+            title="Export de Creator Language",
+            status="running",
+            stage_name="export",
+            video_title=creator_id,
+            action_id=format_name,
+            progress_percent=10.0,
+            message="Exportando memoria de lenguaje",
+            cancellable=True,
+            payload={"kind": "creator_language_export", "creator_id": creator_id, "format": format_name},
+        )
+        try:
+            result = self.creator_language_service.export(creator_id=creator_id, format_name=format_name, summary=summary, destination=destination)
+        except Exception:
+            self.fail_background_task(task.task_id, "Export de creator language fallido")
+            raise
+        self.complete_background_task(task.task_id, "Export de creator language completado")
+        return result
+
+    def list_creator_language_analysis_runs(self, creator_id: str, corpus_id: str | None = None):
+        if self.creator_language_service is None:
+            return []
+        return self.creator_language_service.list_analysis_runs(creator_id, corpus_id)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

@@ -82,6 +82,7 @@ La aplicacion ya permite:
 - preparar datasets de personalizacion por creador a partir del feedback humano;
 - registrar experimentos, decisiones humanas y aprendizajes verificables sin promover reglas automaticamente;
 - construir memoria creativa por creador con perfil, traits, vocabulario, ejemplos, reglas y limites versionados;
+- analizar lenguaje, narrativa y ritmo por creador con profile snapshots y candidatos revisables;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 

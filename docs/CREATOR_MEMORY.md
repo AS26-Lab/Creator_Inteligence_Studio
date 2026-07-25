@@ -66,3 +66,5 @@ Retrieval is local and deterministic. Ranking prefers:
 ## Next phase
 
 Creator Language Analysis / Narrative Profile.
+
+See [`docs/CREATOR_LANGUAGE_ANALYSIS.md`](CREATOR_LANGUAGE_ANALYSIS.md) for the local language analysis layer that consumes structured sources and can propose reviewable candidates without mutating Creator Memory automatically.

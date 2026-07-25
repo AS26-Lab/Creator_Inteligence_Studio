@@ -35,6 +35,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     AnalyticsLabView,
     ExperimentsView,
     CreatorMemoryView,
+    CreatorLanguageView,
     OnboardingView,
     MultimodalAnalysisView,
     OperationalEvaluationView,
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
             "analytics_lab",
             "experiments",
             "creator_memory",
+            "creator_language",
             "workflow",
             "tasks",
             "onboarding",
@@ -161,6 +163,7 @@ class MainWindow(QMainWindow):
         self.analytics_lab_view = AnalyticsLabView(workspace)
         self.experiments_view = ExperimentsView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
+        self.creator_language_view = CreatorLanguageView(workspace)
         self.workflow_view = WorkflowView(workspace)
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
@@ -182,6 +185,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.analytics_lab_view)
         self.stack.addWidget(self.experiments_view)
         self.stack.addWidget(self.creator_memory_view)
+        self.stack.addWidget(self.creator_language_view)
         self.stack.addWidget(self.workflow_view)
         self.stack.addWidget(self.task_center_view)
         self.stack.addWidget(self.onboarding_view)
@@ -254,6 +258,7 @@ class MainWindow(QMainWindow):
         self.analytics_lab_view.refresh()
         self.experiments_view.refresh()
         self.creator_memory_view.refresh()
+        self.creator_language_view.refresh()
         self.workflow_view.refresh()
         self.task_center_view.refresh()
         self.onboarding_view.refresh()
@@ -375,6 +380,8 @@ class MainWindow(QMainWindow):
             self.experiments_view.refresh()
         elif current_key == "creator_memory":
             self.creator_memory_view.refresh()
+        elif current_key == "creator_language":
+            self.creator_language_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "subtitles":

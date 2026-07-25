@@ -271,6 +271,15 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - La capa conserva observaciones, evidencia positiva y contradictoria, y no convierte una muestra aislada en regla definitiva.
 - La memoria del creador se mantiene separada de analytics, experiments y learning records.
 
+## Creator language layer
+
+- `domain/creator_language`: entidades, errores, repositorios, value objects y tipos de analisis linguisticos y narrativos sin dependencia de GUI, SQLite, APIs, LLMs, ML ni embeddings externos.
+- `application/services/creator_language_service.py`: corpus, analisis, perfil narrativo, candidatos para Creator Memory, retrieval local y exportaciones.
+- `infrastructure/creator_language`: tokenizacion determinista, segmentacion de frases, analisis de vocabulario, muletillas, estructura narrativa y pausas.
+- `infrastructure/persistence/sqlite_creator_language_repository.py`: persistencia local de corpora, fuentes, corridas, metricas, patrones, evidencia, candidatos y snapshots.
+- La capa trabaja solo con fuentes locales seleccionadas y no escribe de forma silenciosa en Creator Memory.
+- La salida de la capa sirve como base candidata para revision humana y versionado posterior.
+
 ## Transcription Layer
 
 La transcripcion local se divide en:
@@ -344,6 +353,16 @@ Reglas:
 - `application/services/analytics_query_service.py`: consultas y exportacion normalizada.
 - `infrastructure/analytics`: CSV, XLSX, deteccion de schema, field mapping, validacion, normalizacion y reportes.
 - `infrastructure/persistence/sqlite_analytics_repository.py`: persistencia SQLite de plataformas, canales, publicaciones, metricas, snapshots, imports y mappings.
+
+### Creator language
+
+- corpus por creador con fuentes locales seleccionadas;
+- metricas de lenguaje, vocabulario, frases, narrativa, ritmo y pausas;
+- comparacion por plataforma y tipo de contenido cuando la muestra lo permite;
+- candidates revisables para Creator Memory;
+- profile history y snapshots versionados;
+- Task Center para analisis, snapshot y exportacion.
+
 ## Experiments and Verifiable Learning
 
 - `domain/experiments`: entidades, errores, repositorios, value objects y tipos de decision/aprendizaje sin dependencia de GUI, SQLite, CSV, Excel, APIs o LLM.

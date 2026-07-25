@@ -194,6 +194,15 @@ flowchart LR
 - retrieval determinista local;
 - exportacion local JSON, TXT y CSV.
 
+### Creator Language
+
+- selector de corpus por creador;
+- metricas de lenguaje y narrativa;
+- vocabulary, phrase patterns y rhythm & pauses;
+- diferencias por plataforma y tipo de contenido;
+- candidates revisables hacia Creator Memory;
+- history de perfiles narrativos y snapshots.
+
 ### Sistema
 
 - diagnostico del entorno;
@@ -214,6 +223,7 @@ flowchart LR
 - Script & Voice Studio;
 - Modelos.
 - Creator Memory;
+- Creator Language;
 
 ## Estados vacios
 
@@ -294,6 +304,15 @@ flowchart LR
 - publicaciones normalizadas;
 - metrics visibles sin asumir equivalencia entre plataformas;
 - Task Center para imports persistidos.
+
+### Creator Language
+
+- Corpus con fuentes locales seleccionadas y warnings de comparabilidad;
+- Language Metrics con longitud de frases, diversidad, fillers, repeticiones, speaking rate y pausas;
+- Narrative Structure con apertura, desarrollo, explicacion, humor y cierre;
+- Candidates con aprobacion, modificacion, rechazo o falta de datos;
+- Profile History con comparacion de versiones y snapshots.
+
 ### Experiments and Learning
 
 - Overview con experimentos activos, recomendaciones pendientes, evaluaciones recientes y aprendizajes provisionales;

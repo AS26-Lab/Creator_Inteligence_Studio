@@ -86,6 +86,15 @@ class TaskCenterView(QWidget):
     def _is_experiment_report_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "experiment_report")
 
+    def _is_creator_language_analysis_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "creator_language_analysis")
+
+    def _is_creator_language_snapshot_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "creator_language_profile_snapshot")
+
+    def _is_creator_language_export_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "creator_language_export")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -163,6 +172,18 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte de experimento disponible en: {report}")
             return
+        if self._is_creator_language_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Analisis de lenguaje: {payload.get('corpus_id', task.task_id)} / {task.status}")
+            return
+        if self._is_creator_language_snapshot_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Snapshot de lenguaje: {payload.get('creator_id', task.task_id)} / {task.status}")
+            return
+        if self._is_creator_language_export_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Export de lenguaje: {payload.get('format', task.task_id)} / {task.status}")
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -186,6 +207,8 @@ class TaskCenterView(QWidget):
         elif self._is_analytics_import_task(task):
             self.workspace.cancel_analytics_import(task.task_id)
         elif self._is_analytics_lab_analysis_task(task) or self._is_analytics_lab_report_task(task) or self._is_experiment_evaluation_task(task) or self._is_experiment_report_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_creator_language_analysis_task(task) or self._is_creator_language_snapshot_task(task) or self._is_creator_language_export_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
@@ -242,6 +265,28 @@ class TaskCenterView(QWidget):
             evaluation_id = payload.get("evaluation_id")
             if experiment_id:
                 self.workspace.generate_experiment_report(str(experiment_id), str(evaluation_id) if evaluation_id else None)
+            self.refresh()
+            return
+        if self._is_creator_language_analysis_task(task):
+            payload = getattr(task, "payload", {})
+            corpus_id = payload.get("corpus_id")
+            if corpus_id:
+                self.workspace.analyze_creator_language_corpus(str(corpus_id), force_recompute=True)
+            self.refresh()
+            return
+        if self._is_creator_language_snapshot_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            if creator_id:
+                self.workspace.create_creator_language_profile_snapshot(str(creator_id))
+            self.refresh()
+            return
+        if self._is_creator_language_export_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            format_name = payload.get("format") or "json"
+            if creator_id:
+                self.workspace.export_creator_language(creator_id=str(creator_id), format_name=str(format_name))
             self.refresh()
             return
         if task.title == "Render de clip":

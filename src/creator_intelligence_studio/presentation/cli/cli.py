@@ -330,6 +330,9 @@ from creator_intelligence_studio.application.services.experiment_service import 
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
+from creator_intelligence_studio.application.services.creator_language_service import (
+    CreatorLanguageService,
+)
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
 )
@@ -1171,6 +1174,110 @@ def build_parser() -> argparse.ArgumentParser:
     creator_memory_feedback.add_argument("--reason", required=True)
     creator_memory_feedback.add_argument("--corrected-value-json")
     creator_memory_feedback.add_argument("--json", action="store_true")
+
+    creator_language_parser = subparsers.add_parser("creator-language", help="Creator Language Analysis")
+    creator_language_sub = creator_language_parser.add_subparsers(dest="action", required=True)
+
+    creator_language_corpora = creator_language_sub.add_parser("corpora", help="Listar corpus")
+    creator_language_corpora.add_argument("--creator-id", required=True)
+    creator_language_corpora.add_argument("--json", action="store_true")
+
+    creator_language_corpus_create = creator_language_sub.add_parser("corpus-create", help="Crear corpus")
+    creator_language_corpus_create.add_argument("--creator-id", required=True)
+    creator_language_corpus_create.add_argument("--name", required=True)
+    creator_language_corpus_create.add_argument("--description")
+    creator_language_corpus_create.add_argument("--language", default="es")
+    creator_language_corpus_create.add_argument("--platform")
+    creator_language_corpus_create.add_argument("--content-type")
+    creator_language_corpus_create.add_argument("--topic")
+    creator_language_corpus_create.add_argument("--json", action="store_true")
+
+    creator_language_corpus_show = creator_language_sub.add_parser("corpus-show", help="Mostrar corpus")
+    creator_language_corpus_show.add_argument("--corpus-id", required=True)
+    creator_language_corpus_show.add_argument("--json", action="store_true")
+
+    creator_language_corpus_source_add = creator_language_sub.add_parser("corpus-source-add", help="Agregar fuente al corpus")
+    creator_language_corpus_source_add.add_argument("--corpus-id", required=True)
+    creator_language_corpus_source_add.add_argument("--source-type", required=True)
+    creator_language_corpus_source_add.add_argument("--source-id", required=True)
+    creator_language_corpus_source_add.add_argument("--text-snapshot")
+    creator_language_corpus_source_add.add_argument("--language")
+    creator_language_corpus_source_add.add_argument("--platform")
+    creator_language_corpus_source_add.add_argument("--content-type")
+    creator_language_corpus_source_add.add_argument("--topic")
+    creator_language_corpus_source_add.add_argument("--include-status", default="included")
+    creator_language_corpus_source_add.add_argument("--exclusion-reason")
+    creator_language_corpus_source_add.add_argument("--json", action="store_true")
+
+    creator_language_corpus_source_remove = creator_language_sub.add_parser("corpus-source-remove", help="Excluir fuente")
+    creator_language_corpus_source_remove.add_argument("--source-id", required=True)
+    creator_language_corpus_source_remove.add_argument("--reason")
+    creator_language_corpus_source_remove.add_argument("--json", action="store_true")
+
+    creator_language_analyze = creator_language_sub.add_parser("analyze", help="Analizar corpus")
+    creator_language_analyze.add_argument("--corpus-id", required=True)
+    creator_language_analyze.add_argument("--json", action="store_true")
+
+    creator_language_analysis_show = creator_language_sub.add_parser("analysis-show", help="Mostrar corrida")
+    creator_language_analysis_show.add_argument("--run-id", required=True)
+    creator_language_analysis_show.add_argument("--json", action="store_true")
+
+    creator_language_metrics = creator_language_sub.add_parser("metrics", help="Mostrar metricas")
+    creator_language_metrics.add_argument("--run-id", required=True)
+    creator_language_metrics.add_argument("--json", action="store_true")
+
+    creator_language_patterns = creator_language_sub.add_parser("patterns", help="Listar patrones")
+    creator_language_patterns.add_argument("--creator-id", required=True)
+    creator_language_patterns.add_argument("--run-id")
+    creator_language_patterns.add_argument("--json", action="store_true")
+
+    creator_language_pattern_show = creator_language_sub.add_parser("pattern-show", help="Mostrar patron")
+    creator_language_pattern_show.add_argument("--pattern-id", required=True)
+    creator_language_pattern_show.add_argument("--json", action="store_true")
+
+    creator_language_profile = creator_language_sub.add_parser("profile", help="Mostrar perfil")
+    creator_language_profile.add_argument("--creator-id", required=True)
+    creator_language_profile.add_argument("--json", action="store_true")
+
+    creator_language_profile_history = creator_language_sub.add_parser("profile-history", help="Historial de perfil")
+    creator_language_profile_history.add_argument("--creator-id", required=True)
+    creator_language_profile_history.add_argument("--json", action="store_true")
+
+    creator_language_profile_compare = creator_language_sub.add_parser("profile-compare", help="Comparar versiones")
+    creator_language_profile_compare.add_argument("--creator-id", required=True)
+    creator_language_profile_compare.add_argument("--base-profile-version", required=True, type=int)
+    creator_language_profile_compare.add_argument("--compare-profile-version", required=True, type=int)
+    creator_language_profile_compare.add_argument("--json", action="store_true")
+
+    creator_language_candidates = creator_language_sub.add_parser("candidates", help="Listar candidatos")
+    creator_language_candidates.add_argument("--creator-id", required=True)
+    creator_language_candidates.add_argument("--json", action="store_true")
+
+    creator_language_candidate_review = creator_language_sub.add_parser("candidate-review", help="Revisar candidato")
+    creator_language_candidate_review.add_argument("--candidate-id", required=True)
+    creator_language_candidate_review.add_argument("--decision", required=True)
+    creator_language_candidate_review.add_argument("--reason")
+    creator_language_candidate_review.add_argument("--modified-value-json")
+    creator_language_candidate_review.add_argument("--json", action="store_true")
+
+    creator_language_retrieve = creator_language_sub.add_parser("retrieve", help="Recuperar contexto")
+    creator_language_retrieve.add_argument("--creator-id", required=True)
+    creator_language_retrieve.add_argument("--query")
+    creator_language_retrieve.add_argument("--platform")
+    creator_language_retrieve.add_argument("--content-type")
+    creator_language_retrieve.add_argument("--topic")
+    creator_language_retrieve.add_argument("--trait-type")
+    creator_language_retrieve.add_argument("--example-type")
+    creator_language_retrieve.add_argument("--approval-status")
+    creator_language_retrieve.add_argument("--confidence-level")
+    creator_language_retrieve.add_argument("--status")
+    creator_language_retrieve.add_argument("--json", action="store_true")
+
+    creator_language_export = creator_language_sub.add_parser("export", help="Exportar memoria de lenguaje")
+    creator_language_export.add_argument("--creator-id", required=True)
+    creator_language_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
+    creator_language_export.add_argument("--summary", action="store_true")
+    creator_language_export.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -3896,6 +4003,124 @@ def _handle_creator_memory(args, service: CreatorMemoryService, stdout, stderr) 
     raise ValueError("Accion de creator-memory no reconocida.")
 
 
+def _handle_creator_language(args, service: CreatorLanguageService, stdout, stderr) -> int:
+    if args.action == "corpora":
+        payload = [item.to_dict() for item in service.list_corpora(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "corpus-create":
+        payload = service.create_corpus(
+            creator_id=args.creator_id,
+            name=args.name,
+            description=args.description,
+            language=args.language,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "corpus-show":
+        payload = service.get_corpus(args.corpus_id)
+        if payload is None:
+            print("Corpus no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "corpus-source-add":
+        payload = service.add_corpus_source(
+            corpus_id=args.corpus_id,
+            source_type=args.source_type,
+            source_id=args.source_id,
+            text_snapshot=args.text_snapshot,
+            language=args.language,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            include_status=args.include_status,
+            exclusion_reason=args.exclusion_reason,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "corpus-source-remove":
+        payload = service.remove_corpus_source(args.source_id, reason=args.reason)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "analyze":
+        payload = service.analyze_corpus(args.corpus_id, force_recompute=True)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "analysis-show":
+        payload = service.get_analysis_detail(args.run_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "metrics":
+        payload = [item.to_dict() for item in service.list_metrics(args.run_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "patterns":
+        payload = [item.to_dict() for item in service.list_patterns(args.creator_id, args.run_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "pattern-show":
+        payload = service.get_pattern(args.pattern_id)
+        if payload is None:
+            print("Patron no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "profile":
+        payload = service.get_profile_detail(args.creator_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "profile-history":
+        payload = [item.to_dict() for item in service.list_profile_history(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "profile-compare":
+        payload = service.compare_profile_versions(args.creator_id, args.base_profile_version, args.compare_profile_version)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "candidates":
+        payload = [item.to_dict() for item in service.list_candidates(args.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "candidate-review":
+        payload = service.review_candidate(
+            args.candidate_id,
+            decision=args.decision,
+            reason=args.reason,
+            modified_value_json=args.modified_value_json,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "retrieve":
+        payload = [
+            item.to_dict()
+            for item in service.retrieve_creator_context(
+                args.creator_id,
+                {
+                    "query": args.query,
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "topic": args.topic,
+                    "trait_type": args.trait_type,
+                    "example_type": args.example_type,
+                    "approval_status": args.approval_status,
+                    "confidence_level": args.confidence_level,
+                    "status": args.status,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export":
+        payload = service.export(creator_id=args.creator_id, format_name=args.format, summary=args.summary)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de creator-language no reconocida.")
+
+
 def _handle_analytics(args, service: AnalyticsImportService, lab_service: AnalyticsLabService | None, stdout, stderr) -> int:
     if args.action == "platforms":
         command = ListAnalyticsPlatformsCommand()
@@ -4218,6 +4443,7 @@ def dispatch(
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
     creator_memory_service: CreatorMemoryService | None = None,
+    creator_language_service: CreatorLanguageService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -4279,6 +4505,10 @@ def dispatch(
             if creator_memory_service is None:
                 raise DomainError("El servicio de creator memory no esta disponible.")
             return _handle_creator_memory(args, creator_memory_service, stdout, stderr)
+        if args.entity == "creator-language":
+            if creator_language_service is None:
+                raise DomainError("El servicio de creator language no esta disponible.")
+            return _handle_creator_language(args, creator_language_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")
