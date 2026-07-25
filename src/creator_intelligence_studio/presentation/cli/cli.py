@@ -172,6 +172,27 @@ from creator_intelligence_studio.application.commands.video_commands import (
     RegisterVideoCommand,
     VerifyVideoAvailabilityCommand,
 )
+from creator_intelligence_studio.application.commands.youtube_commands import (
+    ConnectYouTubeCommand,
+    DisconnectYouTubeConnectionCommand,
+    ExportYouTubeSyncReportCommand,
+    LinkYouTubeContentCommand,
+    ListYouTubeChannelsCommand,
+    ListYouTubeConnectionsCommand,
+    ListYouTubeVideosCommand,
+    RevokeYouTubeConnectionCommand,
+    ResumeYouTubeSyncCommand,
+    SelectYouTubeChannelCommand,
+    ShowYouTubeChannelCommand,
+    ShowYouTubeConnectionCommand,
+    ShowYouTubeSyncRunCommand,
+    ShowYouTubeVideoCommand,
+    SyncYouTubeChannelCommand,
+    SyncYouTubeHistoryCommand,
+    UnlinkYouTubeContentCommand,
+    VerifyYouTubeConnectionCommand,
+    YouTubeQuotaCommand,
+)
 from creator_intelligence_studio.application.commands.analytics_commands import (
     CreateAnalyticsChannelCommand,
     DetectAnalyticsSchemaCommand,
@@ -336,6 +357,9 @@ from creator_intelligence_studio.application.services.creator_language_service i
 from creator_intelligence_studio.application.services.creative_packaging_service import (
     CreativePackagingService,
 )
+from creator_intelligence_studio.application.services.youtube_integration_service import (
+    YouTubeIntegrationService,
+)
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
 )
@@ -429,6 +453,124 @@ def build_parser() -> argparse.ArgumentParser:
     video_show.add_argument("video_id")
     video_verify = video_sub.add_parser("verify", help="Verificar disponibilidad")
     video_verify.add_argument("video_id")
+
+    youtube_parser = subparsers.add_parser("youtube", help="Integracion de solo lectura con YouTube")
+    youtube_sub = youtube_parser.add_subparsers(dest="action", required=True)
+
+    youtube_connections = youtube_sub.add_parser("connections", help="Listar conexiones")
+    youtube_connections.add_argument("--creator-id", required=True)
+    youtube_connections.add_argument("--json", action="store_true")
+
+    youtube_connect = youtube_sub.add_parser("connect", help="Conectar una cuenta")
+    youtube_connect.add_argument("--creator-id", required=True)
+    youtube_connect.add_argument("--client-id", required=True)
+    youtube_connect.add_argument("--client-secret")
+    youtube_connect.add_argument("--authorization-code")
+    youtube_connect.add_argument("--redirect-uri")
+    youtube_connect.add_argument("--scopes-json")
+    youtube_connect.add_argument("--google-account-identifier")
+    youtube_connect.add_argument("--json", action="store_true")
+
+    youtube_connection_show = youtube_sub.add_parser("connection-show", help="Mostrar una conexion")
+    youtube_connection_show.add_argument("--connection-id", required=True)
+    youtube_connection_show.add_argument("--json", action="store_true")
+
+    youtube_verify = youtube_sub.add_parser("verify", help="Verificar una conexion")
+    youtube_verify.add_argument("--connection-id", required=True)
+    youtube_verify.add_argument("--json", action="store_true")
+
+    youtube_disconnect = youtube_sub.add_parser("disconnect", help="Desconectar localmente")
+    youtube_disconnect.add_argument("--connection-id", required=True)
+    youtube_disconnect.add_argument("--json", action="store_true")
+
+    youtube_revoke = youtube_sub.add_parser("revoke", help="Revocar credenciales")
+    youtube_revoke.add_argument("--connection-id", required=True)
+    youtube_revoke.add_argument("--json", action="store_true")
+
+    youtube_channels = youtube_sub.add_parser("channels", help="Listar canales")
+    youtube_channels.add_argument("--creator-id", required=True)
+    youtube_channels.add_argument("--json", action="store_true")
+
+    youtube_channel_select = youtube_sub.add_parser("channel-select", help="Seleccionar un canal")
+    youtube_channel_select.add_argument("--channel-id", required=True)
+    youtube_channel_select.add_argument("--json", action="store_true")
+
+    youtube_channel_show = youtube_sub.add_parser("channel-show", help="Mostrar un canal")
+    youtube_channel_show.add_argument("--channel-id", required=True)
+    youtube_channel_show.add_argument("--json", action="store_true")
+
+    youtube_sync_channel = youtube_sub.add_parser("sync-channel", help="Sincronizar canal")
+    youtube_sync_channel.add_argument("--channel-id", required=True)
+    youtube_sync_channel.add_argument("--sync-type", default="incremental_sync")
+    youtube_sync_channel.add_argument("--cursor")
+    youtube_sync_channel.add_argument("--full-resync", action="store_true")
+    youtube_sync_channel.add_argument("--include-analytics", action="store_true", default=True)
+    youtube_sync_channel.add_argument("--include-thumbnails", action="store_true")
+    youtube_sync_channel.add_argument("--metrics-json")
+    youtube_sync_channel.add_argument("--json", action="store_true")
+
+    youtube_sync_content = youtube_sub.add_parser("sync-content", help="Sincronizar catalogo")
+    youtube_sync_content.add_argument("--channel-id", required=True)
+    youtube_sync_content.add_argument("--cursor")
+    youtube_sync_content.add_argument("--json", action="store_true")
+
+    youtube_sync_analytics = youtube_sub.add_parser("sync-analytics", help="Sincronizar analiticas")
+    youtube_sync_analytics.add_argument("--channel-id", required=True)
+    youtube_sync_analytics.add_argument("--cursor")
+    youtube_sync_analytics.add_argument("--metrics-json")
+    youtube_sync_analytics.add_argument("--json", action="store_true")
+
+    youtube_sync_incremental = youtube_sub.add_parser("sync-incremental", help="Sincronizacion incremental")
+    youtube_sync_incremental.add_argument("--channel-id", required=True)
+    youtube_sync_incremental.add_argument("--cursor")
+    youtube_sync_incremental.add_argument("--json", action="store_true")
+
+    youtube_sync_resume = youtube_sub.add_parser("sync-resume", help="Reanudar una sincronizacion")
+    youtube_sync_resume.add_argument("--run-id", required=True)
+    youtube_sync_resume.add_argument("--json", action="store_true")
+
+    youtube_sync_repair = youtube_sub.add_parser("sync-repair", help="Reparar sincronizacion")
+    youtube_sync_repair.add_argument("--channel-id", required=True)
+    youtube_sync_repair.add_argument("--json", action="store_true")
+
+    youtube_sync_history = youtube_sub.add_parser("sync-history", help="Historial de sincronizaciones")
+    youtube_sync_history.add_argument("--creator-id", required=True)
+    youtube_sync_history.add_argument("--json", action="store_true")
+
+    youtube_sync_show = youtube_sub.add_parser("sync-show", help="Mostrar una sincronizacion")
+    youtube_sync_show.add_argument("--run-id", required=True)
+    youtube_sync_show.add_argument("--json", action="store_true")
+
+    youtube_videos = youtube_sub.add_parser("videos", help="Listar videos remotos")
+    youtube_videos.add_argument("--channel-id", required=True)
+    youtube_videos.add_argument("--json", action="store_true")
+
+    youtube_video_show = youtube_sub.add_parser("video-show", help="Mostrar un video remoto")
+    youtube_video_show.add_argument("--remote-video-id", required=True)
+    youtube_video_show.add_argument("--json", action="store_true")
+
+    youtube_link_content = youtube_sub.add_parser("link-content", help="Vincular contenido remoto")
+    youtube_link_content.add_argument("--remote-video-id", required=True)
+    youtube_link_content.add_argument("--publication-id")
+    youtube_link_content.add_argument("--video-asset-id")
+    youtube_link_content.add_argument("--link-method", default="manual")
+    youtube_link_content.add_argument("--confidence-level", default="low")
+    youtube_link_content.add_argument("--status", default="pending")
+    youtube_link_content.add_argument("--json", action="store_true")
+
+    youtube_unlink_content = youtube_sub.add_parser("unlink-content", help="Desvincular contenido remoto")
+    youtube_unlink_content.add_argument("--remote-video-id", required=True)
+    youtube_unlink_content.add_argument("--json", action="store_true")
+
+    youtube_quota = youtube_sub.add_parser("quota", help="Mostrar cuota estimada")
+    youtube_quota.add_argument("--connection-id", required=True)
+    youtube_quota.add_argument("--json", action="store_true")
+
+    youtube_export_report = youtube_sub.add_parser("export-report", help="Exportar un reporte de sincronizacion")
+    youtube_export_report.add_argument("--run-id", required=True)
+    youtube_export_report.add_argument("--format", required=True, choices=["json", "txt", "csv"])
+    youtube_export_report.add_argument("--output")
+    youtube_export_report.add_argument("--json", action="store_true")
 
     media_parser = subparsers.add_parser("media", help="Inspeccion tecnica de medios")
     media_sub = media_parser.add_subparsers(dest="action", required=True)
@@ -3162,6 +3304,204 @@ def _handle_clips(args, service: ClipRankingService, stdout, stderr) -> int:
     raise ValueError("Accion de ranking de clips no reconocida.")
 
 
+def _handle_youtube(args, service: YouTubeIntegrationService, stdout, stderr) -> int:
+    if args.action == "connections":
+        command = ListYouTubeConnectionsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_connections(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "connect":
+        command = ConnectYouTubeCommand(
+            args.creator_id,
+            args.client_id,
+            client_secret=args.client_secret,
+            authorization_code=args.authorization_code,
+            redirect_uri=args.redirect_uri,
+            scopes_json=args.scopes_json,
+            google_account_identifier=args.google_account_identifier,
+        )
+        connect_kwargs = {
+            "creator_id": command.creator_id,
+            "client_id": command.client_id,
+            "client_secret": command.client_secret,
+            "authorization_code": command.authorization_code,
+            "redirect_uri": command.redirect_uri,
+            "google_account_identifier": command.google_account_identifier,
+        }
+        if command.scopes_json:
+            connect_kwargs["scopes"] = tuple(json.loads(command.scopes_json))
+        result = service.connect_account(**connect_kwargs)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "connection-show":
+        command = ShowYouTubeConnectionCommand(args.connection_id)
+        payload = service.get_connection(command.connection_id)
+        if payload is None:
+            print("Conexion no encontrada.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "verify":
+        command = VerifyYouTubeConnectionCommand(args.connection_id)
+        payload = service.verify_connection(command.connection_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "disconnect":
+        command = DisconnectYouTubeConnectionCommand(args.connection_id)
+        payload = service.disconnect_connection(command.connection_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "revoke":
+        command = RevokeYouTubeConnectionCommand(args.connection_id)
+        payload = service.revoke_connection(command.connection_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "channels":
+        command = ListYouTubeChannelsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_channels(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "channel-select":
+        command = SelectYouTubeChannelCommand(args.channel_id)
+        payload = service.select_channel(command.channel_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "channel-show":
+        command = ShowYouTubeChannelCommand(args.channel_id)
+        payload = service.get_channel(command.channel_id)
+        if payload is None:
+            print("Canal no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action in {"sync-channel", "sync-content", "sync-analytics", "sync-incremental", "sync-repair"}:
+        metrics = tuple(json.loads(args.metrics_json)) if getattr(args, "metrics_json", None) else None
+        channel = service.get_channel(args.channel_id)
+        if channel is None:
+            print("Canal no encontrado.", file=stderr)
+            return 1
+        if args.action == "sync-channel":
+            command = SyncYouTubeChannelCommand(
+                args.channel_id,
+                sync_type=args.sync_type,
+                cursor=args.cursor,
+                full_resync=args.full_resync,
+                include_analytics=args.include_analytics,
+                include_thumbnails=args.include_thumbnails,
+                metrics_json=args.metrics_json,
+            )
+            payload = service.sync_channel(
+                creator_id=channel.creator_id,
+                channel_id=command.channel_id,
+                sync_type=command.sync_type,
+                cursor=command.cursor,
+                full_resync=command.full_resync,
+                include_analytics=command.include_analytics,
+                include_thumbnails=command.include_thumbnails,
+                metrics=metrics,
+            )
+        elif args.action == "sync-content":
+            command = SyncYouTubeChannelCommand(args.channel_id, sync_type="content_catalog", cursor=args.cursor)
+            payload = service.sync_content(creator_id=channel.creator_id, channel_id=command.channel_id, cursor=command.cursor)
+        elif args.action == "sync-analytics":
+            command = SyncYouTubeChannelCommand(args.channel_id, sync_type="video_analytics", cursor=args.cursor, metrics_json=args.metrics_json)
+            payload = service.sync_analytics(creator_id=channel.creator_id, channel_id=command.channel_id, cursor=command.cursor, metrics=metrics)
+        elif args.action == "sync-incremental":
+            command = SyncYouTubeChannelCommand(args.channel_id, sync_type="incremental_sync", cursor=args.cursor)
+            payload = service.sync_incremental(creator_id=channel.creator_id, channel_id=command.channel_id, cursor=command.cursor)
+        else:
+            command = SyncYouTubeChannelCommand(args.channel_id, sync_type="repair_sync")
+            payload = service.sync_repair(creator_id=channel.creator_id, channel_id=command.channel_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "sync-resume":
+        command = ResumeYouTubeSyncCommand(args.run_id)
+        payload = service.resume_sync(command.run_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "sync-history":
+        command = SyncYouTubeHistoryCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_sync_runs(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "sync-show":
+        command = ShowYouTubeSyncRunCommand(args.run_id)
+        run = service.get_sync_run(command.run_id)
+        if run is None:
+            print("Sincronizacion no encontrada.", file=stderr)
+            return 1
+        report_path = service.export_sync_report(run.id, "json")
+        payload = {
+            "run": run.to_dict(),
+            "items": [item.to_dict() for item in service.list_sync_items(run.id)],
+            "report": json.loads(report_path.read_text(encoding="utf-8")),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "videos":
+        command = ListYouTubeVideosCommand(args.channel_id)
+        payload = [item.to_dict() for item in service.list_remote_videos(command.channel_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "video-show":
+        command = ShowYouTubeVideoCommand(args.remote_video_id)
+        payload = service.get_remote_video(command.remote_video_id)
+        if payload is None:
+            print("Video remoto no encontrado.", file=stderr)
+            return 1
+        detail = payload.to_dict()
+        detail["thumbnails"] = [item.to_dict() for item in service.list_video_thumbnails(payload.id)]
+        print(json.dumps(detail, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "link-content":
+        command = LinkYouTubeContentCommand(
+            args.remote_video_id,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            link_method=args.link_method,
+            confidence_level=args.confidence_level,
+            status=args.status,
+        )
+        remote_video = service.get_remote_video(command.remote_video_id)
+        if remote_video is None:
+            print("Video remoto no encontrado.", file=stderr)
+            return 1
+        payload = service.link_content(
+            creator_id=remote_video.creator_id,
+            remote_video_id=command.remote_video_id,
+            publication_id=command.publication_id,
+            video_asset_id=command.video_asset_id,
+            link_method=command.link_method,
+            confidence_level=command.confidence_level,
+            status=command.status,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "unlink-content":
+        command = UnlinkYouTubeContentCommand(args.remote_video_id)
+        remote_video = service.get_remote_video(command.remote_video_id)
+        if remote_video is None:
+            print("Video remoto no encontrado.", file=stderr)
+            return 1
+        payload = service.unlink_content(
+            creator_id=remote_video.creator_id,
+            remote_video_id=command.remote_video_id,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "quota":
+        command = YouTubeQuotaCommand(args.connection_id)
+        payload = [item.to_dict() for item in service.list_quota_usage(command.connection_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "export-report":
+        command = ExportYouTubeSyncReportCommand(args.run_id, args.format, output=Path(args.output) if args.output else None)
+        path = service.export_sync_report(command.run_id, command.format, destination=command.output)
+        print(json.dumps({"run_id": command.run_id, "format": command.format, "path": str(path)}, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de youtube no reconocida.")
+
+
 def _handle_render(args, service: ClipRenderService, stdout, stderr) -> int:
     if args.action == "subtitles":
         if args.subaction == "capabilities":
@@ -4966,6 +5306,7 @@ def dispatch(
     visual_service: VisualAnalysisService,
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
+    youtube_service: YouTubeIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
@@ -5013,6 +5354,10 @@ def dispatch(
             return _handle_multimodal(args, multimodal_service, stdout, stderr)
         if args.entity == "clips":
             return _handle_clips(args, clip_service, stdout, stderr)
+        if args.entity == "youtube":
+            if youtube_service is None:
+                raise DomainError("El servicio de youtube no esta disponible.")
+            return _handle_youtube(args, youtube_service, stdout, stderr)
         if args.entity == "analytics":
             if analytics_service is None:
                 raise DomainError("El servicio de analytics no esta disponible.")

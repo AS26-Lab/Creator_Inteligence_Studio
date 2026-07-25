@@ -79,6 +79,10 @@ from creator_intelligence_studio.application.services.creative_packaging_service
     CreativePackagingService,
     build_creative_packaging_service,
 )
+from creator_intelligence_studio.application.services.youtube_integration_service import (
+    YouTubeIntegrationService,
+    build_youtube_integration_service,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -147,6 +151,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_langu
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creative_packaging_repository import (
     SQLiteCreativePackagingRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_youtube_repository import (
+    SQLiteYouTubeRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -190,6 +197,7 @@ class ServiceContext(BootstrapContext):
     creator_memory_service: CreatorMemoryService | None = None
     creator_language_service: CreatorLanguageService | None = None
     creative_packaging_service: CreativePackagingService | None = None
+    youtube_service: YouTubeIntegrationService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -360,6 +368,15 @@ def _load_service_context() -> ServiceContext:
         experiment_service=experiment_service,
         logger=context.logger,
     )
+    youtube_service = build_youtube_integration_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteYouTubeRepository(database),
+        database=database,
+        analytics_repository=analytics_repository,
+        creative_packaging_repository=SQLiteCreativePackagingRepository(database),
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -414,6 +431,7 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creative_packaging_service=creative_packaging_service,
+        youtube_service=youtube_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -488,6 +506,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             visual_service=context.visual_service,
             multimodal_service=context.multimodal_service,
             clip_service=context.clip_service,
+            youtube_service=context.youtube_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

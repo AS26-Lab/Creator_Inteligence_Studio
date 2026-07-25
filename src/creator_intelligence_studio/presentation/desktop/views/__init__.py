@@ -29,6 +29,11 @@ from .subtitle_editor_view import SubtitleEditorView
 from .learning_memory_view import LearningMemoryView
 from .thumbnail_lab_view import ThumbnailLabView
 from .packaging_history_view import PackagingHistoryView
+from .youtube_connection_view import YouTubeConnectionView
+from .youtube_channels_view import YouTubeChannelsView
+from .youtube_sync_view import YouTubeSyncView
+from .youtube_sync_history_view import YouTubeSyncHistoryView
+from .youtube_integration_view import YouTubeIntegrationView
 from .videos_view import VideosView
 
 __all__ = [
@@ -58,6 +63,11 @@ __all__ = [
     "SubtitleEditorView",
     "LearningMemoryView",
     "ThumbnailLabView",
+    "YouTubeConnectionView",
+    "YouTubeChannelsView",
+    "YouTubeSyncView",
+    "YouTubeSyncHistoryView",
+    "YouTubeIntegrationView",
     "PackagingHistoryView",
     "VideosView",
 ]

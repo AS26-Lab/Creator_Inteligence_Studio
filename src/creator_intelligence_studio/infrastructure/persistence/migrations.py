@@ -3474,6 +3474,288 @@ def migration_20(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_packaging_experiment_links_packaging_asset_id ON packaging_experiment_links(packaging_asset_id)")
 
 
+def migration_21(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_connections (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            google_account_identifier TEXT,
+            status TEXT NOT NULL CHECK (status IN ('disconnected', 'pending', 'connected', 'verified', 'revoked', 'error')),
+            granted_scopes_json TEXT NOT NULL,
+            credential_reference TEXT NOT NULL UNIQUE,
+            connected_at TEXT NOT NULL,
+            last_verified_at TEXT,
+            disconnected_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_channels (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            youtube_channel_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            custom_url TEXT,
+            country TEXT,
+            published_at TEXT,
+            thumbnail_url TEXT,
+            subscriber_count INTEGER,
+            video_count INTEGER,
+            view_count INTEGER,
+            hidden_subscriber_count INTEGER NOT NULL DEFAULT 0,
+            selected_for_sync INTEGER NOT NULL DEFAULT 0,
+            last_synced_at TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES youtube_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_remote_videos (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            youtube_video_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            content_type TEXT NOT NULL CHECK (content_type IN ('youtube_longform', 'youtube_short', 'probable_short', 'live', 'upcoming', 'unknown')),
+            title TEXT NOT NULL,
+            description TEXT,
+            published_at TEXT NOT NULL,
+            duration_seconds REAL,
+            privacy_status TEXT,
+            live_broadcast_content TEXT,
+            default_language TEXT,
+            default_audio_language TEXT,
+            category_id TEXT,
+            tags_json TEXT NOT NULL,
+            thumbnail_metadata_json TEXT NOT NULL,
+            remote_fingerprint TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES youtube_channels(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_video_thumbnails (
+            id TEXT PRIMARY KEY,
+            remote_video_id TEXT NOT NULL,
+            thumbnail_type TEXT NOT NULL,
+            remote_url TEXT NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            local_cache_path TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (remote_video_id) REFERENCES youtube_remote_videos(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_sync_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            channel_id TEXT,
+            sync_type TEXT NOT NULL CHECK (
+                sync_type IN (
+                    'connection_verify',
+                    'channel_metadata',
+                    'content_catalog',
+                    'video_metadata',
+                    'thumbnails_metadata',
+                    'channel_analytics',
+                    'video_analytics',
+                    'incremental_sync',
+                    'full_resync',
+                    'repair_sync'
+                )
+            ),
+            status TEXT NOT NULL CHECK (
+                status IN ('queued', 'authenticating', 'listing_channels', 'syncing_content', 'syncing_metadata', 'syncing_analytics', 'linking_content', 'completed', 'completed_with_warnings', 'interrupted', 'failed', 'cancelled')
+            ),
+            configuration_json TEXT NOT NULL,
+            cursor_json TEXT,
+            discovered_count INTEGER NOT NULL DEFAULT 0,
+            imported_count INTEGER NOT NULL DEFAULT 0,
+            updated_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            quota_cost_estimate REAL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES youtube_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES youtube_channels(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_sync_items (
+            id TEXT PRIMARY KEY,
+            sync_run_id TEXT NOT NULL,
+            remote_type TEXT NOT NULL,
+            remote_id TEXT NOT NULL,
+            local_type TEXT,
+            local_id TEXT,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES youtube_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_metric_imports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            remote_video_id TEXT,
+            sync_run_id TEXT NOT NULL,
+            metric_scope TEXT NOT NULL,
+            date_start TEXT NOT NULL,
+            date_end TEXT NOT NULL,
+            comparable_window TEXT,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES youtube_channels(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_video_id) REFERENCES youtube_remote_videos(id) ON DELETE SET NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES youtube_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_metric_values (
+            id TEXT PRIMARY KEY,
+            metric_import_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            raw_metric_name TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT NOT NULL,
+            dimensions_json TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (metric_import_id) REFERENCES youtube_metric_imports(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_content_links (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            remote_video_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            link_method TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_video_id) REFERENCES youtube_remote_videos(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_quota_usage (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            operation_key TEXT NOT NULL,
+            estimated_cost REAL NOT NULL,
+            request_count INTEGER NOT NULL,
+            usage_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (connection_id) REFERENCES youtube_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS youtube_sync_schedules (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            channel_id TEXT,
+            schedule_type TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            interval_hours INTEGER,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES youtube_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES youtube_channels(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_connections_creator_id ON youtube_connections(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_channels_creator_id ON youtube_channels(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_channels_connection_id ON youtube_channels(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_channels_creator_channel ON youtube_channels(creator_id, youtube_channel_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_remote_videos_creator_id ON youtube_remote_videos(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_remote_videos_channel_id ON youtube_remote_videos(channel_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_remote_videos_creator_video ON youtube_remote_videos(creator_id, youtube_video_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_video_thumbnails_remote_video_id ON youtube_video_thumbnails(remote_video_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_video_thumbnails_remote ON youtube_video_thumbnails(remote_video_id, thumbnail_type, remote_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_runs_creator_id ON youtube_sync_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_runs_connection_id ON youtube_sync_runs(connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_runs_channel_id ON youtube_sync_runs(channel_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_sync_items_run_remote_action ON youtube_sync_items(sync_run_id, remote_type, remote_id, action)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_items_sync_run_id ON youtube_sync_items(sync_run_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_metric_imports_source_scope_dates ON youtube_metric_imports(source_fingerprint, metric_scope, date_start, date_end, channel_id, remote_video_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_metric_imports_creator_id ON youtube_metric_imports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_metric_imports_channel_id ON youtube_metric_imports(channel_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_metric_values_import_metric_dimension ON youtube_metric_values(metric_import_id, metric_key, dimensions_json, raw_metric_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_metric_values_metric_import_id ON youtube_metric_values(metric_import_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_content_links_creator_remote_publication_video ON youtube_content_links(creator_id, remote_video_id, publication_id, video_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_content_links_creator_id ON youtube_content_links(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_youtube_quota_usage_connection_operation_date ON youtube_quota_usage(connection_id, operation_key, usage_date)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_quota_usage_connection_id ON youtube_quota_usage(connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_schedules_creator_id ON youtube_sync_schedules(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_schedules_connection_id ON youtube_sync_schedules(connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_schedules_channel_id ON youtube_sync_schedules(channel_id)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -3514,6 +3796,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=18, name="creator_memory"),
     Migration(version=19, name="creator_language"),
     Migration(version=20, name="creative_packaging"),
+    Migration(version=21, name="youtube_read_only_integration"),
 )
 
 
@@ -3591,6 +3874,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_19(connection)
                 elif migration.version == 20:
                     migration_20(connection)
+                elif migration.version == 21:
+                    migration_21(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

@@ -74,6 +74,9 @@ from creator_intelligence_studio.application.services.creative_packaging_service
     CreativePackagingService,
     PackagingBrandProfileDetail,
 )
+from creator_intelligence_studio.application.services.youtube_integration_service import (
+    YouTubeIntegrationService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -305,6 +308,7 @@ class WorkspaceViewModel:
         creator_memory_service: CreatorMemoryService | None = None,
         creator_language_service: CreatorLanguageService | None = None,
         creative_packaging_service: CreativePackagingService | None = None,
+        youtube_service: YouTubeIntegrationService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -433,6 +437,7 @@ class WorkspaceViewModel:
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
         self.creative_packaging_service = creative_packaging_service
+        self.youtube_service = youtube_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -987,6 +992,32 @@ class WorkspaceViewModel:
                         interrupted_at=to_iso_z(import_record.completed_at) if import_record.status.value == "interrupted" else None,
                         completed_at=to_iso_z(import_record.completed_at),
                         payload={"import": import_record.to_dict(), "kind": "analytics_import"},
+                    )
+                )
+        if self.youtube_service is not None and self.selected_creator_id is not None:
+            try:
+                sync_runs = self.youtube_service.list_sync_runs(self.selected_creator_id)
+            except Exception:
+                sync_runs = []
+            for run in sync_runs:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=run.id,
+                        title="Sincronizacion de YouTube",
+                        status=run.status.value,
+                        stage_name=run.sync_type.value,
+                        video_id=None,
+                        video_title=run.channel_id or run.connection_id,
+                        action_id=run.channel_id,
+                        progress_percent=100.0 if run.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=run.error_message or run.status.value,
+                        error=run.error_message,
+                        cancellable=run.status.value in {"queued", "authenticating", "listing_channels", "syncing_content", "syncing_metadata", "syncing_analytics", "linking_content", "interrupted"},
+                        created_at=to_iso_z(run.created_at),
+                        updated_at=to_iso_z(run.completed_at or run.created_at),
+                        interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(run.completed_at),
+                        payload={"kind": "youtube_sync", "run": run.to_dict(), "creator_id": run.creator_id, "channel_id": run.channel_id, "sync_type": run.sync_type.value},
                     )
                 )
         if self.analytics_lab_service is not None and self.selected_creator_id is not None:
@@ -2817,6 +2848,71 @@ class WorkspaceViewModel:
         if self.creator_language_service is None:
             return []
         return self.creator_language_service.list_analysis_runs(creator_id, corpus_id)
+
+    def list_youtube_connections(self, creator_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_connections(creator_id)
+
+    def list_youtube_channels(self, creator_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_channels(creator_id)
+
+    def list_youtube_remote_videos(self, channel_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_remote_videos(channel_id)
+
+    def list_youtube_sync_runs(self, creator_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_sync_runs(creator_id)
+
+    def list_youtube_sync_items(self, sync_run_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_sync_items(sync_run_id)
+
+    def list_youtube_metric_imports(self, creator_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_metric_imports(creator_id)
+
+    def list_youtube_metric_values(self, metric_import_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_metric_values(metric_import_id)
+
+    def list_youtube_content_links(self, creator_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_content_links(creator_id)
+
+    def list_youtube_quota_usage(self, connection_id: str):
+        if self.youtube_service is None:
+            return []
+        return self.youtube_service.list_quota_usage(connection_id)
+
+    def get_youtube_sync_run(self, run_id: str):
+        if self.youtube_service is None:
+            return None
+        return self.youtube_service.get_sync_run(run_id)
+
+    def interrupt_youtube_sync_run(self, run_id: str, reason: str | None = None):
+        if self.youtube_service is None:
+            return None
+        return self.youtube_service.interrupt_sync_run(run_id, reason=reason)
+
+    def resume_youtube_sync_run(self, run_id: str):
+        if self.youtube_service is None:
+            return None
+        return self.youtube_service.resume_sync(run_id)
+
+    def export_youtube_sync_report(self, run_id: str, format_name: str = "json", *, destination: Path | None = None):
+        if self.youtube_service is None:
+            return None
+        return self.youtube_service.export_sync_report(run_id, format_name, destination=destination)
 
     def list_packaging_assets(self, creator_id: str):
         if self.creative_packaging_service is None:

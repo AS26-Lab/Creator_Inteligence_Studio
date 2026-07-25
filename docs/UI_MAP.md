@@ -18,6 +18,7 @@ flowchart LR
     Home --> Personalization[Datos de personalizacion]
     Home --> CreatorMemory[Creator Memory]
     Home --> Packaging[Thumbnail Lab]
+    Home --> YouTube[YouTube Integration]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -234,6 +235,15 @@ flowchart LR
 - conceptos, prompts y brief para diseñador;
 - review opcional cuando el usuario vuelve con una miniatura terminada;
 - historial de versiones, decisiones y experimentos vinculados.
+
+### YouTube Integration
+
+- conexion OAuth de escritorio solo lectura;
+- seleccion de canales;
+- sincronizacion de videos, thumbnails y metricas;
+- enlaces locales a publicaciones y assets;
+- historial de sincronizacion, cuota y privacidad;
+- revocar, desconectar y reanudar sincronizaciones.
 
 ## Estados vacios
 

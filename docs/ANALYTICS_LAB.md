@@ -26,5 +26,6 @@ Primera capa de comparacion estadistica y aprendizaje analitico sobre publicacio
 ## Notes
 
 Analytics Lab consume la base multiplataforma de `docs/ANALYTICS_DATA_FOUNDATION.md` y separa hechos, inferencias e hipotesis.
+Cuando YouTube Read-Only Integration esta activa, los imports remotos y los snapshots historicos pasan a ser evidencia adicional para cohortes, comparaciones y findings, sin mezclar metricas observadas con causalidad.
 
 Thumbnail Lab and Titles Foundation uses these historical metrics, cohorts, and percentiles to judge whether a title or thumbnail is aligned with the creator's real performance history.

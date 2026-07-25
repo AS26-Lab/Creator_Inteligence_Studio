@@ -83,6 +83,7 @@ La aplicacion ya permite:
 - registrar experimentos, decisiones humanas y aprendizajes verificables sin promover reglas automaticamente;
 - construir memoria creativa por creador con perfil, traits, vocabulario, ejemplos, reglas y limites versionados;
 - analizar lenguaje, narrativa y ritmo por creador con profile snapshots y candidatos revisables;
+- conectar YouTube en modo solo lectura mediante OAuth de escritorio para importar canales, videos, titulos, miniaturas y metricas sin permisos de escritura;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -108,6 +109,7 @@ La base de analitica manual multiplataforma esta documentada en [`docs/ANALYTICS
 La fase de experimentos y aprendizaje verificable esta documentada en [`docs/EXPERIMENTS_AND_LEARNING.md`](docs/EXPERIMENTS_AND_LEARNING.md).
 La fase de Creator Memory / Creator Profile Foundation esta documentada en [`docs/CREATOR_MEMORY.md`](docs/CREATOR_MEMORY.md).
 La fase de Thumbnail Lab and Titles Foundation esta documentada en [`docs/THUMBNAIL_LAB_AND_TITLES.md`](docs/THUMBNAIL_LAB_AND_TITLES.md).
+La integracion de YouTube en modo solo lectura esta documentada en [`docs/YOUTUBE_READ_ONLY_INTEGRATION.md`](docs/YOUTUBE_READ_ONLY_INTEGRATION.md).
 
 ## Base local
 

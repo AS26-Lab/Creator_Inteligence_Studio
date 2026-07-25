@@ -117,6 +117,16 @@ Experiments and Learning adds the next operational loop: recommendation, human d
 - exportar el prompt sin obligar a volver al programa;
 - revisar una miniatura devuelta y registrar instrucciones de revision.
 
+## YouTube read-only workflow
+
+- conectar una cuenta Google/YouTube con OAuth de escritorio;
+- elegir canales accesibles;
+- importar videos, titulos, descripciones, miniaturas y metricas disponibles;
+- revisar enlaces locales sugeridos;
+- sincronizar cambios historicos sin sobrescribir versiones previas;
+- desconectar o revocar credenciales locales;
+- alimentar Analytics Lab y Thumbnail Lab con evidencia oficial.
+
 ## Creator language workflow
 
 - seleccionar creador;

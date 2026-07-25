@@ -35,3 +35,4 @@ Base manual de analitica historica para Creator Intelligence Studio.
 
 Analytics Lab consume estas publicaciones normalizadas para cohortes, comparaciones y findings sin sobreescribir snapshots.
 Experiments and Verifiable Learning consume recomendaciones, decisiones y evaluaciones como memoria estructurada.
+YouTube Read-Only Integration puede alimentar estos registros con canales, videos, thumbnails y metricas oficiales sin exponer permisos de escritura.

@@ -118,6 +118,26 @@
 - `file_size_bytes`.
 - `source_file_size_bytes`.
 - `source_file_modified_at` UTC.
+
+## YouTube read-only integration
+
+La fase v21 agrega entidades locales para conexiones OAuth de escritorio, canales remotos, videos remotos, miniaturas remotas, sincronizaciones, items de sincronizacion, importes de metricas, enlaces de contenido, uso de cuota y programaciones de sincronizacion.
+
+Tablas principales:
+
+- `youtube_connections`
+- `youtube_channels`
+- `youtube_remote_videos`
+- `youtube_video_thumbnails`
+- `youtube_sync_runs`
+- `youtube_sync_items`
+- `youtube_metric_imports`
+- `youtube_metric_values`
+- `youtube_content_links`
+- `youtube_quota_usage`
+- `youtube_sync_schedules`
+
+La base local solo conserva referencias, fingerprints, estados y metadatos necesarios para trazabilidad. Los tokens no se guardan en texto plano en la base principal.
 - `selected_stream_index`.
 - `selected_stream_codec_name`.
 - `selected_stream_channels`.

@@ -168,7 +168,7 @@ class ExperimentsAndLearningTests(unittest.TestCase):
             with fixture.database.connect() as connection:
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertEqual(versions[-1], 20)
+            self.assertEqual(versions[-1], 21)
             self.assertIn("experiment_definitions", tables)
             self.assertIn("recommendation_records", tables)
             self.assertIn("learning_records", tables)
