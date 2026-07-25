@@ -77,3 +77,4 @@ The operational evaluation view shows scenarios, history, stages, metrics, asser
 
 Analytics foundation checks can be added as controlled scenarios to validate CSV/XLSX import, schema detection, mapping reuse, duplicate handling, interruption/retry and normalized export without external APIs.
 Experiments and Learning scenarios can reuse the same harness with synthetic recommendations, decisions, evaluations, learning reviews and report exports, while keeping results verifiable and non-causal.
+Creator Memory scenarios can validate profile roundtrips, traits, vocabulary, examples, limits, snapshot comparison, deterministic retrieval, CSV-safe export, and creator isolation without introducing LLMs or external APIs.

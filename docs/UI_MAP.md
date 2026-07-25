@@ -16,6 +16,7 @@ flowchart LR
     Home --> Multimodal[Analisis multimodal]
     Home --> Clips[Clips]
     Home --> Personalization[Datos de personalizacion]
+    Home --> CreatorMemory[Creator Memory]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -183,6 +184,16 @@ flowchart LR
 - aislamiento por creador;
 - sin mostrar texto completo ni notas privadas por defecto.
 
+### Creator Memory
+
+- perfil creativo por creador;
+- traits, vocabulario, ejemplos y reglas de estilo;
+- limites y objetivos editables;
+- evidencia, contradicciones y revisiones humanas;
+- snapshots versionados y comparacion de versiones;
+- retrieval determinista local;
+- exportacion local JSON, TXT y CSV.
+
 ### Sistema
 
 - diagnostico del entorno;
@@ -202,6 +213,7 @@ flowchart LR
 - Tendencias;
 - Script & Voice Studio;
 - Modelos.
+- Creator Memory;
 
 ## Estados vacios
 

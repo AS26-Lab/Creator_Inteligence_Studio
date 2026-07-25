@@ -65,6 +65,7 @@ flowchart TD
 - `Clip Ranking`
 - `Clip Rendering`
 - `Personalization Data`
+- `Creator Memory`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -259,6 +260,16 @@ La arquitectura no debe acoplar toda la logica a un proveedor concreto.
 - La capa recibe feedback humano, candidatos de clip y features derivadas sin entrenar modelos.
 - Cada snapshot es inmutable una vez completado y mantiene aislamiento por creador.
 - Las exportaciones por defecto omiten texto completo y notas privadas.
+
+## Creator memory layer
+
+- `domain/creator_memory`: entidades, errores, repositorios, value objects, tipos de memoria, evidencia y perfil sin dependencia de GUI, SQLite, APIs, LLMs o ML.
+- `application/services/creator_profile_service.py`: lectura y actualizacion del perfil creativo del creador.
+- `application/services/creator_memory_service.py`: traits, ejemplos, vocabulario, reglas de estilo, limites, snapshots, retrieval y feedback.
+- `infrastructure/creator_memory`: construccion de perfil, vinculacion de evidencia, deteccion de contradicciones, indexacion, retrieval y snapshots.
+- `infrastructure/persistence/sqlite_creator_memory_repository.py`: persistencia local de perfiles, traits, ejemplos, vocabulario, reglas, limites, snapshots y feedback.
+- La capa conserva observaciones, evidencia positiva y contradictoria, y no convierte una muestra aislada en regla definitiva.
+- La memoria del creador se mantiene separada de analytics, experiments y learning records.
 
 ## Transcription Layer
 

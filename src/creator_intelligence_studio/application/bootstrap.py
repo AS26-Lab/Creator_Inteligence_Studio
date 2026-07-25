@@ -68,6 +68,9 @@ from creator_intelligence_studio.application.services.experiment_service import 
     ExperimentService,
     build_experiment_services,
 )
+from creator_intelligence_studio.application.services.creator_memory_service import (
+    CreatorMemoryService,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -127,6 +130,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_analytics_lab
 from creator_intelligence_studio.infrastructure.persistence.sqlite_experiment_repository import (
     SQLiteExperimentRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_memory_repository import (
+    SQLiteCreatorMemoryRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -167,6 +173,7 @@ class ServiceContext(BootstrapContext):
     analytics_service: AnalyticsImportService | None = None
     analytics_lab_service: AnalyticsLabService | None = None
     experiment_service: ExperimentService | None = None
+    creator_memory_service: CreatorMemoryService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -308,6 +315,12 @@ def _load_service_context() -> ServiceContext:
         paths=context.paths,
         logger=context.logger,
     )
+    creator_memory_service = CreatorMemoryService(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteCreatorMemoryRepository(database),
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -359,6 +372,7 @@ def _load_service_context() -> ServiceContext:
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,
         experiment_service=experiment_service,
+        creator_memory_service=creator_memory_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -436,6 +450,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,
+            creator_memory_service=context.creator_memory_service,
             render_service=context.render_service,
             subtitle_service=context.subtitle_service,
             personalization_service=context.personalization_service,

@@ -59,6 +59,9 @@ from creator_intelligence_studio.application.services.analytics_lab_service impo
 from creator_intelligence_studio.application.services.experiment_service import (
     ExperimentService,
 )
+from creator_intelligence_studio.application.services.creator_memory_service import (
+    CreatorMemoryService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -287,6 +290,7 @@ class WorkspaceViewModel:
         analytics_service: AnalyticsImportService | None = None,
         analytics_lab_service: AnalyticsLabService | None = None,
         experiment_service: ExperimentService | None = None,
+        creator_memory_service: CreatorMemoryService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -412,6 +416,7 @@ class WorkspaceViewModel:
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
         self.experiment_service = experiment_service
+        self.creator_memory_service = creator_memory_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -2497,6 +2502,139 @@ class WorkspaceViewModel:
         if report.output_csv_path:
             return Path(report.output_csv_path)
         return None
+
+    def get_creator_memory_profile(self, creator_id: str):
+        if self.creator_memory_service is None:
+            return None
+        return self.creator_memory_service.get_creator_profile(creator_id)
+
+    def get_creator_memory_profile_detail(self, creator_id: str):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.get_profile_detail(creator_id)
+
+    def update_creator_memory_profile(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.update_creator_profile(**kwargs)
+
+    def list_creator_traits(self, creator_id: str, filters=None):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_traits(creator_id, filters=filters)
+
+    def create_creator_trait(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_trait(**kwargs)
+
+    def update_creator_trait(self, trait_id: str, **changes):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.update_trait(trait_id, **changes)
+
+    def archive_creator_trait(self, trait_id: str):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.archive_trait(trait_id)
+
+    def add_creator_trait_evidence(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.add_trait_evidence(**kwargs)
+
+    def list_creator_trait_evidence(self, trait_id: str):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_trait_evidence(trait_id)
+
+    def list_creator_examples(self, creator_id: str, filters=None):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_examples(creator_id, filters=filters)
+
+    def create_creator_example(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_example(**kwargs)
+
+    def review_creator_example(self, example_id: str, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.review_example(example_id, **kwargs)
+
+    def list_creator_vocabulary(self, creator_id: str, filters=None):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_vocabulary(creator_id, filters=filters)
+
+    def create_creator_vocabulary_entry(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_vocabulary_entry(**kwargs)
+
+    def list_creator_style_rules(self, creator_id: str, filters=None):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_style_rules(creator_id, filters=filters)
+
+    def create_creator_style_rule(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_style_rule(**kwargs)
+
+    def review_creator_style_rule(self, rule_id: str, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.review_style_rule(rule_id, **kwargs)
+
+    def list_creator_limits(self, creator_id: str):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_limits(creator_id)
+
+    def create_creator_limit(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_limit(**kwargs)
+
+    def update_creator_limit(self, limit_id: str, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        creator_id = kwargs.pop("creator_id", None) or self.selected_creator_id
+        if creator_id is None:
+            raise RuntimeError("Selecciona un creador para actualizar el limite.")
+        return self.creator_memory_service.update_limit(limit_id, creator_id=creator_id, **kwargs)
+
+    def list_creator_profile_snapshots(self, creator_id: str):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_profile_snapshots(creator_id)
+
+    def create_creator_profile_snapshot(self, creator_id: str):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.create_profile_snapshot(creator_id)
+
+    def compare_creator_profile_snapshots(self, creator_id: str, base_snapshot_id: str, compare_snapshot_id: str):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.compare_profile_snapshots(creator_id, base_snapshot_id, compare_snapshot_id)
+
+    def retrieve_creator_memory(self, creator_id: str, query_filters):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.retrieve_creator_context(creator_id, query_filters)
+
+    def record_creator_memory_feedback(self, **kwargs):
+        if self.creator_memory_service is None:
+            raise RuntimeError("El servicio de creator memory no esta disponible.")
+        return self.creator_memory_service.record_memory_feedback(**kwargs)
+
+    def list_creator_memory_feedback(self, creator_id: str):
+        if self.creator_memory_service is None:
+            return []
+        return self.creator_memory_service.list_feedback(creator_id)
 
     def build_creator_dataset(self, creator_id: str, project_id: str | None = None, force: bool = False, *, progress_callback=None) -> PersonalizationDatasetReport:
         if self.personalization_service is None:

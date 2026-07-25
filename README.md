@@ -81,6 +81,7 @@ La aplicacion ya permite:
 - generar, editar, importar y exportar subtitulos locales basados en transcripciones existentes;
 - preparar datasets de personalizacion por creador a partir del feedback humano;
 - registrar experimentos, decisiones humanas y aprendizajes verificables sin promover reglas automaticamente;
+- construir memoria creativa por creador con perfil, traits, vocabulario, ejemplos, reglas y limites versionados;
 - abrir una interfaz de escritorio funcional con navegacion, inspector y diagnostico del sistema;
 - persistir toda la informacion en SQLite local.
 
@@ -104,6 +105,7 @@ La primera version de render local esta documentada en [`docs/CLIP_RENDERING.md`
 La primera version de subtitulos locales esta documentada en [`docs/SUBTITLES.md`](docs/SUBTITLES.md).
 La base de analitica manual multiplataforma esta documentada en [`docs/ANALYTICS_DATA_FOUNDATION.md`](docs/ANALYTICS_DATA_FOUNDATION.md).
 La fase de experimentos y aprendizaje verificable esta documentada en [`docs/EXPERIMENTS_AND_LEARNING.md`](docs/EXPERIMENTS_AND_LEARNING.md).
+La fase de Creator Memory / Creator Profile Foundation esta documentada en [`docs/CREATOR_MEMORY.md`](docs/CREATOR_MEMORY.md).
 
 ## Base local
 

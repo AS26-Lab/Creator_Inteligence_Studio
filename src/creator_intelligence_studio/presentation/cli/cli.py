@@ -231,6 +231,31 @@ from creator_intelligence_studio.application.commands.experiment_commands import
     ShowLearningCommand,
     ShowRecommendationCommand,
 )
+from creator_intelligence_studio.application.commands.creator_memory_commands import (
+    AddCreatorTraitEvidenceCommand,
+    CompareCreatorSnapshotsCommand,
+    CreateCreatorExampleCommand,
+    CreateCreatorLimitCommand,
+    CreateCreatorRuleCommand,
+    CreateCreatorSnapshotCommand,
+    CreateCreatorTraitCommand,
+    CreateCreatorVocabularyCommand,
+    CreatorMemoryProfileCommand,
+    ListCreatorExamplesCommand,
+    ListCreatorLimitsCommand,
+    ListCreatorRulesCommand,
+    ListCreatorSnapshotsCommand,
+    ListCreatorTraitsCommand,
+    ListCreatorVocabularyCommand,
+    RecordCreatorMemoryFeedbackCommand,
+    RetrieveCreatorMemoryCommand,
+    ReviewCreatorExampleCommand,
+    ReviewCreatorRuleCommand,
+    ShowCreatorTraitCommand,
+    UpdateCreatorLimitCommand,
+    UpdateCreatorMemoryProfileCommand,
+    UpdateCreatorTraitCommand,
+)
 from creator_intelligence_studio.application.services.catalog_service import (
     CatalogService,
     VideoVerificationReport,
@@ -301,6 +326,9 @@ from creator_intelligence_studio.application.services.analytics_lab_service impo
 )
 from creator_intelligence_studio.application.services.experiment_service import (
     ExperimentService,
+)
+from creator_intelligence_studio.application.services.creator_memory_service import (
+    CreatorMemoryService,
 )
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
@@ -913,6 +941,236 @@ def build_parser() -> argparse.ArgumentParser:
     learnings_deprecate = learnings_sub.add_parser("deprecate", help="Depreciar aprendizaje")
     learnings_deprecate.add_argument("--learning-id", required=True)
     learnings_deprecate.add_argument("--json", action="store_true")
+
+    creator_memory_parser = subparsers.add_parser("creator-memory", help="Creator Memory / Creator Profile Foundation")
+    creator_memory_sub = creator_memory_parser.add_subparsers(dest="action", required=True)
+
+    creator_memory_profile = creator_memory_sub.add_parser("profile", help="Mostrar perfil del creador")
+    creator_memory_profile.add_argument("--creator-id", required=True)
+    creator_memory_profile.add_argument("--json", action="store_true")
+
+    creator_memory_profile_update = creator_memory_sub.add_parser("profile-update", help="Actualizar perfil del creador")
+    creator_memory_profile_update.add_argument("--creator-id", required=True)
+    creator_memory_profile_update.add_argument("--display-name")
+    creator_memory_profile_update.add_argument("--summary")
+    creator_memory_profile_update.add_argument("--primary-language")
+    creator_memory_profile_update.add_argument("--secondary-languages-json")
+    creator_memory_profile_update.add_argument("--default-tone")
+    creator_memory_profile_update.add_argument("--default-formality")
+    creator_memory_profile_update.add_argument("--objectives-json")
+    creator_memory_profile_update.add_argument("--status")
+    creator_memory_profile_update.add_argument("--json", action="store_true")
+
+    creator_memory_traits = creator_memory_sub.add_parser("traits", help="Listar traits")
+    creator_memory_traits.add_argument("--creator-id", required=True)
+    creator_memory_traits.add_argument("--platform")
+    creator_memory_traits.add_argument("--content-type")
+    creator_memory_traits.add_argument("--topic")
+    creator_memory_traits.add_argument("--trait-type")
+    creator_memory_traits.add_argument("--status")
+    creator_memory_traits.add_argument("--confidence-level")
+    creator_memory_traits.add_argument("--json", action="store_true")
+
+    creator_memory_trait_create = creator_memory_sub.add_parser("trait-create", help="Crear trait")
+    creator_memory_trait_create.add_argument("--creator-id", required=True)
+    creator_memory_trait_create.add_argument("--trait-type", required=True)
+    creator_memory_trait_create.add_argument("--trait-key", required=True)
+    creator_memory_trait_create.add_argument("--display-name", required=True)
+    creator_memory_trait_create.add_argument("--description")
+    creator_memory_trait_create.add_argument("--value-json", default="{}")
+    creator_memory_trait_create.add_argument("--scope", default="creator_general")
+    creator_memory_trait_create.add_argument("--platform")
+    creator_memory_trait_create.add_argument("--content-type")
+    creator_memory_trait_create.add_argument("--topic")
+    creator_memory_trait_create.add_argument("--confidence-level", default="low")
+    creator_memory_trait_create.add_argument("--confidence-score", type=float)
+    creator_memory_trait_create.add_argument("--status", default="observed")
+    creator_memory_trait_create.add_argument("--json", action="store_true")
+
+    creator_memory_trait_show = creator_memory_sub.add_parser("trait-show", help="Mostrar trait")
+    creator_memory_trait_show.add_argument("--trait-id", required=True)
+    creator_memory_trait_show.add_argument("--json", action="store_true")
+
+    creator_memory_trait_update = creator_memory_sub.add_parser("trait-update", help="Actualizar trait")
+    creator_memory_trait_update.add_argument("--trait-id", required=True)
+    creator_memory_trait_update.add_argument("--trait-type")
+    creator_memory_trait_update.add_argument("--trait-key")
+    creator_memory_trait_update.add_argument("--display-name")
+    creator_memory_trait_update.add_argument("--description")
+    creator_memory_trait_update.add_argument("--value-json")
+    creator_memory_trait_update.add_argument("--scope")
+    creator_memory_trait_update.add_argument("--platform")
+    creator_memory_trait_update.add_argument("--content-type")
+    creator_memory_trait_update.add_argument("--topic")
+    creator_memory_trait_update.add_argument("--confidence-level")
+    creator_memory_trait_update.add_argument("--confidence-score", type=float)
+    creator_memory_trait_update.add_argument("--status")
+    creator_memory_trait_update.add_argument("--json", action="store_true")
+
+    creator_memory_trait_evidence = creator_memory_sub.add_parser("trait-evidence-add", help="Agregar evidencia a un trait")
+    creator_memory_trait_evidence.add_argument("--trait-id", required=True)
+    creator_memory_trait_evidence.add_argument("--source-type", required=True)
+    creator_memory_trait_evidence.add_argument("--source-id")
+    creator_memory_trait_evidence.add_argument("--publication-id")
+    creator_memory_trait_evidence.add_argument("--video-asset-id")
+    creator_memory_trait_evidence.add_argument("--transcript-segment-id")
+    creator_memory_trait_evidence.add_argument("--start-seconds", type=float)
+    creator_memory_trait_evidence.add_argument("--end-seconds", type=float)
+    creator_memory_trait_evidence.add_argument("--quoted-text")
+    creator_memory_trait_evidence.add_argument("--evidence-type", default="manual_observation")
+    creator_memory_trait_evidence.add_argument("--supports-trait", action="store_true")
+    creator_memory_trait_evidence.add_argument("--weight", type=float, default=1.0)
+    creator_memory_trait_evidence.add_argument("--notes")
+    creator_memory_trait_evidence.add_argument("--json", action="store_true")
+
+    creator_memory_examples = creator_memory_sub.add_parser("examples", help="Listar ejemplos")
+    creator_memory_examples.add_argument("--creator-id", required=True)
+    creator_memory_examples.add_argument("--platform")
+    creator_memory_examples.add_argument("--content-type")
+    creator_memory_examples.add_argument("--topic")
+    creator_memory_examples.add_argument("--example-type")
+    creator_memory_examples.add_argument("--approval-status")
+    creator_memory_examples.add_argument("--json", action="store_true")
+
+    creator_memory_example_create = creator_memory_sub.add_parser("example-create", help="Crear ejemplo")
+    creator_memory_example_create.add_argument("--creator-id", required=True)
+    creator_memory_example_create.add_argument("--example-type", required=True)
+    creator_memory_example_create.add_argument("--category", required=True)
+    creator_memory_example_create.add_argument("--title", required=True)
+    creator_memory_example_create.add_argument("--source-type", required=True)
+    creator_memory_example_create.add_argument("--platform")
+    creator_memory_example_create.add_argument("--content-type")
+    creator_memory_example_create.add_argument("--topic")
+    creator_memory_example_create.add_argument("--text-content")
+    creator_memory_example_create.add_argument("--source-id")
+    creator_memory_example_create.add_argument("--publication-id")
+    creator_memory_example_create.add_argument("--video-asset-id")
+    creator_memory_example_create.add_argument("--start-seconds", type=float)
+    creator_memory_example_create.add_argument("--end-seconds", type=float)
+    creator_memory_example_create.add_argument("--representativeness", type=float)
+    creator_memory_example_create.add_argument("--approval-status", default="pending")
+    creator_memory_example_create.add_argument("--approval-reason")
+    creator_memory_example_create.add_argument("--json", action="store_true")
+
+    creator_memory_example_review = creator_memory_sub.add_parser("example-review", help="Revisar ejemplo")
+    creator_memory_example_review.add_argument("--example-id", required=True)
+    creator_memory_example_review.add_argument("--approval-status", required=True)
+    creator_memory_example_review.add_argument("--reason")
+    creator_memory_example_review.add_argument("--json", action="store_true")
+
+    creator_memory_vocabulary = creator_memory_sub.add_parser("vocabulary", help="Listar vocabulario")
+    creator_memory_vocabulary.add_argument("--creator-id", required=True)
+    creator_memory_vocabulary.add_argument("--platform")
+    creator_memory_vocabulary.add_argument("--content-type")
+    creator_memory_vocabulary.add_argument("--vocabulary-type")
+    creator_memory_vocabulary.add_argument("--json", action="store_true")
+
+    creator_memory_vocabulary_add = creator_memory_sub.add_parser("vocabulary-add", help="Agregar vocabulario")
+    creator_memory_vocabulary_add.add_argument("--creator-id", required=True)
+    creator_memory_vocabulary_add.add_argument("--term", required=True)
+    creator_memory_vocabulary_add.add_argument("--vocabulary-type", required=True)
+    creator_memory_vocabulary_add.add_argument("--meaning")
+    creator_memory_vocabulary_add.add_argument("--usage-notes")
+    creator_memory_vocabulary_add.add_argument("--platform")
+    creator_memory_vocabulary_add.add_argument("--content-type")
+    creator_memory_vocabulary_add.add_argument("--confidence-level", default="low")
+    creator_memory_vocabulary_add.add_argument("--frequency-count", type=int, default=1)
+    creator_memory_vocabulary_add.add_argument("--status", default="active")
+    creator_memory_vocabulary_add.add_argument("--json", action="store_true")
+
+    creator_memory_rules = creator_memory_sub.add_parser("rules", help="Listar reglas")
+    creator_memory_rules.add_argument("--creator-id", required=True)
+    creator_memory_rules.add_argument("--platform")
+    creator_memory_rules.add_argument("--content-type")
+    creator_memory_rules.add_argument("--topic")
+    creator_memory_rules.add_argument("--status")
+    creator_memory_rules.add_argument("--json", action="store_true")
+
+    creator_memory_rule_create = creator_memory_sub.add_parser("rule-create", help="Crear regla")
+    creator_memory_rule_create.add_argument("--creator-id", required=True)
+    creator_memory_rule_create.add_argument("--rule-type", required=True)
+    creator_memory_rule_create.add_argument("--statement", required=True)
+    creator_memory_rule_create.add_argument("--scope", default="creator_general")
+    creator_memory_rule_create.add_argument("--rationale")
+    creator_memory_rule_create.add_argument("--platform")
+    creator_memory_rule_create.add_argument("--content-type")
+    creator_memory_rule_create.add_argument("--topic")
+    creator_memory_rule_create.add_argument("--confidence-level", default="low")
+    creator_memory_rule_create.add_argument("--status", default="observed")
+    creator_memory_rule_create.add_argument("--supporting-example-count", type=int, default=0)
+    creator_memory_rule_create.add_argument("--contradicting-example-count", type=int, default=0)
+    creator_memory_rule_create.add_argument("--json", action="store_true")
+
+    creator_memory_rule_review = creator_memory_sub.add_parser("rule-review", help="Revisar regla")
+    creator_memory_rule_review.add_argument("--rule-id", required=True)
+    creator_memory_rule_review.add_argument("--decision", required=True)
+    creator_memory_rule_review.add_argument("--reason", required=True)
+    creator_memory_rule_review.add_argument("--previous-statement")
+    creator_memory_rule_review.add_argument("--new-statement")
+    creator_memory_rule_review.add_argument("--json", action="store_true")
+
+    creator_memory_limits = creator_memory_sub.add_parser("limits", help="Listar limites")
+    creator_memory_limits.add_argument("--creator-id", required=True)
+    creator_memory_limits.add_argument("--json", action="store_true")
+
+    creator_memory_limit_create = creator_memory_sub.add_parser("limit-create", help="Crear limite")
+    creator_memory_limit_create.add_argument("--creator-id", required=True)
+    creator_memory_limit_create.add_argument("--limit-type", required=True)
+    creator_memory_limit_create.add_argument("--category", required=True)
+    creator_memory_limit_create.add_argument("--statement", required=True)
+    creator_memory_limit_create.add_argument("--severity", default="caution")
+    creator_memory_limit_create.add_argument("--scope", default="creator_general")
+    creator_memory_limit_create.add_argument("--platform")
+    creator_memory_limit_create.add_argument("--status", default="active")
+    creator_memory_limit_create.add_argument("--json", action="store_true")
+
+    creator_memory_limit_update = creator_memory_sub.add_parser("limit-update", help="Actualizar limite")
+    creator_memory_limit_update.add_argument("--limit-id", required=True)
+    creator_memory_limit_update.add_argument("--creator-id", required=True)
+    creator_memory_limit_update.add_argument("--limit-type")
+    creator_memory_limit_update.add_argument("--category")
+    creator_memory_limit_update.add_argument("--statement")
+    creator_memory_limit_update.add_argument("--severity")
+    creator_memory_limit_update.add_argument("--scope")
+    creator_memory_limit_update.add_argument("--platform")
+    creator_memory_limit_update.add_argument("--status")
+    creator_memory_limit_update.add_argument("--json", action="store_true")
+
+    creator_memory_snapshots = creator_memory_sub.add_parser("snapshots", help="Listar snapshots")
+    creator_memory_snapshots.add_argument("--creator-id", required=True)
+    creator_memory_snapshots.add_argument("--json", action="store_true")
+
+    creator_memory_snapshot_create = creator_memory_sub.add_parser("snapshot-create", help="Crear snapshot")
+    creator_memory_snapshot_create.add_argument("--creator-id", required=True)
+    creator_memory_snapshot_create.add_argument("--json", action="store_true")
+
+    creator_memory_snapshot_compare = creator_memory_sub.add_parser("snapshot-compare", help="Comparar snapshots")
+    creator_memory_snapshot_compare.add_argument("--creator-id", required=True)
+    creator_memory_snapshot_compare.add_argument("--base-snapshot-id", required=True)
+    creator_memory_snapshot_compare.add_argument("--compare-snapshot-id", required=True)
+    creator_memory_snapshot_compare.add_argument("--json", action="store_true")
+
+    creator_memory_retrieve = creator_memory_sub.add_parser("retrieve", help="Recuperar contexto")
+    creator_memory_retrieve.add_argument("--creator-id", required=True)
+    creator_memory_retrieve.add_argument("--query")
+    creator_memory_retrieve.add_argument("--platform")
+    creator_memory_retrieve.add_argument("--content-type")
+    creator_memory_retrieve.add_argument("--topic")
+    creator_memory_retrieve.add_argument("--trait-type")
+    creator_memory_retrieve.add_argument("--example-type")
+    creator_memory_retrieve.add_argument("--approval-status")
+    creator_memory_retrieve.add_argument("--confidence-level")
+    creator_memory_retrieve.add_argument("--status")
+    creator_memory_retrieve.add_argument("--json", action="store_true")
+
+    creator_memory_feedback = creator_memory_sub.add_parser("feedback", help="Registrar feedback")
+    creator_memory_feedback.add_argument("--creator-id", required=True)
+    creator_memory_feedback.add_argument("--target-type", required=True)
+    creator_memory_feedback.add_argument("--target-id", required=True)
+    creator_memory_feedback.add_argument("--feedback-type", required=True)
+    creator_memory_feedback.add_argument("--reason", required=True)
+    creator_memory_feedback.add_argument("--corrected-value-json")
+    creator_memory_feedback.add_argument("--json", action="store_true")
 
     acoustic_parser = subparsers.add_parser("acoustic", help="Analisis acustico local")
     acoustic_sub = acoustic_parser.add_subparsers(dest="action", required=True)
@@ -3321,6 +3579,323 @@ def _handle_learnings(args, service: ExperimentService, stdout, stderr) -> int:
     raise ValueError("Accion de learnings no reconocida.")
 
 
+def _handle_creator_memory(args, service: CreatorMemoryService, stdout, stderr) -> int:
+    if args.action == "profile":
+        command = CreatorMemoryProfileCommand(args.creator_id)
+        payload = service.get_profile_detail(command.creator_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "profile-update":
+        command = UpdateCreatorMemoryProfileCommand(args.creator_id)
+        payload = service.update_creator_profile(
+            creator_id=command.creator_id,
+            display_name=args.display_name,
+            summary=args.summary,
+            primary_language=args.primary_language,
+            secondary_languages=args.secondary_languages_json,
+            default_tone=args.default_tone,
+            default_formality=args.default_formality,
+            objectives=args.objectives_json,
+            status=args.status,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "traits":
+        command = ListCreatorTraitsCommand(args.creator_id)
+        payload = [
+            item.to_dict()
+            for item in service.list_traits(
+                command.creator_id,
+                filters={
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "topic": args.topic,
+                    "trait_type": args.trait_type,
+                    "status": args.status,
+                    "confidence_level": args.confidence_level,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "trait-create":
+        command = CreateCreatorTraitCommand(args.creator_id, args.trait_type, args.trait_key, args.display_name)
+        payload = service.create_trait(
+            creator_id=command.creator_id,
+            trait_type=command.trait_type,
+            trait_key=command.trait_key,
+            display_name=command.display_name,
+            description=args.description,
+            value_json=args.value_json,
+            scope=args.scope,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            confidence_level=args.confidence_level,
+            confidence_score=args.confidence_score,
+            status=args.status,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "trait-show":
+        command = ShowCreatorTraitCommand(args.trait_id)
+        payload = service.get_trait(command.trait_id)
+        if payload is None:
+            print("Trait no encontrado.", file=stderr)
+            return 1
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "trait-update":
+        command = UpdateCreatorTraitCommand(args.trait_id)
+        changes = {
+            key: value
+            for key, value in {
+                "trait_type": args.trait_type,
+                "trait_key": args.trait_key,
+                "display_name": args.display_name,
+                "description": args.description,
+                "value_json": args.value_json,
+                "scope": args.scope,
+                "platform": args.platform,
+                "content_type": args.content_type,
+                "topic": args.topic,
+                "confidence_level": args.confidence_level,
+                "confidence_score": args.confidence_score,
+                "status": args.status,
+            }.items()
+            if value is not None
+        }
+        payload = service.update_trait(command.trait_id, **changes)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "trait-evidence-add":
+        command = AddCreatorTraitEvidenceCommand(args.trait_id, args.source_type)
+        payload = service.add_trait_evidence(
+            trait_id=command.trait_id,
+            source_type=command.source_type,
+            source_id=args.source_id,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            transcript_segment_id=args.transcript_segment_id,
+            start_seconds=args.start_seconds,
+            end_seconds=args.end_seconds,
+            quoted_text=args.quoted_text,
+            evidence_type=args.evidence_type,
+            supports_trait=args.supports_trait,
+            weight=args.weight,
+            notes=args.notes,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "examples":
+        command = ListCreatorExamplesCommand(args.creator_id)
+        payload = [
+            item.to_dict()
+            for item in service.list_examples(
+                command.creator_id,
+                filters={
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "topic": args.topic,
+                    "example_type": args.example_type,
+                    "approval_status": args.approval_status,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "example-create":
+        command = CreateCreatorExampleCommand(args.creator_id, args.example_type, args.category, args.title, args.source_type)
+        payload = service.create_example(
+            creator_id=command.creator_id,
+            example_type=command.example_type,
+            category=command.category,
+            title=command.title,
+            source_type=command.source_type,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            text_content=args.text_content,
+            source_id=args.source_id,
+            publication_id=args.publication_id,
+            video_asset_id=args.video_asset_id,
+            start_seconds=args.start_seconds,
+            end_seconds=args.end_seconds,
+            representativeness=args.representativeness,
+            approval_status=args.approval_status,
+            approval_reason=args.approval_reason,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "example-review":
+        command = ReviewCreatorExampleCommand(args.example_id, args.approval_status, reason=args.reason)
+        payload = service.review_example(command.example_id, approval_status=command.approval_status, reason=command.reason)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "vocabulary":
+        command = ListCreatorVocabularyCommand(args.creator_id)
+        payload = [
+            item.to_dict()
+            for item in service.list_vocabulary(
+                command.creator_id,
+                filters={
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "vocabulary_type": args.vocabulary_type,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "vocabulary-add":
+        command = CreateCreatorVocabularyCommand(args.creator_id, args.term, args.vocabulary_type)
+        payload = service.create_vocabulary_entry(
+            creator_id=command.creator_id,
+            term=command.term,
+            vocabulary_type=command.vocabulary_type,
+            meaning=args.meaning,
+            usage_notes=args.usage_notes,
+            platform=args.platform,
+            content_type=args.content_type,
+            confidence_level=args.confidence_level,
+            frequency_count=args.frequency_count,
+            status=args.status,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "rules":
+        command = ListCreatorRulesCommand(args.creator_id)
+        payload = [
+            item.to_dict()
+            for item in service.list_style_rules(
+                command.creator_id,
+                filters={
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "topic": args.topic,
+                    "status": args.status,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "rule-create":
+        command = CreateCreatorRuleCommand(args.creator_id, args.rule_type, args.statement)
+        payload = service.create_style_rule(
+            creator_id=command.creator_id,
+            rule_type=command.rule_type,
+            statement=command.statement,
+            scope=args.scope,
+            rationale=args.rationale,
+            platform=args.platform,
+            content_type=args.content_type,
+            topic=args.topic,
+            confidence_level=args.confidence_level,
+            status=args.status,
+            supporting_example_count=args.supporting_example_count,
+            contradicting_example_count=args.contradicting_example_count,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "rule-review":
+        command = ReviewCreatorRuleCommand(args.rule_id, args.decision, args.reason)
+        payload = service.review_style_rule(
+            command.rule_id,
+            decision=command.decision,
+            reason=command.reason,
+            previous_statement=args.previous_statement,
+            new_statement=args.new_statement,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "limits":
+        command = ListCreatorLimitsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_limits(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "limit-create":
+        command = CreateCreatorLimitCommand(args.creator_id, args.limit_type, args.category, args.statement)
+        payload = service.create_limit(
+            creator_id=command.creator_id,
+            limit_type=command.limit_type,
+            category=command.category,
+            statement=command.statement,
+            severity=args.severity,
+            scope=args.scope,
+            platform=args.platform,
+            status=args.status,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "limit-update":
+        command = UpdateCreatorLimitCommand(args.limit_id, args.creator_id)
+        changes = {
+            key: value
+            for key, value in {
+                "limit_type": args.limit_type,
+                "category": args.category,
+                "statement": args.statement,
+                "severity": args.severity,
+                "scope": args.scope,
+                "platform": args.platform,
+                "status": args.status,
+            }.items()
+            if value is not None
+        }
+        payload = service.update_limit(command.limit_id, creator_id=command.creator_id, **changes)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "snapshots":
+        command = ListCreatorSnapshotsCommand(args.creator_id)
+        payload = [item.to_dict() for item in service.list_profile_snapshots(command.creator_id)]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "snapshot-create":
+        command = CreateCreatorSnapshotCommand(args.creator_id)
+        payload = service.create_profile_snapshot(command.creator_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "snapshot-compare":
+        command = CompareCreatorSnapshotsCommand(args.creator_id, args.base_snapshot_id, args.compare_snapshot_id)
+        payload = service.compare_profile_snapshots(command.creator_id, command.base_snapshot_id, command.compare_snapshot_id)
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "retrieve":
+        command = RetrieveCreatorMemoryCommand(args.creator_id)
+        payload = [
+            item.to_dict()
+            for item in service.retrieve_creator_context(
+                command.creator_id,
+                {
+                    "query": args.query,
+                    "platform": args.platform,
+                    "content_type": args.content_type,
+                    "topic": args.topic,
+                    "trait_type": args.trait_type,
+                    "example_type": args.example_type,
+                    "approval_status": args.approval_status,
+                    "confidence_level": args.confidence_level,
+                    "status": args.status,
+                },
+            )
+        ]
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    if args.action == "feedback":
+        command = RecordCreatorMemoryFeedbackCommand(args.creator_id, args.target_type, args.target_id, args.feedback_type, args.reason)
+        payload = service.record_memory_feedback(
+            creator_id=command.creator_id,
+            target_type=command.target_type,
+            target_id=command.target_id,
+            feedback_type=command.feedback_type,
+            reason=command.reason,
+            corrected_value_json=args.corrected_value_json,
+        )
+        print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        return 0
+    raise ValueError("Accion de creator-memory no reconocida.")
+
+
 def _handle_analytics(args, service: AnalyticsImportService, lab_service: AnalyticsLabService | None, stdout, stderr) -> int:
     if args.action == "platforms":
         command = ListAnalyticsPlatformsCommand()
@@ -3642,6 +4217,7 @@ def dispatch(
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
+    creator_memory_service: CreatorMemoryService | None = None,
     render_service: ClipRenderService | None = None,
     subtitle_service: SubtitleService | None = None,
     personalization_service: PersonalizationDatasetService | None = None,
@@ -3699,6 +4275,10 @@ def dispatch(
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")
             return _handle_learnings(args, experiment_service, stdout, stderr)
+        if args.entity == "creator-memory":
+            if creator_memory_service is None:
+                raise DomainError("El servicio de creator memory no esta disponible.")
+            return _handle_creator_memory(args, creator_memory_service, stdout, stderr)
         if args.entity == "render":
             if render_service is None:
                 raise DomainError("El servicio de render no esta disponible.")

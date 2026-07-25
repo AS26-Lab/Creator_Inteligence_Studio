@@ -2516,6 +2516,232 @@ def migration_17(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_experiment_reports_fingerprint ON experiment_reports(source_fingerprint)")
 
 
+def migration_18(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+            summary TEXT,
+            primary_language TEXT,
+            secondary_languages_json TEXT NOT NULL,
+            default_tone TEXT,
+            default_formality TEXT,
+            objectives_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_traits (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            trait_type TEXT NOT NULL,
+            trait_key TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            value_json TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            confidence_level TEXT NOT NULL,
+            confidence_score REAL,
+            status TEXT NOT NULL,
+            first_observed_at TEXT,
+            last_observed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, trait_key, scope, platform, content_type, topic)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_trait_evidence (
+            id TEXT PRIMARY KEY,
+            trait_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            transcript_segment_id TEXT,
+            start_seconds REAL,
+            end_seconds REAL,
+            quoted_text TEXT,
+            evidence_type TEXT NOT NULL,
+            supports_trait INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (trait_id) REFERENCES creator_traits(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_examples (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            example_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            title TEXT NOT NULL,
+            text_content TEXT,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            start_seconds REAL,
+            end_seconds REAL,
+            representativeness REAL,
+            approval_status TEXT NOT NULL,
+            approval_reason TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_vocabulary (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            term TEXT NOT NULL,
+            normalized_term TEXT NOT NULL,
+            vocabulary_type TEXT NOT NULL,
+            meaning TEXT,
+            usage_notes TEXT,
+            platform TEXT,
+            content_type TEXT,
+            frequency_count INTEGER NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, normalized_term, vocabulary_type, platform, content_type)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_style_rules (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            rule_type TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            statement TEXT NOT NULL,
+            rationale TEXT,
+            status TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            supporting_example_count INTEGER NOT NULL,
+            contradicting_example_count INTEGER NOT NULL,
+            first_observed_at TEXT,
+            last_reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, rule_type, scope, platform, content_type, topic, statement)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_style_rule_reviews (
+            id TEXT PRIMARY KEY,
+            rule_id TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            previous_statement TEXT,
+            new_statement TEXT,
+            reason TEXT NOT NULL,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (rule_id) REFERENCES creator_style_rules(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_limits (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            limit_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            statement TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            platform TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, limit_type, category, scope, platform, statement)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_profile_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (creator_id, profile_version),
+            UNIQUE (creator_id, source_fingerprint)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_memory_feedback (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            feedback_type TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            corrected_value_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_profiles_creator_id ON creator_profiles(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_profiles_status ON creator_profiles(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_traits_creator_id ON creator_traits(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_traits_type ON creator_traits(trait_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_traits_scope ON creator_traits(scope)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_trait_evidence_trait_id ON creator_trait_evidence(trait_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_examples_creator_id ON creator_examples(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_examples_example_type ON creator_examples(example_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_vocabulary_creator_id ON creator_vocabulary(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_vocabulary_normalized_term ON creator_vocabulary(normalized_term)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_style_rules_creator_id ON creator_style_rules(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_style_rule_reviews_rule_id ON creator_style_rule_reviews(rule_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_limits_creator_id ON creator_limits(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_profile_snapshots_creator_id ON creator_profile_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_profile_snapshots_fingerprint ON creator_profile_snapshots(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_memory_feedback_creator_id ON creator_memory_feedback(creator_id)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -2553,6 +2779,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=15, name="analytics_data_foundation"),
     Migration(version=16, name="analytics_lab"),
     Migration(version=17, name="experiments_learning"),
+    Migration(version=18, name="creator_memory"),
 )
 
 
@@ -2624,6 +2851,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_16(connection)
                 elif migration.version == 17:
                     migration_17(connection)
+                elif migration.version == 18:
+                    migration_18(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

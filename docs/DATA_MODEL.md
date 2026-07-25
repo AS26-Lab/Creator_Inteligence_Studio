@@ -605,3 +605,20 @@ La migracion v17 agrega:
 - `experiment_reports`
 
 Estas tablas conservan recomendacion, decision, ejecucion, evaluacion, learning y reporte sin tocar analytics historico ni findings previos.
+
+## Migration v18
+
+La migracion v18 agrega:
+
+- `creator_profiles`
+- `creator_traits`
+- `creator_trait_evidence`
+- `creator_examples`
+- `creator_vocabulary`
+- `creator_style_rules`
+- `creator_style_rule_reviews`
+- `creator_limits`
+- `creator_profile_snapshots`
+- `creator_memory_feedback`
+
+Estas tablas construyen la memoria estructurada del creador con evidencia, contradicciones, revisiones humanas y snapshots versionados sin alterar analytics, experiments ni learning records.

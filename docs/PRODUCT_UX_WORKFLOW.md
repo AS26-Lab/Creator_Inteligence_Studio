@@ -106,3 +106,13 @@ The initial UX preferences are local and reversible:
 
 This flow records observed facts. It does not infer causality, predictions, or recommendations.
 Experiments and Learning adds the next operational loop: recommendation, human decision, real execution, evaluation and structured learning, still without automatic rule promotion or causal claims.
+
+## Creator memory workflow
+
+- abrir perfil del creador;
+- registrar rasgos, vocabulario, ejemplos, limites y objetivos;
+- vincular evidencia estructurada y feedback humano;
+- revisar contradicciones y snapshots de perfil;
+- recuperar contexto relevante sin generar texto nuevo.
+
+This workflow stays local, versioned, and editable. It does not generate scripts, clone voice, or train models.

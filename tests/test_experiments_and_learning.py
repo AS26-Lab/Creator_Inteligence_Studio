@@ -43,7 +43,7 @@ class ExperimentsAndLearningTests(unittest.TestCase):
         )
         return service
 
-    def test_migration_v17_and_experiment_flow(self) -> None:
+    def test_migration_v18_and_experiment_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fixture = make_fixture(Path(temp_dir))
             import_platform_data(fixture, "youtube_longform", longform_rows()[:2], "longform.csv")
@@ -168,7 +168,7 @@ class ExperimentsAndLearningTests(unittest.TestCase):
             with fixture.database.connect() as connection:
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertEqual(versions[-1], 17)
+            self.assertEqual(versions[-1], 18)
             self.assertIn("experiment_definitions", tables)
             self.assertIn("recommendation_records", tables)
             self.assertIn("learning_records", tables)
