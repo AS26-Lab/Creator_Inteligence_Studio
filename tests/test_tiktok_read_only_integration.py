@@ -272,7 +272,7 @@ def make_bundle(root: Path):
 
 
 class TikTokReadOnlyIntegrationTests(unittest.TestCase):
-    def test_validate_desktop_redirect_uri_and_migration_v24(self) -> None:
+    def test_validate_desktop_redirect_uri_and_migration_v25(self) -> None:
         self.assertTrue(validate_desktop_redirect_uri("http://127.0.0.1:8765/callback"))
         self.assertTrue(validate_desktop_redirect_uri("http://localhost:8080/callback"))
         self.assertFalse(validate_desktop_redirect_uri("https://example.com/callback"))
@@ -463,4 +463,3 @@ class TikTokReadOnlyIntegrationTests(unittest.TestCase):
         args = parser.parse_args(["tiktok", "connections", "--creator-id", "creator-a", "--json"])
         self.assertEqual(args.entity, "tiktok")
         self.assertEqual(args.action, "connections")
-

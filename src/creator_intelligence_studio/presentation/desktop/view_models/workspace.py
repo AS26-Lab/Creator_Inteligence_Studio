@@ -87,6 +87,7 @@ from creator_intelligence_studio.application.services.audience_model_service imp
     AudienceModelBuildResult,
     AudienceModelService,
 )
+from creator_intelligence_studio.application.services.platform_integration_service import PlatformIntegrationService
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -322,6 +323,7 @@ class WorkspaceViewModel:
         instagram_service: InstagramIntegrationService | None = None,
         tiktok_service: TikTokIntegrationService | None = None,
         audience_service: AudienceModelService | None = None,
+        platform_service: PlatformIntegrationService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -454,6 +456,7 @@ class WorkspaceViewModel:
         self.instagram_service = instagram_service
         self.tiktok_service = tiktok_service
         self.audience_service = audience_service
+        self.platform_service = platform_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1010,6 +1013,12 @@ class WorkspaceViewModel:
                         payload={"import": import_record.to_dict(), "kind": "analytics_import"},
                     )
                 )
+        if self.platform_service is not None and self.selected_creator_id is not None:
+            try:
+                for task in self.platform_service.build_background_tasks(self.selected_creator_id):
+                    tasks.append(BackgroundTaskRecord.from_dict(task))
+            except Exception:
+                pass
         if self.youtube_service is not None and self.selected_creator_id is not None:
             try:
                 sync_runs = self.youtube_service.list_sync_runs(self.selected_creator_id)

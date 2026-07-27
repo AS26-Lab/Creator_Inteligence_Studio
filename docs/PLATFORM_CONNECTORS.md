@@ -15,6 +15,13 @@
 2. Instagram.
 3. TikTok Read-Only Integration.
 
+## Consolidacion multi-plataforma
+
+La capa comun de consolidacion coordina conexiones, salud, capacidades, disponibilidad de datos,
+sincronizacion, reportes y privacidad sin mezclar semanticas ni reemplazar conectores nativos.
+
+Ver [`docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md`](MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md).
+
 ## YouTube primero
 
 YouTube será la primera plataforma objetivo para:

@@ -135,6 +135,9 @@ class TaskCenterView(QWidget):
     def _is_tiktok_sync_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "tiktok_sync")
 
+    def _is_platform_sync_group_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "platform_sync_group")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -285,6 +288,16 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte de TikTok disponible en: {report}")
             return
+        if self._is_platform_sync_group_task(task):
+            payload = getattr(task, "payload", {})
+            group = payload.get("group") or {}
+            items = payload.get("items") or []
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Grupo consolidado: {group.get('name', task.task_id)} / {group.get('status', task.status)} / items={len(items)}",
+            )
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -321,6 +334,9 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_instagram_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_tiktok_sync_task(task):
             self.workspace.interrupt_tiktok_sync_run(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_platform_sync_group_task(task):
+            if self.workspace.platform_service is not None:
+                self.workspace.platform_service.cancel_sync(task.task_id)
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -496,6 +512,11 @@ class TaskCenterView(QWidget):
             return
         if self._is_tiktok_sync_task(task):
             self.workspace.resume_tiktok_sync_run(task.task_id)
+            self.refresh()
+            return
+        if self._is_platform_sync_group_task(task):
+            if self.workspace.platform_service is not None:
+                self.workspace.platform_service.resume_sync(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

@@ -460,7 +460,7 @@ class InstagramIntegrationTests(unittest.TestCase):
                 run_migrations(connection)
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-                self.assertEqual(versions[-1], 24)
+                self.assertEqual(versions[-1], 25)
                 expected = {
                     "instagram_connections",
                     "instagram_accounts",
@@ -498,7 +498,7 @@ class InstagramIntegrationTests(unittest.TestCase):
                     )
                 run_migrations(connection)
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
-            self.assertEqual(versions[-1], 24)
+            self.assertEqual(versions[-1], 25)
 
     def test_sync_profile_media_insights_history_and_creator_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

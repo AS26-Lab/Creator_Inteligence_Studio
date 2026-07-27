@@ -376,6 +376,7 @@ from creator_intelligence_studio.application.services.instagram_integration_serv
     InstagramIntegrationService,
 )
 from creator_intelligence_studio.application.services.audience_model_service import AudienceModelService
+from creator_intelligence_studio.application.services.platform_integration_service import PlatformIntegrationService
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
 )
@@ -385,6 +386,7 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     VideoInspectionReport,
 )
 from creator_intelligence_studio.domain.errors import DomainError
+from creator_intelligence_studio.presentation.cli.platforms_cli import build_platforms_parser, handle_platforms_command
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.acoustic_analysis.value_objects import AcousticAnalysisStatus
 from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
@@ -428,6 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="entity")
+    build_platforms_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
     creator_sub = creator_parser.add_subparsers(dest="action", required=True)
@@ -5330,6 +5333,7 @@ def dispatch(
     instagram_service: InstagramIntegrationService | None = None,
     tiktok_service=None,
     audience_service: AudienceModelService | None = None,
+    platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
@@ -5393,6 +5397,10 @@ def dispatch(
             if audience_service is None:
                 raise DomainError("El servicio de audiencia no esta disponible.")
             return handle_audience(args, service=audience_service, stdout=stdout, stderr=stderr)
+        if args.entity == "platforms":
+            if platform_service is None:
+                raise DomainError("El servicio de plataformas no esta disponible.")
+            return handle_platforms_command(args, service=platform_service, stdout=stdout, stderr=stderr)
         if args.entity == "analytics":
             if analytics_service is None:
                 raise DomainError("El servicio de analytics no esta disponible.")

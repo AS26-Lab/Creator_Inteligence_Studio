@@ -31,6 +31,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     ClipRankingView,
     CreatorsView,
     DashboardView,
+    IntegrationsOverviewView,
     AnalyticsView,
     AnalyticsLabView,
     AudienceOverviewView,
@@ -69,6 +70,7 @@ class MainWindow(QMainWindow):
 
         self._page_keys = [
             "home",
+            "integrations",
             "creators",
             "projects",
             "videos",
@@ -157,6 +159,7 @@ class MainWindow(QMainWindow):
         self.inspector = InspectorPanel()
         self.inspector.set_compact_mode(True)
         self.dashboard_view = DashboardView(workspace)
+        self.integrations_view = IntegrationsOverviewView(workspace)
         self.creators_view = CreatorsView(workspace, self.inspector)
         self.projects_view = ProjectsView(workspace, self.inspector)
         self.videos_view = VideosView(
@@ -193,6 +196,7 @@ class MainWindow(QMainWindow):
         self.personalization_models_view = PersonalizationModelsView(workspace)
         self.system_view = SystemView(workspace)
         self.stack.addWidget(self.dashboard_view)
+        self.stack.addWidget(self.integrations_view)
         self.stack.addWidget(self.creators_view)
         self.stack.addWidget(self.projects_view)
         self.stack.addWidget(self.videos_view)
@@ -271,6 +275,7 @@ class MainWindow(QMainWindow):
         self.workspace.refresh()
         self._refresh_topbar()
         self.dashboard_view.refresh()
+        self.integrations_view.refresh()
         self.creators_view.refresh()
         self.projects_view.refresh()
         self.videos_view.refresh()
@@ -395,6 +400,8 @@ class MainWindow(QMainWindow):
             self.videos_view.search_edit.setText(text)
             self.videos_view.search_edit.blockSignals(False)
             self.videos_view.refresh()
+        elif current_key == "integrations":
+            self.integrations_view.refresh()
         elif current_key == "multimodal":
             self.multimodal_view.refresh()
         elif current_key == "analytics":

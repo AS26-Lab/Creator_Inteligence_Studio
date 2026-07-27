@@ -4634,6 +4634,265 @@ def migration_24(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_schedules_connection_id ON tiktok_sync_schedules(connection_id)")
 
 
+def migration_25(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_connections (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform TEXT NOT NULL CHECK (platform IN ('youtube', 'instagram', 'tiktok', 'manual_other')),
+            connector_type TEXT NOT NULL CHECK (connector_type IN ('native', 'manual')),
+            native_connection_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'not_configured',
+                    'disconnected',
+                    'connecting',
+                    'connected',
+                    'connected_with_warnings',
+                    'expired',
+                    'revoked',
+                    'insufficient_permissions',
+                    'app_review_required',
+                    'product_approval_required',
+                    'unavailable',
+                    'error',
+                    'unknown'
+                )
+            ),
+            display_name TEXT,
+            account_identifier TEXT,
+            credential_reference TEXT,
+            granted_permissions_json TEXT NOT NULL,
+            capability_snapshot_json TEXT NOT NULL,
+            health_status TEXT NOT NULL CHECK (
+                health_status IN ('healthy', 'healthy_with_warnings', 'degraded', 'action_required', 'disconnected', 'unavailable', 'unknown')
+            ),
+            health_checked_at TEXT,
+            connected_at TEXT,
+            disconnected_at TEXT,
+            native_status TEXT NOT NULL,
+            native_error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_connections_creator_id ON platform_connections(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_connections_platform ON platform_connections(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_connections_status ON platform_connections(status)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_connections_creator_platform_native ON platform_connections(creator_id, platform, native_connection_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_connection_health (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform_connection_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('healthy', 'healthy_with_warnings', 'degraded', 'action_required', 'disconnected', 'unavailable', 'unknown')),
+            severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+            error_code TEXT,
+            message TEXT,
+            details_json TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (platform_connection_id) REFERENCES platform_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_connection_health_creator_id ON platform_connection_health(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_connection_health_platform_connection_id ON platform_connection_health(platform_connection_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_capability_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform_connection_id TEXT NOT NULL,
+            capability_key TEXT NOT NULL,
+            availability_status TEXT NOT NULL CHECK (
+                availability_status IN ('available', 'partially_available', 'unavailable', 'manual_import_only', 'permission_required', 'approval_required', 'unsupported', 'unknown')
+            ),
+            access_level TEXT,
+            permission_required TEXT,
+            limitation_code TEXT,
+            source_version TEXT,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (platform_connection_id) REFERENCES platform_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_capability_snapshots_creator_id ON platform_capability_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_capability_snapshots_platform_connection_id ON platform_capability_snapshots(platform_connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_capability_snapshots_capability_key ON platform_capability_snapshots(capability_key)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_capability_snapshots_connection_capability ON platform_capability_snapshots(platform_connection_id, capability_key)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_data_availability (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform_connection_id TEXT NOT NULL,
+            data_category TEXT NOT NULL CHECK (data_category IN ('profile', 'content', 'public_metrics', 'private_analytics', 'retention', 'traffic_sources', 'audience', 'schedules', 'manual_import')),
+            data_key TEXT NOT NULL,
+            availability_status TEXT NOT NULL CHECK (availability_status IN ('available', 'partially_available', 'unavailable', 'manual_import_only', 'permission_required', 'approval_required', 'unsupported', 'unknown')),
+            source_type TEXT NOT NULL CHECK (source_type IN ('automatic', 'manual', 'native', 'manual_import')),
+            automatic_available INTEGER NOT NULL DEFAULT 0,
+            manual_import_available INTEGER NOT NULL DEFAULT 0,
+            period_semantics TEXT,
+            cumulative_semantics TEXT,
+            limitations_json TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (platform_connection_id) REFERENCES platform_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_data_availability_creator_id ON platform_data_availability(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_data_availability_platform_connection_id ON platform_data_availability(platform_connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_data_availability_category ON platform_data_availability(data_category)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_data_availability_connection_key ON platform_data_availability(platform_connection_id, data_category, data_key)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_sync_groups (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sync_mode TEXT NOT NULL CHECK (sync_mode IN ('sequential', 'limited_parallel', 'platform_ordered')),
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'partially_completed', 'completed', 'completed_with_warnings', 'interrupted', 'cancelled', 'failed')),
+            configuration_json TEXT NOT NULL,
+            platform_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_sync_groups_creator_id ON platform_sync_groups(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_sync_groups_status ON platform_sync_groups(status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_sync_group_items (
+            id TEXT PRIMARY KEY,
+            sync_group_id TEXT NOT NULL,
+            platform TEXT NOT NULL CHECK (platform IN ('youtube', 'instagram', 'tiktok', 'manual_other')),
+            native_connection_id TEXT,
+            native_sync_run_id TEXT,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'completed_with_warnings', 'failed', 'interrupted', 'cancelled', 'skipped')),
+            sequence_order INTEGER NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            warning_codes_json TEXT NOT NULL,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (sync_group_id) REFERENCES platform_sync_groups(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_sync_group_items_sync_group_id ON platform_sync_group_items(sync_group_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_sync_group_items_platform ON platform_sync_group_items(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_sync_group_items_group_platform_order ON platform_sync_group_items(sync_group_id, platform, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_schedule_registry (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform TEXT NOT NULL CHECK (platform IN ('youtube', 'instagram', 'tiktok', 'manual_other')),
+            native_schedule_id TEXT,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            schedule_type TEXT NOT NULL,
+            interval_hours INTEGER,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            coordination_key TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_schedule_registry_creator_id ON platform_schedule_registry(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_schedule_registry_platform ON platform_schedule_registry(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_schedule_registry_platform_schedule ON platform_schedule_registry(creator_id, platform, schedule_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_manual_import_status (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform TEXT NOT NULL CHECK (platform IN ('youtube', 'instagram', 'tiktok', 'manual_other')),
+            data_category TEXT NOT NULL,
+            last_import_at TEXT,
+            last_period_start TEXT,
+            last_period_end TEXT,
+            current_status TEXT NOT NULL,
+            missing_periods_json TEXT NOT NULL,
+            recommended_action TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_manual_import_status_creator_id ON platform_manual_import_status(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_manual_import_status_platform ON platform_manual_import_status(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_manual_import_status_platform_category ON platform_manual_import_status(creator_id, platform, data_category)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_integration_events (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform TEXT NOT NULL CHECK (platform IN ('youtube', 'instagram', 'tiktok', 'manual_other')),
+            platform_connection_id TEXT,
+            event_type TEXT NOT NULL,
+            severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+            message TEXT NOT NULL,
+            details_json TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (platform_connection_id) REFERENCES platform_connections(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_integration_events_creator_id ON platform_integration_events(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_integration_events_platform ON platform_integration_events(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_integration_events_occurred_at ON platform_integration_events(occurred_at)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_reports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            report_type TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            source_fingerprint TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_reports_creator_id ON platform_reports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_platform_reports_report_type ON platform_reports(report_type)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_reports_source_fingerprint ON platform_reports(source_fingerprint)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -4659,6 +4918,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=22, name="audience_model_foundation"),
     Migration(version=23, name="instagram_read_only_integration"),
     Migration(version=24, name="tiktok_read_only_integration"),
+    Migration(version=25, name="multi_platform_integration_consolidation"),
 )
 
 
@@ -4744,6 +5004,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_23(connection)
                 elif migration.version == 24:
                     migration_24(connection)
+                elif migration.version == 25:
+                    migration_25(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

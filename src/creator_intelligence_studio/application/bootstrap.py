@@ -95,6 +95,9 @@ from creator_intelligence_studio.application.services.audience_model_service imp
     AudienceModelService,
     build_audience_model_service,
 )
+from creator_intelligence_studio.application.services.platform_integration_service import (
+    PlatformIntegrationService,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
@@ -175,6 +178,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_tiktok_reposi
 from creator_intelligence_studio.infrastructure.persistence.sqlite_audience_repository import (
     SQLiteAudienceRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_platform_integration_repository import (
+    SQLitePlatformIntegrationRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
 )
@@ -222,6 +228,7 @@ class ServiceContext(BootstrapContext):
     instagram_service: InstagramIntegrationService | None = None
     tiktok_service: TikTokIntegrationService | None = None
     audience_service: AudienceModelService | None = None
+    platform_service: PlatformIntegrationService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -427,6 +434,17 @@ def _load_service_context() -> ServiceContext:
         database=database,
         logger=context.logger,
     )
+    platform_service = PlatformIntegrationService(
+        settings=context.settings,
+        paths=context.paths,
+        database=database,
+        repository=SQLitePlatformIntegrationRepository(database),
+        youtube_service=youtube_service,
+        instagram_service=instagram_service,
+        tiktok_service=tiktok_service,
+        analytics_service=analytics_service,
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -485,6 +503,7 @@ def _load_service_context() -> ServiceContext:
         instagram_service=instagram_service,
         tiktok_service=tiktok_service,
         audience_service=audience_service,
+        platform_service=platform_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -559,10 +578,11 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             visual_service=context.visual_service,
             multimodal_service=context.multimodal_service,
             clip_service=context.clip_service,
-        youtube_service=context.youtube_service,
-        instagram_service=context.instagram_service,
-        tiktok_service=context.tiktok_service,
-        audience_service=context.audience_service,
+            youtube_service=context.youtube_service,
+            instagram_service=context.instagram_service,
+            tiktok_service=context.tiktok_service,
+            audience_service=context.audience_service,
+            platform_service=context.platform_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

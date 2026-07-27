@@ -442,3 +442,7 @@ La fase de Instagram Read-Only Integration ya esta disponible y se documenta en 
 ## TikTok Read-Only Integration
 
 La fase de TikTok Read-Only Integration ya esta disponible y se documenta en [`docs/TIKTOK_READ_ONLY_INTEGRATION.md`](docs/TIKTOK_READ_ONLY_INTEGRATION.md). Implementa Login Kit y Display API en modo solo lectura, con scopes estrictamente permitidos, sin publicaciones, sin uploads, sin scraping y sin Research API.
+
+## Multi-Platform Integration Consolidation
+
+La consolidacion de plataforma ya esta documentada en [`docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md`](docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md).

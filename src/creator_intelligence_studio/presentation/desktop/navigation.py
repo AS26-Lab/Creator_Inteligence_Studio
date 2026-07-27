@@ -20,6 +20,7 @@ def build_navigation_items() -> list[NavigationItem]:
 
     return [
         NavigationItem("home", "Inicio"),
+        NavigationItem("integrations", "Integrations"),
         NavigationItem("creators", "Creadores"),
         NavigationItem("projects", "Proyectos"),
         NavigationItem("videos", "Videos"),

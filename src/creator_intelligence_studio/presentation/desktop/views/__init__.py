@@ -47,6 +47,17 @@ from .tiktok_sync_view import TikTokSyncView
 from .tiktok_videos_view import TikTokVideosView
 from .tiktok_metrics_view import TikTokMetricsView
 from .tiktok_sync_history_view import TikTokSyncHistoryView
+from .integrations_overview_view import (
+    IntegrationsOverviewView,
+    IntegrationConnectionsView,
+    IntegrationSyncCenterView,
+    IntegrationHealthView,
+    IntegrationCapabilitiesView,
+    IntegrationDataAvailabilityView,
+    IntegrationHistoryView,
+    IntegrationPrivacyView,
+    IntegrationOnboardingView,
+)
 from .videos_view import VideosView
 
 __all__ = [
@@ -94,6 +105,15 @@ __all__ = [
     "TikTokVideosView",
     "TikTokMetricsView",
     "TikTokSyncHistoryView",
+    "IntegrationsOverviewView",
+    "IntegrationConnectionsView",
+    "IntegrationSyncCenterView",
+    "IntegrationHealthView",
+    "IntegrationCapabilitiesView",
+    "IntegrationDataAvailabilityView",
+    "IntegrationHistoryView",
+    "IntegrationPrivacyView",
+    "IntegrationOnboardingView",
     "PackagingHistoryView",
     "VideosView",
 ]
