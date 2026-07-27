@@ -77,6 +77,9 @@ from creator_intelligence_studio.application.services.creative_packaging_service
 from creator_intelligence_studio.application.services.youtube_integration_service import (
     YouTubeIntegrationService,
 )
+from creator_intelligence_studio.application.services.instagram_integration_service import (
+    InstagramIntegrationService,
+)
 from creator_intelligence_studio.application.services.audience_model_service import (
     AudienceModelBuildResult,
     AudienceModelService,
@@ -313,6 +316,7 @@ class WorkspaceViewModel:
         creator_language_service: CreatorLanguageService | None = None,
         creative_packaging_service: CreativePackagingService | None = None,
         youtube_service: YouTubeIntegrationService | None = None,
+        instagram_service: InstagramIntegrationService | None = None,
         audience_service: AudienceModelService | None = None,
     ) -> None:
         self.service = service
@@ -443,6 +447,7 @@ class WorkspaceViewModel:
         self.creator_language_service = creator_language_service
         self.creative_packaging_service = creative_packaging_service
         self.youtube_service = youtube_service
+        self.instagram_service = instagram_service
         self.audience_service = audience_service
         self.personalization_service = personalization_service
         self.model_service = model_service
@@ -1024,6 +1029,32 @@ class WorkspaceViewModel:
                         interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
                         completed_at=to_iso_z(run.completed_at),
                         payload={"kind": "youtube_sync", "run": run.to_dict(), "creator_id": run.creator_id, "channel_id": run.channel_id, "sync_type": run.sync_type.value},
+                    )
+                )
+        if self.instagram_service is not None and self.selected_creator_id is not None:
+            try:
+                sync_runs = self.instagram_service.list_sync_runs(self.selected_creator_id)
+            except Exception:
+                sync_runs = []
+            for run in sync_runs:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=run.id,
+                        title="Sincronizacion de Instagram",
+                        status=run.status.value,
+                        stage_name=run.sync_type.value,
+                        video_id=None,
+                        video_title=run.account_id or run.connection_id,
+                        action_id=run.account_id,
+                        progress_percent=100.0 if run.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=run.error_message or run.status.value,
+                        error=run.error_message,
+                        cancellable=run.status.value in {"queued", "authenticating", "verifying_account", "syncing_profile", "syncing_media", "syncing_children", "syncing_account_insights", "syncing_media_insights", "linking_content", "interrupted"},
+                        created_at=to_iso_z(run.created_at),
+                        updated_at=to_iso_z(run.completed_at or run.created_at),
+                        interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(run.completed_at),
+                        payload={"kind": "instagram_sync", "run": run.to_dict(), "creator_id": run.creator_id, "account_id": run.account_id, "sync_type": run.sync_type.value},
                     )
                 )
         if self.analytics_lab_service is not None and self.selected_creator_id is not None:
@@ -2860,6 +2891,116 @@ class WorkspaceViewModel:
             return []
         return self.youtube_service.list_connections(creator_id)
 
+    def list_instagram_connections(self, creator_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_connections(creator_id)
+
+    def show_instagram_connection(self, connection_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.show_connection(connection_id)
+
+    def verify_instagram_connection(self, connection_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.verify_connection(connection_id)
+
+    def disconnect_instagram_connection(self, connection_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.disconnect_connection(connection_id)
+
+    def revoke_instagram_connection(self, connection_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.revoke_connection(connection_id)
+
+    def list_instagram_accounts(self, creator_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_accounts(creator_id)
+
+    def select_instagram_account(self, account_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.select_account(account_id)
+
+    def show_instagram_account(self, account_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.show_account(account_id)
+
+    def sync_instagram_account(self, account_id: str, *, cursor: str | None = None, full_resync: bool = False):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.sync_account(account_id=account_id, cursor=cursor, full_resync=full_resync)
+
+    def sync_instagram_media(self, account_id: str, *, cursor: str | None = None):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.sync_media(account_id=account_id, cursor=cursor)
+
+    def sync_instagram_insights(self, account_id: str, *, remote_media_id: str | None = None, period=None):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.sync_insights(account_id=account_id, remote_media_id=remote_media_id, period=period)
+
+    def sync_instagram_incremental(self, account_id: str, *, cursor: str | None = None):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.sync_incremental(account_id=account_id, cursor=cursor)
+
+    def sync_instagram_repair(self, account_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.sync_repair(account_id=account_id)
+
+    def list_instagram_media(self, account_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_media(account_id)
+
+    def show_instagram_media(self, remote_media_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.show_media(remote_media_id)
+
+    def list_instagram_sync_runs(self, creator_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_sync_runs(creator_id)
+
+    def show_instagram_sync_run(self, run_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.show_sync_run(run_id)
+
+    def list_instagram_sync_items(self, run_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_sync_items(run_id)
+
+    def list_instagram_content_links(self, creator_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_content_links(creator_id)
+
+    def list_instagram_insight_imports(self, creator_id: str, *, account_id: str | None = None):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_insight_imports(creator_id, account_id=account_id)
+
+    def list_instagram_insight_values(self, insight_import_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_insight_values(insight_import_id)
+
+    def list_instagram_rate_limit_usage(self, connection_id: str):
+        if self.instagram_service is None:
+            return []
+        return self.instagram_service.list_rate_limit_usage(connection_id)
+
     def list_youtube_channels(self, creator_id: str):
         if self.youtube_service is None:
             return []
@@ -2919,6 +3060,30 @@ class WorkspaceViewModel:
         if self.youtube_service is None:
             return None
         return self.youtube_service.export_sync_report(run_id, format_name, destination=destination)
+
+    def get_instagram_sync_run(self, run_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.show_sync_run(run_id)
+
+    def interrupt_instagram_sync_run(self, run_id: str, reason: str | None = None):
+        return self.interrupt_background_task(run_id, reason or "Interrumpida desde Task Center")
+
+    def resume_instagram_sync_run(self, run_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.resume_sync(run_id)
+
+    def export_instagram_sync_report(self, run_id: str, format_name: str = "json", *, destination: Path | None = None):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.export_report(run_id, format_name, destination=destination)
+
+    def reveal_instagram_sync_report(self, run_id: str):
+        if self.instagram_service is None:
+            return None
+        report = self.instagram_service.export_report(run_id, "json")
+        return str(report) if report else None
 
     def list_packaging_assets(self, creator_id: str):
         if self.creative_packaging_service is None:

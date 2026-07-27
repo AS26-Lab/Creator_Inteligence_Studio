@@ -128,6 +128,9 @@ class TaskCenterView(QWidget):
     def _is_youtube_sync_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "youtube_sync")
 
+    def _is_instagram_sync_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "instagram_sync")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -264,6 +267,13 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte de YouTube disponible en: {report}")
             return
+        if self._is_instagram_sync_task(task):
+            report = self.workspace.export_instagram_sync_report(task.task_id)
+            if report is None:
+                QMessageBox.information(self, "Task Center", "La sincronizacion no tiene un reporte disponible.")
+            else:
+                QMessageBox.information(self, "Task Center", f"Reporte de Instagram disponible en: {report}")
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -296,6 +306,8 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_youtube_sync_task(task):
             self.workspace.interrupt_youtube_sync_run(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_instagram_sync_task(task):
+            self.workspace.interrupt_instagram_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -463,6 +475,10 @@ class TaskCenterView(QWidget):
             return
         if self._is_youtube_sync_task(task):
             self.workspace.resume_youtube_sync_run(task.task_id)
+            self.refresh()
+            return
+        if self._is_instagram_sync_task(task):
+            self.workspace.resume_instagram_sync_run(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

@@ -61,3 +61,6 @@ No write scope is requested or stored.
 The next phase is Audience Model Foundation.
 
 Audience Model Foundation consumes the read-only channels, videos, thumbnails and metrics from this integration as local evidence only. It does not add any YouTube write operation, does not scrape, and does not infer demographic profiles.
+## Instagram bridge note
+
+Instagram Read-Only Integration is documented separately in [`docs/INSTAGRAM_READ_ONLY_INTEGRATION.md`](INSTAGRAM_READ_ONLY_INTEGRATION.md). It uses the same local-evidence principle but a separate connector, separate storage, and no YouTube write operations.

@@ -83,6 +83,10 @@ from creator_intelligence_studio.application.services.youtube_integration_servic
     YouTubeIntegrationService,
     build_youtube_integration_service,
 )
+from creator_intelligence_studio.application.services.instagram_integration_service import (
+    InstagramIntegrationService,
+    build_instagram_integration_service,
+)
 from creator_intelligence_studio.application.services.audience_model_service import (
     AudienceModelService,
     build_audience_model_service,
@@ -158,6 +162,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_creative_pack
 from creator_intelligence_studio.infrastructure.persistence.sqlite_youtube_repository import (
     SQLiteYouTubeRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_instagram_repository import (
+    SQLiteInstagramRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_audience_repository import (
     SQLiteAudienceRepository,
 )
@@ -205,6 +212,7 @@ class ServiceContext(BootstrapContext):
     creator_language_service: CreatorLanguageService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
+    instagram_service: InstagramIntegrationService | None = None
     audience_service: AudienceModelService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
@@ -385,6 +393,15 @@ def _load_service_context() -> ServiceContext:
         creative_packaging_repository=SQLiteCreativePackagingRepository(database),
         logger=context.logger,
     )
+    instagram_service = build_instagram_integration_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteInstagramRepository(database),
+        database=database,
+        analytics_repository=analytics_repository,
+        creative_packaging_repository=SQLiteCreativePackagingRepository(database),
+        logger=context.logger,
+    )
     audience_service = build_audience_model_service(
         settings=context.settings,
         paths=context.paths,
@@ -448,6 +465,7 @@ def _load_service_context() -> ServiceContext:
         creator_language_service=creator_language_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
+        instagram_service=instagram_service,
         audience_service=audience_service,
         personalization_service=personalization_service,
         model_service=model_service,
@@ -524,6 +542,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             multimodal_service=context.multimodal_service,
             clip_service=context.clip_service,
             youtube_service=context.youtube_service,
+            instagram_service=context.instagram_service,
             audience_service=context.audience_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,

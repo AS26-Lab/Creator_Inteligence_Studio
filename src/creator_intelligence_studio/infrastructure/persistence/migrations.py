@@ -4016,9 +4016,318 @@ def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE analytics_metric_definitions ADD COLUMN applicability_json TEXT NOT NULL DEFAULT '[]'"
         )
-        connection.execute(
-            "UPDATE analytics_metric_definitions SET applicability_json = '[]' WHERE applicability_json IS NULL OR applicability_json = ''"
+    connection.execute(
+        "UPDATE analytics_metric_definitions SET applicability_json = '[]' WHERE applicability_json IS NULL OR applicability_json = ''"
+    )
+
+
+def migration_23(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_connections (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            account_identifier TEXT,
+            professional_account_type TEXT,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'connected', 'verified', 'disconnected', 'revoked', 'error')),
+            granted_scopes_json TEXT NOT NULL,
+            credential_reference TEXT NOT NULL,
+            api_version TEXT NOT NULL,
+            access_level TEXT,
+            app_access_status TEXT NOT NULL CHECK (app_access_status IN ('development_mode', 'live_mode', 'standard_access', 'advanced_access', 'app_review_required', 'business_verification_required', 'tester_account_only', 'unknown')),
+            connected_at TEXT NOT NULL,
+            last_verified_at TEXT,
+            disconnected_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
         )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_accounts (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            instagram_user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            name TEXT,
+            biography TEXT,
+            website TEXT,
+            profile_picture_url TEXT,
+            followers_count INTEGER,
+            follows_count INTEGER,
+            media_count INTEGER,
+            account_type TEXT NOT NULL CHECK (account_type IN ('business', 'creator', 'personal', 'unknown')),
+            selected_for_sync INTEGER NOT NULL DEFAULT 0,
+            last_synced_at TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES instagram_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_remote_media (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            instagram_media_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            packaging_asset_id TEXT,
+            media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'carousel_album', 'reels', 'stories', 'live', 'unknown')),
+            media_product_type TEXT,
+            content_type TEXT NOT NULL CHECK (content_type IN ('instagram_reel', 'instagram_post', 'instagram_video', 'instagram_carousel', 'instagram_story', 'instagram_live', 'instagram_unknown')),
+            caption TEXT,
+            permalink TEXT,
+            media_url TEXT,
+            thumbnail_url TEXT,
+            cover_url TEXT,
+            timestamp TEXT NOT NULL,
+            shortcode TEXT,
+            children_count INTEGER,
+            remote_fingerprint TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            remote_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES instagram_accounts(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_carousel_children (
+            id TEXT PRIMARY KEY,
+            remote_media_id TEXT NOT NULL,
+            instagram_child_id TEXT NOT NULL,
+            child_order INTEGER NOT NULL,
+            media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'carousel_album', 'reels', 'stories', 'live', 'unknown')),
+            media_url TEXT,
+            thumbnail_url TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (remote_media_id) REFERENCES instagram_remote_media(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_caption_versions (
+            id TEXT PRIMARY KEY,
+            remote_media_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            caption_text TEXT,
+            source_fingerprint TEXT NOT NULL,
+            is_current INTEGER NOT NULL DEFAULT 1,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (remote_media_id) REFERENCES instagram_remote_media(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_cover_versions (
+            id TEXT PRIMARY KEY,
+            remote_media_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            cover_url TEXT,
+            thumbnail_url TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            packaging_asset_id TEXT,
+            is_current INTEGER NOT NULL DEFAULT 1,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (remote_media_id) REFERENCES instagram_remote_media(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_sync_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            account_id TEXT,
+            sync_type TEXT NOT NULL CHECK (sync_type IN ('connection_verify', 'account_metadata', 'media_catalog', 'media_metadata', 'carousel_children', 'account_insights', 'media_insights', 'incremental_sync', 'full_resync', 'repair_sync')),
+            status TEXT NOT NULL CHECK (status IN ('queued', 'authenticating', 'verifying_account', 'syncing_profile', 'syncing_media', 'syncing_children', 'syncing_account_insights', 'syncing_media_insights', 'linking_content', 'completed', 'completed_with_warnings', 'interrupted', 'failed', 'cancelled')),
+            configuration_json TEXT NOT NULL,
+            cursor_json TEXT,
+            discovered_count INTEGER NOT NULL DEFAULT 0,
+            imported_count INTEGER NOT NULL DEFAULT 0,
+            updated_count INTEGER NOT NULL DEFAULT 0,
+            unchanged_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            estimated_usage TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES instagram_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES instagram_accounts(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_sync_items (
+            id TEXT PRIMARY KEY,
+            sync_run_id TEXT NOT NULL,
+            remote_type TEXT NOT NULL,
+            remote_id TEXT NOT NULL,
+            local_type TEXT,
+            local_id TEXT,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES instagram_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_insight_imports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            remote_media_id TEXT,
+            sync_run_id TEXT NOT NULL,
+            insight_scope TEXT NOT NULL CHECK (insight_scope IN ('account', 'media')),
+            metric_period TEXT,
+            date_start TEXT,
+            date_end TEXT,
+            comparable_window TEXT,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES instagram_accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_media_id) REFERENCES instagram_remote_media(id) ON DELETE SET NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES instagram_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_insight_values (
+            id TEXT PRIMARY KEY,
+            insight_import_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            raw_metric_name TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT,
+            period TEXT,
+            dimensions_json TEXT NOT NULL,
+            breakdowns_json TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (insight_import_id) REFERENCES instagram_insight_imports(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_content_links (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            remote_media_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            packaging_asset_id TEXT,
+            link_method TEXT NOT NULL CHECK (link_method IN ('exact_instagram_id', 'exact_permalink', 'manual', 'normalized_caption_and_date', 'media_timestamp', 'metadata_match', 'probable_match')),
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_media_id) REFERENCES instagram_remote_media(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_rate_limit_usage (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            operation_key TEXT NOT NULL,
+            estimated_usage TEXT,
+            request_count INTEGER NOT NULL,
+            usage_date TEXT NOT NULL,
+            headers_snapshot_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (connection_id) REFERENCES instagram_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS instagram_sync_schedules (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            account_id TEXT,
+            schedule_type TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            interval_hours INTEGER,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES instagram_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES instagram_accounts(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_connections_creator_id ON instagram_connections(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_connections_provider ON instagram_connections(provider)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_accounts_creator_id ON instagram_accounts(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_accounts_creator_user ON instagram_accounts(creator_id, instagram_user_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_accounts_connection_id ON instagram_accounts(connection_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_remote_media_creator_id ON instagram_remote_media(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_remote_media_creator_remote ON instagram_remote_media(creator_id, instagram_media_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_remote_media_account_id ON instagram_remote_media(account_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_carousel_children_remote_media_id ON instagram_carousel_children(remote_media_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_carousel_children_remote_child ON instagram_carousel_children(remote_media_id, instagram_child_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_caption_versions_remote_version ON instagram_caption_versions(remote_media_id, version_number)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_caption_versions_remote_media_id ON instagram_caption_versions(remote_media_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_cover_versions_remote_version ON instagram_cover_versions(remote_media_id, version_number)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_cover_versions_remote_media_id ON instagram_cover_versions(remote_media_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_runs_creator_id ON instagram_sync_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_runs_connection_id ON instagram_sync_runs(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_sync_items_run_remote_action ON instagram_sync_items(sync_run_id, remote_type, remote_id, action)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_items_sync_run_id ON instagram_sync_items(sync_run_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_insight_imports_source ON instagram_insight_imports(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_insight_imports_creator_id ON instagram_insight_imports(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_insight_values_import_metric_dimension ON instagram_insight_values(insight_import_id, metric_key, dimensions_json, raw_metric_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_insight_values_import_id ON instagram_insight_values(insight_import_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_content_links_creator_remote_publication_video_package ON instagram_content_links(creator_id, remote_media_id, IFNULL(publication_id, ''), IFNULL(video_asset_id, ''), IFNULL(packaging_asset_id, ''))")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_content_links_creator_id ON instagram_content_links(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_rate_limit_usage_connection_operation_date ON instagram_rate_limit_usage(connection_id, operation_key, usage_date)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_rate_limit_usage_connection_id ON instagram_rate_limit_usage(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_instagram_sync_schedules_creator_connection_schedule ON instagram_sync_schedules(creator_id, connection_id, schedule_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_schedules_creator_id ON instagram_sync_schedules(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_schedules_connection_id ON instagram_sync_schedules(connection_id)")
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -4044,6 +4353,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=20, name="creative_packaging"),
     Migration(version=21, name="youtube_read_only_integration"),
     Migration(version=22, name="audience_model_foundation"),
+    Migration(version=23, name="instagram_read_only_integration"),
 )
 
 
@@ -4125,6 +4435,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_21(connection)
                 elif migration.version == 22:
                     migration_22(connection)
+                elif migration.version == 23:
+                    migration_23(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

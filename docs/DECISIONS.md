@@ -77,3 +77,9 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - La fase registra recomendacion, decision humana, ejecucion real, evaluacion y aprendizaje sin convertir correlacion en causalidad.
 - Las evaluaciones y los aprendizajes quedan trazables, revisables y separados de las reglas automaticas.
 - No se promueven reglas automaticamente ni se borra evidencia historica.
+## Instagram read-only decision
+
+- Instagram is integrated only through official read-only login paths for professional accounts.
+- Write scopes, scraping and unofficial APIs are rejected.
+- Tokens stay outside the main SQLite database.
+- Instagram evidence can feed Analytics Lab, Audience Model and Thumbnail Lab, but only as local evidence and never as invented personas.

@@ -350,3 +350,9 @@ flowchart LR
 - review-first workflow for confirm, reject, needs_more_data, edit, merge, split, change_scope and deprecate;
 - export in JSON, TXT and CSV with CSV injection protection;
 - Task Center visibility for build, retry, cancel and open profile.
+### Instagram Integration
+
+- Connection, Account and Sync sections for professional account onboarding and verification;
+- Remote Media, Content Links and Insights for local-only review;
+- Sync History, Rate Limits and Privacy for operational tracing and safe handling of credentials;
+- read-only behavior only, with no publication, deletion or comment/message management.

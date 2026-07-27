@@ -24,6 +24,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("projects", "Proyectos"),
         NavigationItem("videos", "Videos"),
         NavigationItem("youtube", "YouTube"),
+        NavigationItem("instagram", "Instagram"),
         NavigationItem("analytics", "Analytics"),
         NavigationItem("analytics_lab", "Analytics Lab"),
         NavigationItem("experiments", "Experiments"),

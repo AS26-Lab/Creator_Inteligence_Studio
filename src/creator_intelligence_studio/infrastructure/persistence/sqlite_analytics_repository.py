@@ -294,7 +294,7 @@ class SQLiteAnalyticsRepository(AnalyticsRepository):
                     :duration_seconds, :url, :thumbnail_path, :status, :source_type,
                     :source_fingerprint, :dedupe_key, :created_at, :updated_at
                 )
-                ON CONFLICT(dedupe_key) DO UPDATE SET
+                ON CONFLICT(id) DO UPDATE SET
                     channel_id = excluded.channel_id,
                     video_asset_id = excluded.video_asset_id,
                     external_publication_id = excluded.external_publication_id,
@@ -312,7 +312,7 @@ class SQLiteAnalyticsRepository(AnalyticsRepository):
                 """,
                 publication.to_dict() | {"content_type": publication.content_type.value, "source_type": publication.source_type.value},
             )
-            row = connection.execute("SELECT * FROM analytics_publications WHERE dedupe_key = ?", (publication.dedupe_key,)).fetchone()
+            row = connection.execute("SELECT * FROM analytics_publications WHERE id = ?", (publication.id,)).fetchone()
         return _row_to_publication(row)
 
     def list_publications(self, creator_id: str, *, filters: dict[str, object] | None = None) -> list[AnalyticsPublication]:

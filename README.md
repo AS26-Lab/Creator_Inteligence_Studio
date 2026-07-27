@@ -434,3 +434,6 @@ python -m creator_intelligence_studio evaluation export --run-id <run_id> --form
 Los artefactos de evaluacion se guardan en rutas gestionadas por la aplicacion, como `temp/evaluations/`, y no deben subirse al repositorio.
 
 Una evaluacion end-to-end pasada demuestra coherencia tecnica, no calidad comercial ni capacidad predictiva universal.
+## Instagram Read-Only Integration
+
+La fase de Instagram Read-Only Integration ya esta disponible y se documenta en [`docs/INSTAGRAM_READ_ONLY_INTEGRATION.md`](docs/INSTAGRAM_READ_ONLY_INTEGRATION.md). La siguiente fase prevista sigue siendo TikTok Read-Only Integration; no se implementa aqui.

@@ -39,6 +39,7 @@ from .youtube_channels_view import YouTubeChannelsView
 from .youtube_sync_view import YouTubeSyncView
 from .youtube_sync_history_view import YouTubeSyncHistoryView
 from .youtube_integration_view import YouTubeIntegrationView
+from .instagram_integration_view import InstagramIntegrationView
 from .videos_view import VideosView
 
 __all__ = [
@@ -78,6 +79,7 @@ __all__ = [
     "YouTubeSyncView",
     "YouTubeSyncHistoryView",
     "YouTubeIntegrationView",
+    "InstagramIntegrationView",
     "PackagingHistoryView",
     "VideosView",
 ]

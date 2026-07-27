@@ -385,3 +385,10 @@ Reglas:
 - `infrastructure/experiments`: calculo de confianza, deteccion de contradicciones, evaluacion, matching de outcomes y builder de reportes.
 - `infrastructure/persistence/sqlite_experiment_repository.py`: persistencia SQLite de experimentos, assignments, evaluaciones, aprendizajes y reportes.
 - `presentation/desktop/views/experiments_view.py` y `presentation/desktop/views/learning_memory_view.py`: interfaz operativa para la fase.
+## Instagram read-only architecture
+
+- `domain/instagram_integration` owns the read-only types, errors, entities and repository interfaces.
+- `application/services/instagram_integration_service.py` coordinates OAuth verification, account import, media sync, insights sync, content linking, snapshots and exports.
+- `infrastructure/instagram` holds OAuth, API, pagination, retry, rate-limit and mapping adapters.
+- `infrastructure/persistence/sqlite_instagram_repository.py` stores creator-scoped Instagram state in SQLite.
+- `presentation/cli/instagram_cli.py` and `presentation/desktop/views/instagram_integration_view.py` expose the feature without exposing tokens or write operations.

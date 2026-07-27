@@ -114,3 +114,6 @@ Synthetic coverage uses two creators:
 ## Next phase
 
 The next phase is Instagram Read-Only Integration.
+## Instagram Read-Only Integration
+
+Instagram Read-Only Integration now contributes additional local evidence for the same behavioral model. The audience layer remains aggregated and creator-scoped: it consumes Instagram account/media snapshots, captions, covers, insights and links as evidence only, not as personas or demographics.

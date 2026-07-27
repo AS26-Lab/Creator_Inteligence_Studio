@@ -40,6 +40,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         creator_language_service=context.creator_language_service,
         creative_packaging_service=context.creative_packaging_service,
         youtube_service=context.youtube_service,
+        instagram_service=context.instagram_service,
         personalization_service=context.personalization_service,
         model_service=context.model_service,
         evaluation_service=context.evaluation_service,

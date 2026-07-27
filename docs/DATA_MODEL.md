@@ -683,3 +683,6 @@ La migracion v22 agrega el modelo local de audiencia:
 - `audience_model_runs`
 
 Estas tablas conservan señales agregadas, segmentos observables, afinidades, journeys, revision humana, snapshots y corridas versionadas por creador, sin PII, sin sobrescribir datos de YouTube y sin alterar Analytics Lab.
+## Instagram Read-Only Integration
+
+The Instagram read-only phase adds creator-scoped tables for connections, accounts, remote media, carousel children, caption versions, cover versions, sync runs, sync items, insight imports, insight values, content links, rate limit usage and sync schedules. These tables preserve history, keep tokens out of the main SQLite database and do not overwrite YouTube or manual import data.

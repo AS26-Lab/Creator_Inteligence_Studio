@@ -31,3 +31,6 @@ Cuando YouTube Read-Only Integration esta activa, los imports remotos y los snap
 Thumbnail Lab and Titles Foundation uses these historical metrics, cohorts, and percentiles to judge whether a title or thumbnail is aligned with the creator's real performance history.
 
 Audience Model Foundation reusa esos mismos insumos como señales agregadas para acquisition, consumption, conversion, loyalty, engagement, affinities y contradictions, siempre con lenguaje de evidencia y no de personas individuales.
+## Instagram Read-Only Integration
+
+Instagram Read-Only Integration feeds Analytics Lab only through imported local snapshots and official insights. It does not add write operations, scraping, inferred demographics or metric equivalence across platforms.

@@ -231,6 +231,10 @@ from creator_intelligence_studio.presentation.cli.audience_cli import (
     build_audience_parser,
     handle_audience,
 )
+from creator_intelligence_studio.presentation.cli.instagram_cli import (
+    build_instagram_parser,
+    handle_instagram,
+)
 from creator_intelligence_studio.application.commands.experiment_commands import (
     AddExperimentGuardrailCommand,
     AddExperimentVariableCommand,
@@ -363,6 +367,9 @@ from creator_intelligence_studio.application.services.creative_packaging_service
 )
 from creator_intelligence_studio.application.services.youtube_integration_service import (
     YouTubeIntegrationService,
+)
+from creator_intelligence_studio.application.services.instagram_integration_service import (
+    InstagramIntegrationService,
 )
 from creator_intelligence_studio.application.services.audience_model_service import AudienceModelService
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
@@ -606,6 +613,7 @@ def build_parser() -> argparse.ArgumentParser:
     audio_clear.add_argument("--json", action="store_true")
 
     build_audience_parser(subparsers)
+    build_instagram_parser(subparsers)
 
     transcription_parser = subparsers.add_parser("transcription", help="Gestion de transcripcion local")
     transcription_sub = transcription_parser.add_subparsers(dest="action", required=True)
@@ -5314,6 +5322,7 @@ def dispatch(
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
     youtube_service: YouTubeIntegrationService | None = None,
+    instagram_service: InstagramIntegrationService | None = None,
     audience_service: AudienceModelService | None = None,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
@@ -5366,6 +5375,10 @@ def dispatch(
             if youtube_service is None:
                 raise DomainError("El servicio de youtube no esta disponible.")
             return _handle_youtube(args, youtube_service, stdout, stderr)
+        if args.entity == "instagram":
+            if instagram_service is None:
+                raise DomainError("El servicio de instagram no esta disponible.")
+            return handle_instagram(args, service=instagram_service, stdout=stdout, stderr=stderr)
         if args.entity == "audience":
             if audience_service is None:
                 raise DomainError("El servicio de audiencia no esta disponible.")

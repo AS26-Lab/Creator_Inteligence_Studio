@@ -46,6 +46,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     SubtitleEditorView,
     TaskCenterView,
     ThumbnailLabView,
+    InstagramIntegrationView,
     YouTubeIntegrationView,
     WorkflowView,
     VisualAnalysisView,
@@ -71,6 +72,7 @@ class MainWindow(QMainWindow):
             "projects",
             "videos",
             "youtube",
+            "instagram",
             "analytics",
             "audience",
             "analytics_lab",
@@ -173,6 +175,7 @@ class MainWindow(QMainWindow):
         self.creator_language_view = CreatorLanguageView(workspace)
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
         self.youtube_view = YouTubeIntegrationView(workspace)
+        self.instagram_view = InstagramIntegrationView(workspace)
         self.workflow_view = WorkflowView(workspace)
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
@@ -191,6 +194,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.projects_view)
         self.stack.addWidget(self.videos_view)
         self.stack.addWidget(self.youtube_view)
+        self.stack.addWidget(self.instagram_view)
         self.stack.addWidget(self.analytics_view)
         self.stack.addWidget(self.audience_view)
         self.stack.addWidget(self.analytics_lab_view)
@@ -403,6 +407,8 @@ class MainWindow(QMainWindow):
             self.thumbnail_lab_view.refresh()
         elif current_key == "youtube":
             self.youtube_view.refresh()
+        elif current_key == "instagram":
+            self.instagram_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "subtitles":
