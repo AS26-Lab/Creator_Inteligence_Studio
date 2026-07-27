@@ -109,6 +109,11 @@ flowchart TD
 - `infrastructure/youtube/` centraliza el cliente OAuth, el almacenamiento seguro de credenciales, los clientes oficiales de YouTube y la gestion de cuota y reintentos.
 - `presentation/desktop/views/onboarding_view.py` ofrece una guia breve reabrible.
 - `presentation/desktop/views/preferences_dialog.py` permite configurar rutas y preferencias de UX sin mover datos automaticamente.
+- `application/services/audience_model_service.py` coordina el modelo de audiencia local, versionado y revisable.
+- `infrastructure/audience_model/` centraliza normalizacion, segmentacion, affinities, journeys, contradicciones, evidencias y perfiles.
+- `infrastructure/persistence/sqlite_audience_repository.py` persiste perfiles, señales, segmentos, affinities, journeys, reviews y model runs en SQLite.
+- `presentation/desktop/views/audience_overview_view.py` expone el area de audiencia con overview, signals, segments, affinities, journeys, roles, contradictions y history.
+- `presentation/cli/audience_cli.py` expone comandos de perfil, señales, segmentos, affinities, journeys, roles, reviews y export.
 
 ## Jobs
 
@@ -126,6 +131,7 @@ flowchart TD
 - inspeccion tecnica local de medios;
 - preparacion tecnica local de audio;
 - entrenamiento o evaluacion local cuando aplique.
+- modelado de audiencia local y revisable.
 
 ### Reglas para jobs
 

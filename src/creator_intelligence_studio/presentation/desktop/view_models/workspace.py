@@ -77,6 +77,10 @@ from creator_intelligence_studio.application.services.creative_packaging_service
 from creator_intelligence_studio.application.services.youtube_integration_service import (
     YouTubeIntegrationService,
 )
+from creator_intelligence_studio.application.services.audience_model_service import (
+    AudienceModelBuildResult,
+    AudienceModelService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -309,6 +313,7 @@ class WorkspaceViewModel:
         creator_language_service: CreatorLanguageService | None = None,
         creative_packaging_service: CreativePackagingService | None = None,
         youtube_service: YouTubeIntegrationService | None = None,
+        audience_service: AudienceModelService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -438,6 +443,7 @@ class WorkspaceViewModel:
         self.creator_language_service = creator_language_service
         self.creative_packaging_service = creative_packaging_service
         self.youtube_service = youtube_service
+        self.audience_service = audience_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -3475,3 +3481,125 @@ class WorkspaceViewModel:
         if self.evaluation_service is None:
             raise RuntimeError("El servicio de evaluacion operativa no esta disponible.")
         return self.evaluation_service.clean(run_id, dry_run=dry_run)
+
+    def build_audience_model(self, creator_id: str, *, force: bool = False, configuration: dict[str, object] | None = None) -> AudienceModelBuildResult:
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        task = self.register_background_task(
+            title="Modelo de audiencia",
+            status="running",
+            stage_name="building_profile",
+            video_title=creator_id,
+            action_id="build",
+            progress_percent=10.0,
+            message="Construyendo modelo de audiencia",
+            cancellable=True,
+            payload={"kind": "audience_model_build", "creator_id": creator_id, "force": force, "configuration": dict(configuration or {})},
+        )
+        try:
+            result = self.audience_service.build_profile(creator_id, force=force, configuration=configuration)
+        except Exception:
+            self.fail_background_task(task.task_id, "Construccion del modelo de audiencia fallida")
+            raise
+        self.complete_background_task(task.task_id, "Construccion del modelo de audiencia completada")
+        return result
+
+    def list_audience_profiles(self, creator_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_profiles(creator_id)
+
+    def get_audience_profile(self, creator_id: str, profile_version: int | None = None):
+        if self.audience_service is None:
+            return None
+        return self.audience_service.get_profile(creator_id, profile_version=profile_version)
+
+    def list_audience_profile_history(self, creator_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.get_profile_history(creator_id)
+
+    def compare_audience_profiles(self, creator_id: str, base_version: int, compare_version: int):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.compare_profiles(creator_id, base_version, compare_version)
+
+    def list_audience_signals(self, creator_id: str, platform: str | None = None):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_signals(creator_id, platform=platform)
+
+    def get_audience_signal(self, signal_id: str):
+        if self.audience_service is None:
+            return None
+        return self.audience_service.get_signal(signal_id)
+
+    def list_audience_segments(self, creator_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_segments(creator_id)
+
+    def create_audience_segment(self, **kwargs):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.create_segment(**kwargs)
+
+    def get_audience_segment(self, segment_id: str):
+        if self.audience_service is None:
+            return None
+        return self.audience_service.get_segment(segment_id)
+
+    def review_audience_segment(self, *args, **kwargs):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.review_segment(*args, **kwargs)
+
+    def archive_audience_segment(self, segment_id: str):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.archive_segment(segment_id)
+
+    def list_audience_affinities(self, creator_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_affinities(creator_id)
+
+    def get_audience_affinity(self, affinity_id: str):
+        if self.audience_service is None:
+            return None
+        return self.audience_service.get_affinity(affinity_id)
+
+    def list_audience_journeys(self, creator_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_journeys(creator_id)
+
+    def get_audience_journey(self, journey_id: str):
+        if self.audience_service is None:
+            return None
+        return self.audience_service.get_journey(journey_id)
+
+    def review_audience_journey(self, *args, **kwargs):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.review_journey(*args, **kwargs)
+
+    def list_audience_platform_roles(self, creator_id: str):
+        if self.audience_service is None:
+            return {}
+        return self.audience_service.list_platform_roles(creator_id)
+
+    def list_audience_content_roles(self, creator_id: str):
+        if self.audience_service is None:
+            return {}
+        return self.audience_service.list_content_roles(creator_id)
+
+    def list_audience_journey_steps(self, journey_id: str):
+        if self.audience_service is None:
+            return []
+        return self.audience_service.list_journey_steps(journey_id)
+
+    def export_audience(self, creator_id: str, format_name: str):
+        if self.audience_service is None:
+            raise RuntimeError("El servicio de audiencia no esta disponible.")
+        return self.audience_service.export(creator_id, format_name)

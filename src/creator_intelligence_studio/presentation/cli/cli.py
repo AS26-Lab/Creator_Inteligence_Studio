@@ -227,6 +227,10 @@ from creator_intelligence_studio.application.commands.analytics_lab_commands imp
     ShowAnalyticsFindingCommand,
     ShowAnalyticsReportCommand,
 )
+from creator_intelligence_studio.presentation.cli.audience_cli import (
+    build_audience_parser,
+    handle_audience,
+)
 from creator_intelligence_studio.application.commands.experiment_commands import (
     AddExperimentGuardrailCommand,
     AddExperimentVariableCommand,
@@ -360,6 +364,7 @@ from creator_intelligence_studio.application.services.creative_packaging_service
 from creator_intelligence_studio.application.services.youtube_integration_service import (
     YouTubeIntegrationService,
 )
+from creator_intelligence_studio.application.services.audience_model_service import AudienceModelService
 from creator_intelligence_studio.domain.operational_evaluation.value_objects import (
     OperationalEvaluationRunStatus,
 )
@@ -599,6 +604,8 @@ def build_parser() -> argparse.ArgumentParser:
     audio_clear = audio_sub.add_parser("clear-cache", help="Limpiar caché de audio")
     audio_clear.add_argument("--video-id", required=True)
     audio_clear.add_argument("--json", action="store_true")
+
+    build_audience_parser(subparsers)
 
     transcription_parser = subparsers.add_parser("transcription", help="Gestion de transcripcion local")
     transcription_sub = transcription_parser.add_subparsers(dest="action", required=True)
@@ -5307,6 +5314,7 @@ def dispatch(
     multimodal_service: MultimodalAnalysisService,
     clip_service: ClipRankingService,
     youtube_service: YouTubeIntegrationService | None = None,
+    audience_service: AudienceModelService | None = None,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
@@ -5358,6 +5366,10 @@ def dispatch(
             if youtube_service is None:
                 raise DomainError("El servicio de youtube no esta disponible.")
             return _handle_youtube(args, youtube_service, stdout, stderr)
+        if args.entity == "audience":
+            if audience_service is None:
+                raise DomainError("El servicio de audiencia no esta disponible.")
+            return handle_audience(args, service=audience_service, stdout=stdout, stderr=stderr)
         if args.entity == "analytics":
             if analytics_service is None:
                 raise DomainError("El servicio de analytics no esta disponible.")

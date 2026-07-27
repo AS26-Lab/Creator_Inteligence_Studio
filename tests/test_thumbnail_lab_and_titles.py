@@ -91,7 +91,7 @@ class ThumbnailLabAndTitlesTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
-            self.assertEqual(versions[-1], 21)
+            self.assertEqual(versions[-1], 22)
             self.assertIn("packaging_assets", tables)
             self.assertIn("title_versions", tables)
             self.assertIn("thumbnail_versions", tables)

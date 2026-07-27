@@ -3756,6 +3756,252 @@ def migration_21(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_youtube_sync_schedules_channel_id ON youtube_sync_schedules(channel_id)")
 
 
+def migration_22(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'reviewed', 'archived')),
+            summary TEXT NOT NULL,
+            evidence_quality TEXT NOT NULL,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high', 'very_high')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_signals (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            channel_id TEXT,
+            publication_id TEXT,
+            remote_video_id TEXT,
+            signal_type TEXT NOT NULL CHECK (signal_type IN ('acquisition', 'consumption', 'engagement', 'conversion', 'loyalty', 'affinity', 'geography', 'device', 'subscription_status', 'traffic_source', 'returning_behavior', 'cross_content_flow', 'data_quality')),
+            signal_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT,
+            period_start TEXT,
+            period_end TEXT,
+            observed_at TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            dimensions_json TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES youtube_channels(id) ON DELETE SET NULL,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (remote_video_id) REFERENCES youtube_remote_videos(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_segments (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            segment_type TEXT NOT NULL CHECK (segment_type IN ('system_defined', 'creator_defined', 'evidence_suggested')),
+            description TEXT NOT NULL,
+            scope TEXT NOT NULL CHECK (scope IN ('creator', 'platform', 'content', 'topic', 'format', 'journey', 'cohort', 'unknown')),
+            platform TEXT,
+            content_type TEXT,
+            topic TEXT,
+            lifecycle_stage TEXT,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'reviewed', 'archived')),
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high', 'very_high')),
+            confidence_score REAL,
+            supporting_signal_count INTEGER NOT NULL DEFAULT 0,
+            contradicting_signal_count INTEGER NOT NULL DEFAULT 0,
+            first_observed_at TEXT,
+            last_observed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_segment_definitions (
+            id TEXT PRIMARY KEY,
+            segment_id TEXT NOT NULL,
+            rule_type TEXT NOT NULL,
+            field_key TEXT NOT NULL,
+            operator TEXT NOT NULL,
+            value_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (segment_id) REFERENCES audience_segments(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_segment_evidence (
+            id TEXT PRIMARY KEY,
+            segment_id TEXT NOT NULL,
+            signal_id TEXT,
+            publication_id TEXT,
+            analytics_finding_id TEXT,
+            experiment_id TEXT,
+            evidence_type TEXT NOT NULL CHECK (evidence_type IN ('metric', 'publication', 'analytics_finding', 'experiment', 'snapshot', 'review', 'quality', 'contradiction', 'inference', 'hypothesis')),
+            supports_segment INTEGER NOT NULL DEFAULT 1,
+            weight REAL NOT NULL DEFAULT 1.0,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (segment_id) REFERENCES audience_segments(id) ON DELETE CASCADE,
+            FOREIGN KEY (signal_id) REFERENCES audience_signals(id) ON DELETE SET NULL,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (analytics_finding_id) REFERENCES analytics_findings(id) ON DELETE SET NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_affinities (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            segment_id TEXT,
+            affinity_type TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            target_value TEXT NOT NULL,
+            platform TEXT,
+            content_type TEXT,
+            score REAL,
+            supporting_example_count INTEGER NOT NULL DEFAULT 0,
+            contradicting_example_count INTEGER NOT NULL DEFAULT 0,
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high', 'very_high')),
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'reviewed', 'archived')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (segment_id) REFERENCES audience_segments(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_journeys (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            entry_platform TEXT,
+            entry_source TEXT,
+            entry_content_type TEXT,
+            next_step_type TEXT,
+            conversion_type TEXT,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'reviewed', 'archived')),
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('very_low', 'low', 'medium', 'high', 'very_high')),
+            evidence_json TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_journey_steps (
+            id TEXT PRIMARY KEY,
+            journey_id TEXT NOT NULL,
+            step_order INTEGER NOT NULL,
+            platform TEXT NOT NULL,
+            content_type TEXT,
+            action_type TEXT NOT NULL,
+            metric_key TEXT,
+            observed_value REAL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (journey_id) REFERENCES audience_journeys(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_profile_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_version INTEGER NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'reviewed', 'archived')),
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            decision TEXT NOT NULL CHECK (decision IN ('confirm', 'reject', 'needs_more_data', 'edit', 'merge', 'split', 'change_scope', 'deprecate')),
+            previous_value_json TEXT,
+            new_value_json TEXT,
+            reason TEXT NOT NULL,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audience_model_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'collecting_signals', 'normalizing', 'building_segments', 'building_affinities', 'building_journeys', 'building_profile', 'completed', 'completed_with_warnings', 'interrupted', 'failed', 'cancelled')),
+            configuration_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            signal_count INTEGER NOT NULL DEFAULT 0,
+            segment_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_profiles_creator_id ON audience_profiles(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_audience_profiles_creator_version ON audience_profiles(creator_id, profile_version)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_profiles_creator_version ON audience_profiles(creator_id, profile_version)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_signals_creator_id ON audience_signals(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_signals_platform ON audience_signals(platform)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_signals_publication_id ON audience_signals(publication_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_signals_creator_platform_key ON audience_signals(creator_id, platform, signal_type, signal_key, publication_id, remote_video_id, observed_at, source_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_segments_creator_id ON audience_segments(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_segments_scope ON audience_segments(creator_id, name, scope, platform, content_type, topic, lifecycle_stage)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_segment_definitions_segment_id ON audience_segment_definitions(segment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_segment_evidence_segment_id ON audience_segment_evidence(segment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_affinities_creator_id ON audience_affinities(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_affinities_target ON audience_affinities(creator_id, affinity_type, target_key, target_value, platform, content_type, segment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_journeys_creator_id ON audience_journeys(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_journeys_target ON audience_journeys(creator_id, name, entry_platform, entry_source, entry_content_type, next_step_type, conversion_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_journey_steps_journey_id ON audience_journey_steps(journey_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_journey_steps_order ON audience_journey_steps(journey_id, step_order, platform, action_type, metric_key)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_profile_snapshots_creator_id ON audience_profile_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_profile_snapshots_version_source ON audience_profile_snapshots(creator_id, profile_version, source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_reviews_creator_id ON audience_reviews(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_reviews_target ON audience_reviews(target_type, target_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_model_runs_creator_id ON audience_model_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_audience_model_runs_fingerprint ON audience_model_runs(creator_id, source_fingerprint, configuration_json)")
+
+
 def _ensure_analytics_v15_compatibility(connection: sqlite3.Connection) -> None:
     table_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analytics_metric_definitions'"
@@ -3797,6 +4043,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=19, name="creator_language"),
     Migration(version=20, name="creative_packaging"),
     Migration(version=21, name="youtube_read_only_integration"),
+    Migration(version=22, name="audience_model_foundation"),
 )
 
 
@@ -3876,6 +4123,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_20(connection)
                 elif migration.version == 21:
                     migration_21(connection)
+                elif migration.version == 22:
+                    migration_22(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

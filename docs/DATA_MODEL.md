@@ -665,3 +665,21 @@ La migracion v19 agrega:
 - `creator_language_profile_snapshots`
 
 Estas tablas conservan corpus seleccionados, fuentes con `text_snapshot`, corridas deterministas, metricas heuristicas, patrones narrativos, evidencia, candidatos revisables y snapshots versionados sin alterar transcripciones, creator memory ni analytics previos.
+
+## Migration v22
+
+La migracion v22 agrega el modelo local de audiencia:
+
+- `audience_profiles`
+- `audience_signals`
+- `audience_segments`
+- `audience_segment_definitions`
+- `audience_segment_evidence`
+- `audience_affinities`
+- `audience_journeys`
+- `audience_journey_steps`
+- `audience_profile_snapshots`
+- `audience_reviews`
+- `audience_model_runs`
+
+Estas tablas conservan señales agregadas, segmentos observables, afinidades, journeys, revision humana, snapshots y corridas versionadas por creador, sin PII, sin sobrescribir datos de YouTube y sin alterar Analytics Lab.

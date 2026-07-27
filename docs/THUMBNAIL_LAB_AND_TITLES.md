@@ -50,3 +50,5 @@ Thumbnail Lab and Titles Foundation adds a local, deterministic layer for evalua
 
 The next phase is read-only YouTube integration, which will use packaging history and performance data but will not add publishing or editing automation.
 See [`docs/YOUTUBE_READ_ONLY_INTEGRATION.md`](YOUTUBE_READ_ONLY_INTEGRATION.md) for the read-only channel, video, title, thumbnail and analytics sync layer.
+
+Audience Model Foundation later consumes the same publication history and packaging performance as aggregate evidence for platform roles, content roles and affinities, without generating images or packaging suggestions automatically.

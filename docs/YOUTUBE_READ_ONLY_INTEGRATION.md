@@ -59,3 +59,5 @@ No write scope is requested or stored.
 ## Next phase
 
 The next phase is Audience Model Foundation.
+
+Audience Model Foundation consumes the read-only channels, videos, thumbnails and metrics from this integration as local evidence only. It does not add any YouTube write operation, does not scrape, and does not infer demographic profiles.

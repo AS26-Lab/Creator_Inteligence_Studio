@@ -33,6 +33,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     DashboardView,
     AnalyticsView,
     AnalyticsLabView,
+    AudienceOverviewView,
     ExperimentsView,
     CreatorMemoryView,
     CreatorLanguageView,
@@ -71,6 +72,7 @@ class MainWindow(QMainWindow):
             "videos",
             "youtube",
             "analytics",
+            "audience",
             "analytics_lab",
             "experiments",
             "creator_memory",
@@ -164,6 +166,7 @@ class MainWindow(QMainWindow):
             open_workflow_callback=lambda: self.show_page("workflow"),
         )
         self.analytics_view = AnalyticsView(workspace)
+        self.audience_view = AudienceOverviewView(workspace)
         self.analytics_lab_view = AnalyticsLabView(workspace)
         self.experiments_view = ExperimentsView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
@@ -189,6 +192,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.videos_view)
         self.stack.addWidget(self.youtube_view)
         self.stack.addWidget(self.analytics_view)
+        self.stack.addWidget(self.audience_view)
         self.stack.addWidget(self.analytics_lab_view)
         self.stack.addWidget(self.experiments_view)
         self.stack.addWidget(self.creator_memory_view)
@@ -263,6 +267,7 @@ class MainWindow(QMainWindow):
         self.projects_view.refresh()
         self.videos_view.refresh()
         self.analytics_view.refresh()
+        self.audience_view.refresh()
         self.analytics_lab_view.refresh()
         self.experiments_view.refresh()
         self.creator_memory_view.refresh()
@@ -384,6 +389,8 @@ class MainWindow(QMainWindow):
             self.multimodal_view.refresh()
         elif current_key == "analytics":
             self.analytics_view.refresh()
+        elif current_key == "audience":
+            self.audience_view.refresh()
         elif current_key == "analytics_lab":
             self.analytics_lab_view.refresh()
         elif current_key == "experiments":

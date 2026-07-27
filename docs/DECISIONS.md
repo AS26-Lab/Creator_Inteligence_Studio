@@ -64,6 +64,14 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - refinamiento futuro de candidatos multimodales cuando exista una segunda fase de clips o edicion.
 - refinamiento futuro de datos de personalizacion cuando exista una fase explicita de entrenamiento por creador.
 - estrategia futura de personalizacion mas avanzada por creador.
+
+## 2026-07-27 - Audience model is behavioral, not demographic
+
+- Audience Model Foundation tracks observed signals, not invented personas.
+- Demographic or psychological claims stay out unless an explicit valid source exists.
+- Traffic source and platform semantics remain separate from audience identity.
+- Trend Radar, scraping, external research, LLM generation and ML are excluded from this phase.
+
 ## Experiments and Verifiable Learning
 
 - La fase registra recomendacion, decision humana, ejecucion real, evaluacion y aprendizaje sin convertir correlacion en causalidad.

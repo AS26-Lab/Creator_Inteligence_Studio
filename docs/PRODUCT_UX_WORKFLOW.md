@@ -147,3 +147,13 @@ This workflow stays local, deterministic, and human-reviewed. It does not genera
 - recuperar contexto relevante sin generar texto nuevo.
 
 This workflow stays local, versioned, and editable. It does not generate scripts, clone voice, or train models.
+
+## Audience model workflow
+
+- seleccionar creador;
+- revisar señales agregadas, segmentos, affinities, journeys y roles por plataforma o contenido;
+- abrir history y snapshots para comparar cambios temporales;
+- revisar contradictions y marcar decisiones humanas;
+- exportar solo cuando el usuario lo solicita.
+
+This workflow stays local and review-first. It does not invent demographic profiles, does not perform automatic publication, and does not use Trend Radar or external research.

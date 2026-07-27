@@ -8,6 +8,11 @@ from .clip_ranking_view import ClipRankingView
 from .dashboard_view import DashboardView
 from .analytics_view import AnalyticsView
 from .analytics_lab_view import AnalyticsLabView
+from .audience_overview_view import AudienceOverviewView
+from .audience_segments_view import AudienceSegmentsView
+from .audience_journeys_view import AudienceJourneysView
+from .audience_affinity_view import AudienceAffinityView
+from .audience_history_view import AudienceHistoryView
 from .experiments_view import ExperimentsView
 from .creator_memory_view import CreatorMemoryView
 from .creator_profile_view import CreatorProfileView
@@ -42,6 +47,11 @@ __all__ = [
     "AnalyticsView",
     "ClipRankingView",
     "DashboardView",
+    "AudienceOverviewView",
+    "AudienceSegmentsView",
+    "AudienceJourneysView",
+    "AudienceAffinityView",
+    "AudienceHistoryView",
     "ExperimentsView",
     "MultimodalAnalysisView",
     "AnalyticsLabView",

@@ -122,6 +122,9 @@ class TaskCenterView(QWidget):
     def _is_packaging_export_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "packaging_export")
 
+    def _is_audience_model_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "audience_model_build")
+
     def _is_youtube_sync_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "youtube_sync")
 
@@ -250,6 +253,10 @@ class TaskCenterView(QWidget):
             payload = getattr(task, "payload", {})
             QMessageBox.information(self, "Task Center", f"Export de packaging: {payload.get('format', task.task_id)} / {task.status}")
             return
+        if self._is_audience_model_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(self, "Task Center", f"Modelo de audiencia: {payload.get('creator_id', task.task_id)} / {task.status}")
+            return
         if self._is_youtube_sync_task(task):
             report = self.workspace.export_youtube_sync_report(task.task_id)
             if report is None:
@@ -284,6 +291,8 @@ class TaskCenterView(QWidget):
         elif self._is_creator_language_analysis_task(task) or self._is_creator_language_snapshot_task(task) or self._is_creator_language_export_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_packaging_title_analysis_task(task) or self._is_packaging_thumbnail_analysis_task(task) or self._is_packaging_brand_profile_task(task) or self._is_packaging_pair_evaluation_task(task) or self._is_packaging_frame_candidates_task(task) or self._is_packaging_concept_task(task) or self._is_packaging_prompt_task(task) or self._is_packaging_review_task(task) or self._is_packaging_export_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_audience_model_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_youtube_sync_task(task):
             self.workspace.interrupt_youtube_sync_run(task.task_id, "Interrumpida desde Task Center")
@@ -441,6 +450,15 @@ class TaskCenterView(QWidget):
             summary = bool(payload.get("summary"))
             if creator_id:
                 self.workspace.export_packaging(creator_id=str(creator_id), format_name=str(format_name), summary=summary)
+            self.refresh()
+            return
+        if self._is_audience_model_task(task):
+            payload = getattr(task, "payload", {})
+            creator_id = payload.get("creator_id")
+            force = bool(payload.get("force", False))
+            configuration = payload.get("configuration")
+            if creator_id:
+                self.workspace.build_audience_model(str(creator_id), force=force, configuration=configuration if isinstance(configuration, dict) else None)
             self.refresh()
             return
         if self._is_youtube_sync_task(task):

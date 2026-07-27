@@ -342,3 +342,11 @@ flowchart LR
 - Evaluations con resultado, muestra, diferencias, warnings y confianza;
 - Learning Memory con statement, scope, evidencia, supports, contradictions y revisiones humanas;
 - Reports con exportacion JSON, TXT y CSV.
+
+### Audience Model
+
+- overview of profile confidence, period, platforms, signals, summaries and warnings;
+- signals, new vs returning, segments, affinities, journeys, platform roles, content roles, contradictions and history;
+- review-first workflow for confirm, reject, needs_more_data, edit, merge, split, change_scope and deprecate;
+- export in JSON, TXT and CSV with CSV injection protection;
+- Task Center visibility for build, retry, cancel and open profile.
