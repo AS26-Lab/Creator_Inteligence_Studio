@@ -80,6 +80,9 @@ from creator_intelligence_studio.application.services.youtube_integration_servic
 from creator_intelligence_studio.application.services.instagram_integration_service import (
     InstagramIntegrationService,
 )
+from creator_intelligence_studio.application.services.tiktok_integration_service import (
+    TikTokIntegrationService,
+)
 from creator_intelligence_studio.application.services.audience_model_service import (
     AudienceModelBuildResult,
     AudienceModelService,
@@ -317,6 +320,7 @@ class WorkspaceViewModel:
         creative_packaging_service: CreativePackagingService | None = None,
         youtube_service: YouTubeIntegrationService | None = None,
         instagram_service: InstagramIntegrationService | None = None,
+        tiktok_service: TikTokIntegrationService | None = None,
         audience_service: AudienceModelService | None = None,
     ) -> None:
         self.service = service
@@ -448,6 +452,7 @@ class WorkspaceViewModel:
         self.creative_packaging_service = creative_packaging_service
         self.youtube_service = youtube_service
         self.instagram_service = instagram_service
+        self.tiktok_service = tiktok_service
         self.audience_service = audience_service
         self.personalization_service = personalization_service
         self.model_service = model_service
@@ -1055,6 +1060,32 @@ class WorkspaceViewModel:
                         interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
                         completed_at=to_iso_z(run.completed_at),
                         payload={"kind": "instagram_sync", "run": run.to_dict(), "creator_id": run.creator_id, "account_id": run.account_id, "sync_type": run.sync_type.value},
+                    )
+                )
+        if self.tiktok_service is not None and self.selected_creator_id is not None:
+            try:
+                sync_runs = self.tiktok_service.sync_history(self.selected_creator_id)
+            except Exception:
+                sync_runs = []
+            for run in sync_runs:
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=run.id,
+                        title="Sincronizacion de TikTok",
+                        status=run.status.value,
+                        stage_name=run.sync_type.value,
+                        video_id=None,
+                        video_title=run.profile_id or run.connection_id,
+                        action_id=run.profile_id,
+                        progress_percent=100.0 if run.status.value in {"completed", "completed_with_warnings"} else 0.0,
+                        message=run.error_message or run.status.value,
+                        error=run.error_message,
+                        cancellable=run.status.value in {"queued", "authenticating", "verifying_profile", "syncing_profile", "syncing_videos", "refreshing_videos", "importing_metrics", "linking_content", "interrupted"},
+                        created_at=to_iso_z(run.created_at),
+                        updated_at=to_iso_z(run.completed_at or run.created_at),
+                        interrupted_at=to_iso_z(run.completed_at) if run.status.value == "interrupted" else None,
+                        completed_at=to_iso_z(run.completed_at),
+                        payload={"kind": "tiktok_sync", "run": run.to_dict(), "creator_id": run.creator_id, "profile_id": run.profile_id, "connection_id": run.connection_id, "sync_type": run.sync_type.value},
                     )
                 )
         if self.analytics_lab_service is not None and self.selected_creator_id is not None:
@@ -2896,10 +2927,20 @@ class WorkspaceViewModel:
             return []
         return self.instagram_service.list_connections(creator_id)
 
+    def list_tiktok_connections(self, creator_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_connections(creator_id)
+
     def show_instagram_connection(self, connection_id: str):
         if self.instagram_service is None:
             return None
         return self.instagram_service.show_connection(connection_id)
+
+    def show_tiktok_connection(self, connection_id: str):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.show_connection(connection_id)
 
     def verify_instagram_connection(self, connection_id: str):
         if self.instagram_service is None:
@@ -2921,6 +2962,11 @@ class WorkspaceViewModel:
             return []
         return self.instagram_service.list_accounts(creator_id)
 
+    def list_tiktok_profiles(self, creator_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_profiles(creator_id)
+
     def select_instagram_account(self, account_id: str):
         if self.instagram_service is None:
             return None
@@ -2930,6 +2976,11 @@ class WorkspaceViewModel:
         if self.instagram_service is None:
             return None
         return self.instagram_service.show_account(account_id)
+
+    def show_tiktok_profile(self, profile_id: str):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.show_profile(profile_id)
 
     def sync_instagram_account(self, account_id: str, *, cursor: str | None = None, full_resync: bool = False):
         if self.instagram_service is None:
@@ -2951,6 +3002,31 @@ class WorkspaceViewModel:
             return None
         return self.instagram_service.sync_incremental(account_id=account_id, cursor=cursor)
 
+    def sync_tiktok_profile(self, profile_id: str, *, cursor: str | None = None):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.sync_profile(profile_id=profile_id, cursor=cursor)
+
+    def sync_tiktok_videos(self, profile_id: str, *, cursor: str | None = None, max_count: int = 20):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.sync_videos(profile_id=profile_id, cursor=cursor, max_count=max_count)
+
+    def sync_tiktok_incremental(self, profile_id: str, *, cursor: str | None = None, max_count: int = 20):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.sync_incremental(profile_id=profile_id, cursor=cursor, max_count=max_count)
+
+    def sync_tiktok_public_metrics(self, profile_id: str, *, cursor: str | None = None):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.sync_public_metrics(profile_id=profile_id, cursor=cursor)
+
+    def sync_tiktok_repair(self, profile_id: str):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.sync_repair(profile_id=profile_id)
+
     def sync_instagram_repair(self, account_id: str):
         if self.instagram_service is None:
             return None
@@ -2960,6 +3036,11 @@ class WorkspaceViewModel:
         if self.instagram_service is None:
             return []
         return self.instagram_service.list_media(account_id)
+
+    def list_tiktok_videos(self, profile_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_remote_videos(profile_id)
 
     def show_instagram_media(self, remote_media_id: str):
         if self.instagram_service is None:
@@ -2971,20 +3052,50 @@ class WorkspaceViewModel:
             return []
         return self.instagram_service.list_sync_runs(creator_id)
 
+    def list_tiktok_sync_runs(self, creator_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.sync_history(creator_id)
+
     def show_instagram_sync_run(self, run_id: str):
         if self.instagram_service is None:
             return None
         return self.instagram_service.show_sync_run(run_id)
+
+    def show_tiktok_sync_run(self, run_id: str):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.show_sync_run(run_id)
 
     def list_instagram_sync_items(self, run_id: str):
         if self.instagram_service is None:
             return []
         return self.instagram_service.list_sync_items(run_id)
 
+    def list_tiktok_sync_items(self, run_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_sync_items(run_id)
+
     def list_instagram_content_links(self, creator_id: str):
         if self.instagram_service is None:
             return []
         return self.instagram_service.list_content_links(creator_id)
+
+    def list_tiktok_metric_imports(self, creator_id: str, *, profile_id: str | None = None):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_metric_imports(creator_id, profile_id=profile_id)
+
+    def list_tiktok_metric_values(self, metric_import_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_metric_values(metric_import_id)
+
+    def list_tiktok_content_links(self, creator_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_content_links(creator_id)
 
     def list_instagram_insight_imports(self, creator_id: str, *, account_id: str | None = None):
         if self.instagram_service is None:
@@ -3000,6 +3111,11 @@ class WorkspaceViewModel:
         if self.instagram_service is None:
             return []
         return self.instagram_service.list_rate_limit_usage(connection_id)
+
+    def list_tiktok_rate_limit_usage(self, connection_id: str):
+        if self.tiktok_service is None:
+            return []
+        return self.tiktok_service.list_rate_limit_usage(connection_id)
 
     def list_youtube_channels(self, creator_id: str):
         if self.youtube_service is None:
@@ -3078,6 +3194,21 @@ class WorkspaceViewModel:
         if self.instagram_service is None:
             return None
         return self.instagram_service.export_report(run_id, format_name, destination=destination)
+
+    def interrupt_tiktok_sync_run(self, run_id: str, reason: str | None = None):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.interrupt_sync_run(run_id, reason=reason)
+
+    def resume_tiktok_sync_run(self, run_id: str):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.resume_sync(run_id)
+
+    def export_tiktok_sync_report(self, run_id: str, format_name: str = "json", *, destination: Path | None = None):
+        if self.tiktok_service is None:
+            return None
+        return self.tiktok_service.export_report(run_id, format_name, destination=destination)
 
     def reveal_instagram_sync_report(self, run_id: str):
         if self.instagram_service is None:

@@ -13,7 +13,7 @@
 
 1. YouTube.
 2. Instagram.
-3. TikTok con especial cautela.
+3. TikTok Read-Only Integration.
 
 ## YouTube primero
 
@@ -33,9 +33,10 @@ YouTube será la primera plataforma objetivo para:
 
 ## TikTok
 
-- tratar con especial cautela;
-- depender solo de integraciones oficiales o importaciones manuales/asistidas;
-- no asumir cobertura total.
+- integracion oficial en modo solo lectura;
+- depender solo de Login Kit y Display API oficiales;
+- mantener importacion manual para metricas no cubiertas;
+- no asumir cobertura total ni equivalencia con analytics privados.
 
 ## APIs oficiales
 
@@ -91,4 +92,3 @@ YouTube será la primera plataforma objetivo para:
 - cada proveedor debe fallar de forma independiente;
 - un error en un proveedor no debe corromper los demás;
 - los datos importados deben registrar su origen.
-

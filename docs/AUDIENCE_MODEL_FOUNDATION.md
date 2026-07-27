@@ -114,6 +114,9 @@ Synthetic coverage uses two creators:
 ## Next phase
 
 The next phase is Instagram Read-Only Integration.
+## TikTok Read-Only Integration
+
+TikTok Read-Only Integration contributes aggregated, creator-scoped evidence only. It can add public consumption and engagement signals, profile growth when available, and content affinity hints from official snapshots. It does not invent acquisition source, returning viewers, demographics, retention, completion or follower conversion.
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration now contributes additional local evidence for the same behavioral model. The audience layer remains aggregated and creator-scoped: it consumes Instagram account/media snapshots, captions, covers, insights and links as evidence only, not as personas or demographics.

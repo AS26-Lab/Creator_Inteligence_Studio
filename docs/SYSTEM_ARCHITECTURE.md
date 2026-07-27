@@ -68,6 +68,7 @@ flowchart TD
 - `Creator Memory`
 - `Creative Packaging`
 - `YouTube Read-Only Integration`
+- `TikTok Read-Only Integration`
 - `Model Registry`
 - `Connector Layer`
 - `Cost Control`
@@ -89,6 +90,7 @@ flowchart TD
 12. Los clips aprobados pueden renderizarse localmente sin modificar el archivo fuente; la verificacion de salida guarda metadatos tecnicos y el Task Center conserva el historial.
 13. Los subtitulos se generan a partir de la transcripcion vigente o de un clip aprobado; la edicion de subtitulos no reescribe la transcripcion original y la exportacion se verifica antes de considerarse valida.
 14. La integracion de YouTube en modo solo lectura autentica con OAuth de escritorio, sincroniza canales y contenidos remotos sin escrituras, conserva snapshots historicos y alimenta Analytics y Thumbnail Lab con referencias y metricas oficiales.
+15. La integracion de TikTok en modo solo lectura autentica con OAuth de escritorio, sincroniza perfiles y videos publicos del usuario autorizado sin escrituras, conserva historial de titulos, descripciones y covers, y alimenta Analytics, Audience Model y Thumbnail Lab solo con la evidencia que Display API permite.
 
 ## Workflow shell de escritorio
 

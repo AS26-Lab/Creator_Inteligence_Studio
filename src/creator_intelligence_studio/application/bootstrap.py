@@ -87,6 +87,10 @@ from creator_intelligence_studio.application.services.instagram_integration_serv
     InstagramIntegrationService,
     build_instagram_integration_service,
 )
+from creator_intelligence_studio.application.services.tiktok_integration_service import (
+    TikTokIntegrationService,
+    build_tiktok_integration_service,
+)
 from creator_intelligence_studio.application.services.audience_model_service import (
     AudienceModelService,
     build_audience_model_service,
@@ -165,6 +169,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_youtube_repos
 from creator_intelligence_studio.infrastructure.persistence.sqlite_instagram_repository import (
     SQLiteInstagramRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_tiktok_repository import (
+    SQLiteTikTokRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_audience_repository import (
     SQLiteAudienceRepository,
 )
@@ -213,6 +220,7 @@ class ServiceContext(BootstrapContext):
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
     instagram_service: InstagramIntegrationService | None = None
+    tiktok_service: TikTokIntegrationService | None = None
     audience_service: AudienceModelService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
@@ -402,6 +410,15 @@ def _load_service_context() -> ServiceContext:
         creative_packaging_repository=SQLiteCreativePackagingRepository(database),
         logger=context.logger,
     )
+    tiktok_service = build_tiktok_integration_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteTikTokRepository(database),
+        database=database,
+        analytics_repository=analytics_repository,
+        creative_packaging_repository=SQLiteCreativePackagingRepository(database),
+        logger=context.logger,
+    )
     audience_service = build_audience_model_service(
         settings=context.settings,
         paths=context.paths,
@@ -466,6 +483,7 @@ def _load_service_context() -> ServiceContext:
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
         instagram_service=instagram_service,
+        tiktok_service=tiktok_service,
         audience_service=audience_service,
         personalization_service=personalization_service,
         model_service=model_service,
@@ -541,9 +559,10 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             visual_service=context.visual_service,
             multimodal_service=context.multimodal_service,
             clip_service=context.clip_service,
-            youtube_service=context.youtube_service,
-            instagram_service=context.instagram_service,
-            audience_service=context.audience_service,
+        youtube_service=context.youtube_service,
+        instagram_service=context.instagram_service,
+        tiktok_service=context.tiktok_service,
+        audience_service=context.audience_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

@@ -54,6 +54,7 @@ class TaskCenterView(QWidget):
         self.open_button.clicked.connect(self._open_video)
         self.cancel_button.clicked.connect(self._interrupt_task)
         self.retry_button.clicked.connect(self._retry_task)
+        self.refresh()
 
     def _selected_task_id(self) -> str | None:
         rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
@@ -130,6 +131,9 @@ class TaskCenterView(QWidget):
 
     def _is_instagram_sync_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "instagram_sync")
+
+    def _is_tiktok_sync_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "tiktok_sync")
 
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
@@ -274,6 +278,13 @@ class TaskCenterView(QWidget):
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte de Instagram disponible en: {report}")
             return
+        if self._is_tiktok_sync_task(task):
+            report = self.workspace.export_tiktok_sync_report(task.task_id)
+            if report is None:
+                QMessageBox.information(self, "Task Center", "La sincronizacion no tiene un reporte disponible.")
+            else:
+                QMessageBox.information(self, "Task Center", f"Reporte de TikTok disponible en: {report}")
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -308,6 +319,8 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_youtube_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_instagram_sync_task(task):
             self.workspace.interrupt_instagram_sync_run(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_tiktok_sync_task(task):
+            self.workspace.interrupt_tiktok_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -479,6 +492,10 @@ class TaskCenterView(QWidget):
             return
         if self._is_instagram_sync_task(task):
             self.workspace.resume_instagram_sync_run(task.task_id)
+            self.refresh()
+            return
+        if self._is_tiktok_sync_task(task):
+            self.workspace.resume_tiktok_sync_run(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

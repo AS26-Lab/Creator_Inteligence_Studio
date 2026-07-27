@@ -103,4 +103,4 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 
 ## Next phase
 
-The next phase is TikTok Read-Only Integration.
+The next phase is Multi-Platform Integration Consolidation.

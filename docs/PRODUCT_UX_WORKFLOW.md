@@ -157,4 +157,5 @@ This workflow stays local, versioned, and editable. It does not generate scripts
 - exportar solo cuando el usuario lo solicita.
 
 This workflow stays local and review-first. It does not invent demographic profiles, does not perform automatic publication, and does not use Trend Radar or external research.
+TikTok Read-Only Integration uses the same product principle: connect a TikTok account, verify access, import profile and public video evidence, preserve historical title/description/cover versions, and keep private analytics in manual CSV/XLSX flows. It never publishes, uploads or deletes remote content.
 Instagram Read-Only Integration uses the same product principle: connect a professional account, verify access, import account and media evidence, review history and links, and export locally only when the user asks. It never publishes or deletes remote content.

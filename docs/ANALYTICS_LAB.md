@@ -34,3 +34,6 @@ Audience Model Foundation reusa esos mismos insumos como señales agregadas para
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration feeds Analytics Lab only through imported local snapshots and official insights. It does not add write operations, scraping, inferred demographics or metric equivalence across platforms.
+## TikTok Read-Only Integration
+
+TikTok Read-Only Integration feeds Analytics Lab only through compatible public snapshots and cumulative counters. Private watch time, completion, retention and traffic source remain manual imports or unavailable states; they are not derived from public views.

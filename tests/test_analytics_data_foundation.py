@@ -93,7 +93,7 @@ class AnalyticsDataFoundationTests(unittest.TestCase):
                 run_migrations(connection)
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertEqual(versions[-1], 23)
+            self.assertEqual(versions[-1], 24)
             self.assertIn("analytics_publications", tables)
             self.assertIn("analytics_metric_snapshots", tables)
             self.assertIn("analytics_imports", tables)

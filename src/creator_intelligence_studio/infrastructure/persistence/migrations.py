@@ -4330,6 +4330,310 @@ def migration_23(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_instagram_sync_schedules_connection_id ON instagram_sync_schedules(connection_id)")
 
 
+def migration_24(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_connections (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'connected', 'verified', 'disconnected', 'revoked', 'error')),
+            open_id TEXT,
+            union_id TEXT,
+            account_identifier TEXT,
+            granted_scopes_json TEXT NOT NULL,
+            credential_reference TEXT NOT NULL,
+            api_version TEXT NOT NULL,
+            access_level TEXT,
+            connected_at TEXT NOT NULL,
+            last_verified_at TEXT,
+            disconnected_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            open_id TEXT NOT NULL,
+            union_id TEXT,
+            display_name TEXT,
+            username TEXT,
+            avatar_url TEXT,
+            bio_description TEXT,
+            profile_deep_link TEXT,
+            profile_web_link TEXT,
+            is_verified INTEGER,
+            follower_count INTEGER,
+            following_count INTEGER,
+            likes_count INTEGER,
+            video_count INTEGER,
+            selected_for_sync INTEGER NOT NULL DEFAULT 0,
+            last_synced_at TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES tiktok_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_remote_videos (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_id TEXT NOT NULL,
+            tiktok_video_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            packaging_asset_id TEXT,
+            title TEXT,
+            video_description TEXT,
+            create_time TEXT NOT NULL,
+            duration_seconds INTEGER,
+            width INTEGER,
+            height INTEGER,
+            share_url TEXT,
+            embed_link TEXT,
+            cover_image_url TEXT,
+            like_count INTEGER,
+            comment_count INTEGER,
+            share_count INTEGER,
+            view_count INTEGER,
+            remote_fingerprint TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            remote_status TEXT NOT NULL CHECK (remote_status IN ('public', 'unavailable', 'no_longer_returned', 'access_changed', 'unknown')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (profile_id) REFERENCES tiktok_profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_video_text_versions (
+            id TEXT PRIMARY KEY,
+            remote_video_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            title_text TEXT,
+            description_text TEXT,
+            source_fingerprint TEXT NOT NULL,
+            is_current INTEGER NOT NULL DEFAULT 1,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (remote_video_id) REFERENCES tiktok_remote_videos(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_cover_versions (
+            id TEXT PRIMARY KEY,
+            remote_video_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            cover_image_url TEXT,
+            remote_fingerprint TEXT NOT NULL,
+            packaging_asset_id TEXT,
+            is_current INTEGER NOT NULL DEFAULT 1,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (remote_video_id) REFERENCES tiktok_remote_videos(id) ON DELETE CASCADE,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_sync_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            profile_id TEXT,
+            sync_type TEXT NOT NULL CHECK (sync_type IN ('connection_verify', 'profile_metadata', 'profile_stats', 'video_catalog', 'video_metadata', 'public_metrics', 'incremental_sync', 'full_resync', 'repair_sync', 'cover_refresh')),
+            status TEXT NOT NULL CHECK (status IN ('queued', 'authenticating', 'verifying_profile', 'syncing_profile', 'syncing_videos', 'refreshing_videos', 'importing_metrics', 'linking_content', 'completed', 'completed_with_warnings', 'interrupted', 'failed', 'cancelled')),
+            configuration_json TEXT NOT NULL,
+            cursor_json TEXT,
+            discovered_count INTEGER NOT NULL DEFAULT 0,
+            imported_count INTEGER NOT NULL DEFAULT 0,
+            updated_count INTEGER NOT NULL DEFAULT 0,
+            unchanged_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            estimated_usage TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES tiktok_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (profile_id) REFERENCES tiktok_profiles(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_sync_items (
+            id TEXT PRIMARY KEY,
+            sync_run_id TEXT NOT NULL,
+            remote_type TEXT NOT NULL,
+            remote_id TEXT NOT NULL,
+            local_type TEXT,
+            local_id TEXT,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES tiktok_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_metric_imports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            profile_id TEXT NOT NULL,
+            remote_video_id TEXT,
+            sync_run_id TEXT NOT NULL,
+            metric_scope TEXT NOT NULL CHECK (metric_scope IN ('profile', 'video', 'manual_snapshot')),
+            source_type TEXT NOT NULL CHECK (source_type IN ('tiktok_display_api', 'tiktok_manual_csv', 'tiktok_manual_xlsx', 'manual_other')),
+            observed_at TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            comparable_window TEXT,
+            source_fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (profile_id) REFERENCES tiktok_profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_video_id) REFERENCES tiktok_remote_videos(id) ON DELETE SET NULL,
+            FOREIGN KEY (sync_run_id) REFERENCES tiktok_sync_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_metric_values (
+            id TEXT PRIMARY KEY,
+            metric_import_id TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            raw_metric_name TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            unit TEXT,
+            dimensions_json TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (metric_import_id) REFERENCES tiktok_metric_imports(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_content_links (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            remote_video_id TEXT NOT NULL,
+            publication_id TEXT,
+            video_asset_id TEXT,
+            packaging_asset_id TEXT,
+            link_method TEXT NOT NULL CHECK (link_method IN ('exact_tiktok_id', 'exact_share_url', 'manual', 'normalized_description_and_date', 'create_time_match', 'metadata_match', 'probable_match')),
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (remote_video_id) REFERENCES tiktok_remote_videos(id) ON DELETE CASCADE,
+            FOREIGN KEY (publication_id) REFERENCES analytics_publications(id) ON DELETE SET NULL,
+            FOREIGN KEY (video_asset_id) REFERENCES video_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (packaging_asset_id) REFERENCES packaging_assets(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_rate_limit_usage (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            operation_key TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            request_count INTEGER NOT NULL,
+            estimated_usage TEXT,
+            window_started_at TEXT,
+            response_headers_json TEXT,
+            usage_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (connection_id) REFERENCES tiktok_connections(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tiktok_sync_schedules (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            profile_id TEXT,
+            schedule_type TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            interval_hours INTEGER,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (connection_id) REFERENCES tiktok_connections(id) ON DELETE CASCADE,
+            FOREIGN KEY (profile_id) REFERENCES tiktok_profiles(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_connections_creator_id ON tiktok_connections(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_connections_status ON tiktok_connections(status)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_connections_creator_open_id ON tiktok_connections(creator_id, open_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_profiles_creator_id ON tiktok_profiles(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_profiles_connection_id ON tiktok_profiles(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_profiles_creator_open_id ON tiktok_profiles(creator_id, open_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_remote_videos_creator_id ON tiktok_remote_videos(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_remote_videos_profile_id ON tiktok_remote_videos(profile_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_remote_videos_creator_video ON tiktok_remote_videos(creator_id, tiktok_video_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_video_text_versions_remote_video_id ON tiktok_video_text_versions(remote_video_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_video_text_versions_remote_version ON tiktok_video_text_versions(remote_video_id, version_number)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_cover_versions_remote_video_id ON tiktok_cover_versions(remote_video_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_cover_versions_remote_version ON tiktok_cover_versions(remote_video_id, version_number)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_runs_creator_id ON tiktok_sync_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_runs_connection_id ON tiktok_sync_runs(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_sync_items_run_remote_action ON tiktok_sync_items(sync_run_id, remote_type, remote_id, action)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_items_sync_run_id ON tiktok_sync_items(sync_run_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_metric_imports_source ON tiktok_metric_imports(source_fingerprint)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_metric_imports_creator_id ON tiktok_metric_imports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_metric_imports_profile_id ON tiktok_metric_imports(profile_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_metric_values_import_metric_dimension ON tiktok_metric_values(metric_import_id, metric_key, dimensions_json, raw_metric_name)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_metric_values_import_id ON tiktok_metric_values(metric_import_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_content_links_creator_remote_publication_video_package ON tiktok_content_links(creator_id, remote_video_id, IFNULL(publication_id, ''), IFNULL(video_asset_id, ''), IFNULL(packaging_asset_id, ''))")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_content_links_creator_id ON tiktok_content_links(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_rate_limit_usage_connection_operation_date ON tiktok_rate_limit_usage(connection_id, operation_key, usage_date)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_rate_limit_usage_connection_id ON tiktok_rate_limit_usage(connection_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tiktok_sync_schedules_creator_connection_schedule ON tiktok_sync_schedules(creator_id, connection_id, schedule_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_schedules_creator_id ON tiktok_sync_schedules(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_tiktok_sync_schedules_connection_id ON tiktok_sync_schedules(connection_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -4354,6 +4658,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=21, name="youtube_read_only_integration"),
     Migration(version=22, name="audience_model_foundation"),
     Migration(version=23, name="instagram_read_only_integration"),
+    Migration(version=24, name="tiktok_read_only_integration"),
 )
 
 
@@ -4437,6 +4742,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_22(connection)
                 elif migration.version == 23:
                     migration_23(connection)
+                elif migration.version == 24:
+                    migration_24(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

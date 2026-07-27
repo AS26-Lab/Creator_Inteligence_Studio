@@ -262,7 +262,7 @@ class YouTubeIntegrationTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
                 youtube_columns = {row[1] for row in connection.execute("PRAGMA table_info(youtube_connections)").fetchall()}
-            self.assertEqual(versions[-1], 23)
+            self.assertEqual(versions[-1], 24)
             self.assertTrue({"youtube_connections", "youtube_channels", "youtube_remote_videos", "youtube_sync_runs", "youtube_metric_imports", "youtube_content_links"}.issubset(tables))
             self.assertFalse({"access_token", "refresh_token"}.intersection(youtube_columns))
             self.assertEqual(READ_ONLY_SCOPES, (

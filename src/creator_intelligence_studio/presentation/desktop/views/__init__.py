@@ -40,6 +40,13 @@ from .youtube_sync_view import YouTubeSyncView
 from .youtube_sync_history_view import YouTubeSyncHistoryView
 from .youtube_integration_view import YouTubeIntegrationView
 from .instagram_integration_view import InstagramIntegrationView
+from .tiktok_integration_view import TikTokIntegrationView
+from .tiktok_connection_view import TikTokConnectionView
+from .tiktok_profile_view import TikTokProfileView
+from .tiktok_sync_view import TikTokSyncView
+from .tiktok_videos_view import TikTokVideosView
+from .tiktok_metrics_view import TikTokMetricsView
+from .tiktok_sync_history_view import TikTokSyncHistoryView
 from .videos_view import VideosView
 
 __all__ = [
@@ -80,6 +87,13 @@ __all__ = [
     "YouTubeSyncHistoryView",
     "YouTubeIntegrationView",
     "InstagramIntegrationView",
+    "TikTokIntegrationView",
+    "TikTokConnectionView",
+    "TikTokProfileView",
+    "TikTokSyncView",
+    "TikTokVideosView",
+    "TikTokMetricsView",
+    "TikTokSyncHistoryView",
     "PackagingHistoryView",
     "VideosView",
 ]

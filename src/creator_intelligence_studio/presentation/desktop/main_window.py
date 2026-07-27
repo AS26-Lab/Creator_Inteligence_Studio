@@ -47,6 +47,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     TaskCenterView,
     ThumbnailLabView,
     InstagramIntegrationView,
+    TikTokIntegrationView,
     YouTubeIntegrationView,
     WorkflowView,
     VisualAnalysisView,
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
             "videos",
             "youtube",
             "instagram",
+            "tiktok",
             "analytics",
             "audience",
             "analytics_lab",
@@ -176,6 +178,7 @@ class MainWindow(QMainWindow):
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
         self.youtube_view = YouTubeIntegrationView(workspace)
         self.instagram_view = InstagramIntegrationView(workspace)
+        self.tiktok_view = TikTokIntegrationView(workspace)
         self.workflow_view = WorkflowView(workspace)
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
@@ -195,6 +198,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.videos_view)
         self.stack.addWidget(self.youtube_view)
         self.stack.addWidget(self.instagram_view)
+        self.stack.addWidget(self.tiktok_view)
         self.stack.addWidget(self.analytics_view)
         self.stack.addWidget(self.audience_view)
         self.stack.addWidget(self.analytics_lab_view)
@@ -278,6 +282,8 @@ class MainWindow(QMainWindow):
         self.creator_language_view.refresh()
         self.thumbnail_lab_view.refresh()
         self.youtube_view.refresh()
+        self.instagram_view.refresh()
+        self.tiktok_view.refresh()
         self.workflow_view.refresh()
         self.task_center_view.refresh()
         self.onboarding_view.refresh()
@@ -409,6 +415,8 @@ class MainWindow(QMainWindow):
             self.youtube_view.refresh()
         elif current_key == "instagram":
             self.instagram_view.refresh()
+        elif current_key == "tiktok":
+            self.tiktok_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "subtitles":

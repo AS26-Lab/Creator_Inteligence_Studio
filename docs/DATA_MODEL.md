@@ -683,6 +683,24 @@ La migracion v22 agrega el modelo local de audiencia:
 - `audience_model_runs`
 
 Estas tablas conservan señales agregadas, segmentos observables, afinidades, journeys, revision humana, snapshots y corridas versionadas por creador, sin PII, sin sobrescribir datos de YouTube y sin alterar Analytics Lab.
+## Migration v24: TikTok read-only integration
+
+La migracion v24 agrega tablas creator-scoped para integracion oficial de TikTok en modo solo lectura:
+
+- `tiktok_connections`
+- `tiktok_profiles`
+- `tiktok_remote_videos`
+- `tiktok_video_text_versions`
+- `tiktok_cover_versions`
+- `tiktok_sync_runs`
+- `tiktok_sync_items`
+- `tiktok_metric_imports`
+- `tiktok_metric_values`
+- `tiktok_content_links`
+- `tiktok_rate_limit_usage`
+- `tiktok_sync_schedules`
+
+La base local conserva solo referencias, scopes concedidos, fingerprints, estados, cursors y timestamps. Los tokens, codes y secrets no se guardan en la base SQLite principal. La migracion es additive, idempotente y no destructiva, y no modifica los datos de YouTube ni Instagram.
 ## Instagram Read-Only Integration
 
 The Instagram read-only phase adds creator-scoped tables for connections, accounts, remote media, carousel children, caption versions, cover versions, sync runs, sync items, insight imports, insight values, content links, rate limit usage and sync schedules. These tables preserve history, keep tokens out of the main SQLite database and do not overwrite YouTube or manual import data.

@@ -38,6 +38,9 @@ Experiments and Verifiable Learning consume recomendaciones, decisiones y evalua
 YouTube Read-Only Integration puede alimentar estos registros con canales, videos, thumbnails y metricas oficiales sin exponer permisos de escritura.
 
 Audience Model Foundation consume estas mismas publicaciones, snapshots y metricas importadas para modelar comportamiento observado por creador, sin inventar demografia, sin PII y sin convertir fuentes de trafico en identidad.
+## TikTok Read-Only Integration
+
+TikTok Read-Only Integration feeds the same local foundation with creator-scoped profile snapshots, public video metadata, public counters and explicit unavailable states. Manual CSV/XLSX imports continue to hold private analytics that Display API does not expose. Missing TikTok analytics never become zero.
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration adds imported account and media snapshots to the same local foundation. Instagram metrics remain semantically separate from YouTube and manual imports, and missing Instagram data stays missing instead of being forced to zero.

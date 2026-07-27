@@ -19,6 +19,7 @@ flowchart LR
     Home --> CreatorMemory[Creator Memory]
     Home --> Packaging[Thumbnail Lab]
     Home --> YouTube[YouTube Integration]
+    Home --> TikTok[TikTok Integration]
     Home --> System[Sistema]
     Home --> Future[Proximamente]
 ```
@@ -245,6 +246,13 @@ flowchart LR
 - historial de sincronizacion, cuota y privacidad;
 - revocar, desconectar y reanudar sincronizaciones.
 
+### TikTok Integration
+
+- Connection, Profile and Sync sections for official read-only TikTok OAuth;
+- Remote Videos, Content Links and Public Metrics for Display API evidence;
+- Sync History, Rate Limits, Manual Analytics Status and Privacy;
+- disconnected state, scopes, product approval and local revoke or disconnect.
+
 ## Estados vacios
 
 - sin creadores;
@@ -260,6 +268,7 @@ flowchart LR
 - sin analisis multimodal aun;
 - sin clips aprobados aun;
 - sin herramientas multimedia disponibles.
+- sin conexion TikTok aun.
 
 ## Separacion de Script & Voice Studio
 

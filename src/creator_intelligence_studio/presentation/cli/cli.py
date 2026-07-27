@@ -235,6 +235,10 @@ from creator_intelligence_studio.presentation.cli.instagram_cli import (
     build_instagram_parser,
     handle_instagram,
 )
+from creator_intelligence_studio.presentation.cli.tiktok_cli import (
+    build_tiktok_parser,
+    handle_tiktok,
+)
 from creator_intelligence_studio.application.commands.experiment_commands import (
     AddExperimentGuardrailCommand,
     AddExperimentVariableCommand,
@@ -614,6 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_audience_parser(subparsers)
     build_instagram_parser(subparsers)
+    build_tiktok_parser(subparsers)
 
     transcription_parser = subparsers.add_parser("transcription", help="Gestion de transcripcion local")
     transcription_sub = transcription_parser.add_subparsers(dest="action", required=True)
@@ -5323,6 +5328,7 @@ def dispatch(
     clip_service: ClipRankingService,
     youtube_service: YouTubeIntegrationService | None = None,
     instagram_service: InstagramIntegrationService | None = None,
+    tiktok_service=None,
     audience_service: AudienceModelService | None = None,
     analytics_service: AnalyticsImportService | None = None,
     analytics_lab_service: AnalyticsLabService | None = None,
@@ -5379,6 +5385,10 @@ def dispatch(
             if instagram_service is None:
                 raise DomainError("El servicio de instagram no esta disponible.")
             return handle_instagram(args, service=instagram_service, stdout=stdout, stderr=stderr)
+        if args.entity == "tiktok":
+            if tiktok_service is None:
+                raise DomainError("El servicio de tiktok no esta disponible.")
+            return handle_tiktok(args, service=tiktok_service, stdout=stdout, stderr=stderr)
         if args.entity == "audience":
             if audience_service is None:
                 raise DomainError("El servicio de audiencia no esta disponible.")

@@ -52,6 +52,9 @@ The next phase is read-only YouTube integration, which will use packaging histor
 See [`docs/YOUTUBE_READ_ONLY_INTEGRATION.md`](YOUTUBE_READ_ONLY_INTEGRATION.md) for the read-only channel, video, title, thumbnail and analytics sync layer.
 
 Audience Model Foundation later consumes the same publication history and packaging performance as aggregate evidence for platform roles, content roles and affinities, without generating images or packaging suggestions automatically.
+## TikTok Read-Only Integration
+
+TikTok Read-Only Integration can attach cover metadata and packaging links for remote videos. The cover reference is stored as observed evidence only; it is not treated as a YouTube thumbnail, it is not downloaded by default, and changing the cover URL does not automatically confirm a visual change.
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration may attach cover and thumbnail metadata as observed evidence for Reels, posts and carousels without automatically downloading remote media. Instagram covers are stored as local evidence, not as a replacement for YouTube thumbnail assets.
