@@ -412,7 +412,7 @@ class AnalyticsLabTests(unittest.TestCase):
             with fixture.database.connect() as connection:
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertEqual(versions[-1], 26)
+            self.assertEqual(versions[-1], 27)
             self.assertIn("analytics_cohort_definitions", tables)
             self.assertIn("analytics_analysis_runs", tables)
             self.assertIn("analytics_findings", tables)

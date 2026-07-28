@@ -5463,6 +5463,459 @@ def migration_26(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_reports_source_fingerprint ON market_reports(source_fingerprint)")
 
 
+def migration_27(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_context_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            context_type TEXT NOT NULL,
+            context_version TEXT NOT NULL,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            audience_snapshot_id TEXT,
+            analytics_snapshot_id TEXT,
+            market_snapshot_id TEXT,
+            platform_snapshot_id TEXT,
+            experiment_snapshot_id TEXT,
+            packaging_snapshot_id TEXT,
+            source_fingerprint TEXT NOT NULL,
+            context_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_context_snapshots_creator_id ON recommendation_context_snapshots(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recommendation_context_snapshots_source_fingerprint ON recommendation_context_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_requests (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            request_type TEXT NOT NULL,
+            objective_type TEXT,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            market_id TEXT,
+            topic_id TEXT,
+            time_horizon TEXT,
+            constraints_json TEXT NOT NULL,
+            preferences_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_requests_creator_id ON recommendation_requests(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_requests_market_id ON recommendation_requests(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_requests_topic_id ON recommendation_requests(topic_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            request_id TEXT,
+            context_snapshot_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            candidate_count INTEGER NOT NULL,
+            generated_count INTEGER NOT NULL,
+            skipped_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            error_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (request_id) REFERENCES recommendation_requests(id) ON DELETE SET NULL,
+            FOREIGN KEY (context_snapshot_id) REFERENCES recommendation_context_snapshots(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_runs_creator_id ON recommendation_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_runs_request_id ON recommendation_runs(request_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_runs_context_snapshot_id ON recommendation_runs(context_snapshot_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_run_items (
+            id TEXT PRIMARY KEY,
+            recommendation_run_id TEXT NOT NULL,
+            source_candidate_type TEXT NOT NULL,
+            source_candidate_id TEXT,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            warning_codes_json TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_run_id) REFERENCES recommendation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_run_items_run_id ON recommendation_run_items(recommendation_run_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_candidates (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_run_id TEXT NOT NULL,
+            source_opportunity_candidate_id TEXT,
+            recommendation_type TEXT NOT NULL,
+            objective_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            audience_scope_json TEXT NOT NULL,
+            market_scope_json TEXT NOT NULL,
+            topic_scope_json TEXT NOT NULL,
+            time_horizon TEXT,
+            status TEXT NOT NULL,
+            priority_level TEXT NOT NULL,
+            priority_score REAL,
+            confidence_level TEXT NOT NULL,
+            confidence_score REAL,
+            freshness_status TEXT NOT NULL,
+            expires_at TEXT,
+            creator_fit REAL NOT NULL,
+            audience_fit REAL NOT NULL,
+            historical_fit REAL NOT NULL,
+            market_fit REAL NOT NULL,
+            platform_fit REAL NOT NULL,
+            strategic_fit REAL NOT NULL,
+            authenticity_fit REAL NOT NULL,
+            timing_fit REAL NOT NULL,
+            differentiation_potential REAL NOT NULL,
+            operational_feasibility REAL NOT NULL,
+            expected_learning_value REAL NOT NULL,
+            copying_risk REAL NOT NULL,
+            overall_risk REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_run_id) REFERENCES recommendation_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_candidates_creator_id ON recommendation_candidates(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_candidates_run_id ON recommendation_candidates(recommendation_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_candidates_source_opportunity_candidate_id ON recommendation_candidates(source_opportunity_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_evidence (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            evidence_type TEXT NOT NULL,
+            source_domain TEXT NOT NULL,
+            source_id TEXT,
+            source_snapshot_id TEXT,
+            supports_recommendation INTEGER NOT NULL,
+            evidence_strength TEXT NOT NULL,
+            evidence_quality TEXT NOT NULL,
+            weight REAL NOT NULL,
+            fact_inference_hypothesis TEXT NOT NULL,
+            description TEXT NOT NULL,
+            limitations_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_evidence_candidate_id ON recommendation_evidence(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_contradictions (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            contradiction_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            description TEXT NOT NULL,
+            source_id TEXT,
+            resolution_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_contradictions_candidate_id ON recommendation_contradictions(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_risks (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            risk_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            likelihood REAL,
+            impact REAL,
+            description TEXT NOT NULL,
+            mitigation TEXT,
+            blocking INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_risks_candidate_id ON recommendation_risks(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_constraints (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            constraint_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            description TEXT NOT NULL,
+            satisfied INTEGER NOT NULL,
+            blocking INTEGER NOT NULL,
+            resolution_action TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_constraints_candidate_id ON recommendation_constraints(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_actions (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            required INTEGER NOT NULL,
+            estimated_effort TEXT,
+            dependency_ids_json TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_actions_candidate_id ON recommendation_actions(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_metrics (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            metric_role TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            internal_metric_key TEXT,
+            unit TEXT,
+            period_semantics TEXT,
+            target_direction TEXT,
+            baseline_value REAL,
+            target_value REAL,
+            minimum_detectable_change REAL,
+            measurement_window TEXT,
+            availability_status TEXT NOT NULL,
+            source_type TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_metrics_candidate_id ON recommendation_metrics(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_invalidation_criteria (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            criterion_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            metric_key TEXT,
+            operator TEXT,
+            threshold_value TEXT,
+            evaluation_window TEXT,
+            severity TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_invalidation_criteria_candidate_id ON recommendation_invalidation_criteria(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_alternatives (
+            id TEXT PRIMARY KEY,
+            recommendation_candidate_id TEXT NOT NULL,
+            alternative_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            tradeoffs_json TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_alternatives_candidate_id ON recommendation_alternatives(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            previous_status TEXT NOT NULL,
+            new_status TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            reviewer TEXT,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_reviews_creator_id ON recommendation_reviews(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_reviews_candidate_id ON recommendation_reviews(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_feedback (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            feedback_type TEXT NOT NULL,
+            rating INTEGER,
+            feedback_text TEXT,
+            reason_code TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_creator_id ON recommendation_feedback(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_candidate_id ON recommendation_feedback(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_experiment_links (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            experiment_id TEXT NOT NULL,
+            link_type TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_experiment_links_creator_id ON recommendation_experiment_links(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_experiment_links_candidate_id ON recommendation_experiment_links(recommendation_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_experiment_links_experiment_id ON recommendation_experiment_links(experiment_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_execution_records (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            execution_status TEXT NOT NULL,
+            internal_content_id TEXT,
+            platform TEXT,
+            publication_id TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_execution_records_creator_id ON recommendation_execution_records(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_execution_records_candidate_id ON recommendation_execution_records(recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_outcome_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            experiment_id TEXT,
+            period_start TEXT,
+            period_end TEXT,
+            metrics_json TEXT NOT NULL,
+            interpretation_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_outcome_snapshots_creator_id ON recommendation_outcome_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_outcome_snapshots_candidate_id ON recommendation_outcome_snapshots(recommendation_candidate_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recommendation_outcome_snapshots_source_fingerprint ON recommendation_outcome_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            recommendation_candidate_id TEXT NOT NULL,
+            snapshot_type TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_snapshots_creator_id ON recommendation_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_snapshots_candidate_id ON recommendation_snapshots(recommendation_candidate_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recommendation_snapshots_source_fingerprint ON recommendation_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_reports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            report_type TEXT NOT NULL,
+            recommendation_scope_json TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            source_fingerprint TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_reports_creator_id ON recommendation_reports(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recommendation_reports_source_fingerprint ON recommendation_reports(source_fingerprint)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -5490,6 +5943,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=24, name="tiktok_read_only_integration"),
     Migration(version=25, name="multi_platform_integration_consolidation"),
     Migration(version=26, name="market_and_trend_intelligence_foundation"),
+    Migration(version=27, name="opportunity_and_recommendation_engine_foundation"),
 )
 
 
@@ -5579,6 +6033,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_25(connection)
                 elif migration.version == 26:
                     migration_26(connection)
+                elif migration.version == 27:
+                    migration_27(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

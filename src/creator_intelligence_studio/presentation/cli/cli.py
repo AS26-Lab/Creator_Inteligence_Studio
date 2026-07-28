@@ -235,6 +235,10 @@ from creator_intelligence_studio.presentation.cli.market_cli import (
     build_market_parser,
     handle_market_command,
 )
+from creator_intelligence_studio.presentation.cli.recommendations_cli import (
+    build_recommendations_parser,
+    handle_recommendations_command,
+)
 from creator_intelligence_studio.presentation.cli.instagram_cli import (
     build_instagram_parser,
     handle_instagram,
@@ -1060,36 +1064,7 @@ def build_parser() -> argparse.ArgumentParser:
     experiments_report_export.add_argument("--format", required=True, choices=["json", "txt", "csv"])
     experiments_report_export.add_argument("--json", action="store_true")
 
-    recommendations_parser = subparsers.add_parser("recommendations", help="Recomendaciones rastreadas")
-    recommendations_sub = recommendations_parser.add_subparsers(dest="action", required=True)
-
-    recommendations_list = recommendations_sub.add_parser("list", help="Listar recomendaciones")
-    recommendations_list.add_argument("--creator-id", required=True)
-    recommendations_list.add_argument("--json", action="store_true")
-
-    recommendations_create = recommendations_sub.add_parser("create", help="Crear recomendacion")
-    recommendations_create.add_argument("--creator-id", required=True)
-    recommendations_create.add_argument("--source-type", required=True)
-    recommendations_create.add_argument("--source-id")
-    recommendations_create.add_argument("--recommendation-type", required=True)
-    recommendations_create.add_argument("--title", required=True)
-    recommendations_create.add_argument("--recommendation-text", required=True)
-    recommendations_create.add_argument("--evidence-json", required=True)
-    recommendations_create.add_argument("--confidence-level", required=True)
-    recommendations_create.add_argument("--platform")
-    recommendations_create.add_argument("--content-type")
-    recommendations_create.add_argument("--json", action="store_true")
-
-    recommendations_show = recommendations_sub.add_parser("show", help="Mostrar recomendacion")
-    recommendations_show.add_argument("--recommendation-id", required=True)
-    recommendations_show.add_argument("--json", action="store_true")
-
-    recommendations_decide = recommendations_sub.add_parser("decide", help="Decidir recomendacion")
-    recommendations_decide.add_argument("--recommendation-id", required=True)
-    recommendations_decide.add_argument("--decision", required=True)
-    recommendations_decide.add_argument("--reason", required=True)
-    recommendations_decide.add_argument("--modified-value-json")
-    recommendations_decide.add_argument("--json", action="store_true")
+    build_recommendations_parser(subparsers)
 
     learnings_parser = subparsers.add_parser("learnings", help="Memoria estructurada de aprendizaje")
     learnings_sub = learnings_parser.add_subparsers(dest="action", required=True)
@@ -5338,6 +5313,7 @@ def dispatch(
     instagram_service: InstagramIntegrationService | None = None,
     tiktok_service=None,
     market_service=None,
+    recommendation_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -5420,9 +5396,9 @@ def dispatch(
                 raise DomainError("El servicio de experiments no esta disponible.")
             return _handle_experiments(args, experiment_service, stdout, stderr)
         if args.entity == "recommendations":
-            if experiment_service is None:
-                raise DomainError("El servicio de experiments no esta disponible.")
-            return _handle_recommendations(args, experiment_service, stdout, stderr)
+            if recommendation_service is None:
+                raise DomainError("El servicio de recommendations no esta disponible.")
+            return handle_recommendations_command(args, service=recommendation_service, stdout=stdout, stderr=stderr)
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

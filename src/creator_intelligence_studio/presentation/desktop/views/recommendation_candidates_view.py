@@ -1,0 +1,3 @@
+from __future__ import annotations
+
+from .recommendations_overview_view import RecommendationCandidatesView

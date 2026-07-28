@@ -1,0 +1,3 @@
+from __future__ import annotations
+
+from .recommendation_engine_service import RecommendationEngineService as RecommendationReportService

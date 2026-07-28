@@ -31,6 +31,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("analytics", "Analytics"),
         NavigationItem("analytics_lab", "Analytics Lab"),
         NavigationItem("experiments", "Experiments"),
+        NavigationItem("recommendations", "Recommendations"),
         NavigationItem("creator_memory", "Creator Memory"),
         NavigationItem("creator_language", "Creator Language"),
         NavigationItem("workflow", "Workflow"),

@@ -59,6 +59,9 @@ from creator_intelligence_studio.application.services.analytics_lab_service impo
 from creator_intelligence_studio.application.services.experiment_service import (
     ExperimentService,
 )
+from creator_intelligence_studio.application.services.recommendation_engine_service import (
+    RecommendationEngineService,
+)
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
@@ -317,6 +320,7 @@ class WorkspaceViewModel:
         analytics_service: AnalyticsImportService | None = None,
         analytics_lab_service: AnalyticsLabService | None = None,
         experiment_service: ExperimentService | None = None,
+        recommendation_service: RecommendationEngineService | None = None,
         creator_memory_service: CreatorMemoryService | None = None,
         creator_language_service: CreatorLanguageService | None = None,
         creative_packaging_service: CreativePackagingService | None = None,
@@ -451,6 +455,7 @@ class WorkspaceViewModel:
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
         self.experiment_service = experiment_service
+        self.recommendation_service = recommendation_service
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
         self.creative_packaging_service = creative_packaging_service
@@ -1025,6 +1030,12 @@ class WorkspaceViewModel:
         if self.market_service is not None and self.selected_creator_id is not None:
             try:
                 for task in self.market_service.build_background_tasks(self.selected_creator_id):
+                    tasks.append(BackgroundTaskRecord.from_dict(task))
+            except Exception:
+                pass
+        if self.recommendation_service is not None and self.selected_creator_id is not None:
+            try:
+                for task in self.recommendation_service.build_background_tasks(self.selected_creator_id):
                     tasks.append(BackgroundTaskRecord.from_dict(task))
             except Exception:
                 pass

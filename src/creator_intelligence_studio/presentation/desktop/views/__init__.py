@@ -14,6 +14,16 @@ from .audience_journeys_view import AudienceJourneysView
 from .audience_affinity_view import AudienceAffinityView
 from .audience_history_view import AudienceHistoryView
 from .experiments_view import ExperimentsView
+from .recommendations_overview_view import RecommendationsOverviewView
+from .recommendation_candidates_view import RecommendationCandidatesView
+from .recommendation_detail_view import RecommendationDetailView
+from .recommendation_evidence_view import RecommendationEvidenceView
+from .recommendation_risks_view import RecommendationRisksView
+from .recommendation_alternatives_view import RecommendationAlternativesView
+from .recommendation_review_view import RecommendationReviewView
+from .recommendation_history_view import RecommendationHistoryView
+from .recommendation_settings_view import RecommendationSettingsView
+from .recommendation_privacy_view import RecommendationPrivacyView
 from .creator_memory_view import CreatorMemoryView
 from .creator_profile_view import CreatorProfileView
 from .creator_language_view import CreatorLanguageView
@@ -84,6 +94,16 @@ __all__ = [
     "AudienceAffinityView",
     "AudienceHistoryView",
     "ExperimentsView",
+    "RecommendationsOverviewView",
+    "RecommendationCandidatesView",
+    "RecommendationDetailView",
+    "RecommendationEvidenceView",
+    "RecommendationRisksView",
+    "RecommendationAlternativesView",
+    "RecommendationReviewView",
+    "RecommendationHistoryView",
+    "RecommendationSettingsView",
+    "RecommendationPrivacyView",
     "MultimodalAnalysisView",
     "AnalyticsLabView",
     "OperationalEvaluationView",

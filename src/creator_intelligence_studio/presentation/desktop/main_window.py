@@ -37,6 +37,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     AnalyticsLabView,
     AudienceOverviewView,
     ExperimentsView,
+    RecommendationsOverviewView,
     CreatorMemoryView,
     CreatorLanguageView,
     OnboardingView,
@@ -83,6 +84,7 @@ class MainWindow(QMainWindow):
             "audience",
             "analytics_lab",
             "experiments",
+            "recommendations",
             "creator_memory",
             "creator_language",
             "thumbnails",
@@ -179,6 +181,7 @@ class MainWindow(QMainWindow):
         self.audience_view = AudienceOverviewView(workspace)
         self.analytics_lab_view = AnalyticsLabView(workspace)
         self.experiments_view = ExperimentsView(workspace)
+        self.recommendations_view = RecommendationsOverviewView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
         self.creator_language_view = CreatorLanguageView(workspace)
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
@@ -211,6 +214,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.audience_view)
         self.stack.addWidget(self.analytics_lab_view)
         self.stack.addWidget(self.experiments_view)
+        self.stack.addWidget(self.recommendations_view)
         self.stack.addWidget(self.creator_memory_view)
         self.stack.addWidget(self.creator_language_view)
         self.stack.addWidget(self.thumbnail_lab_view)
@@ -288,6 +292,7 @@ class MainWindow(QMainWindow):
         self.audience_view.refresh()
         self.analytics_lab_view.refresh()
         self.experiments_view.refresh()
+        self.recommendations_view.refresh()
         self.creator_memory_view.refresh()
         self.creator_language_view.refresh()
         self.thumbnail_lab_view.refresh()
@@ -419,6 +424,8 @@ class MainWindow(QMainWindow):
             self.analytics_lab_view.refresh()
         elif current_key == "experiments":
             self.experiments_view.refresh()
+        elif current_key == "recommendations":
+            self.recommendations_view.refresh()
         elif current_key == "creator_memory":
             self.creator_memory_view.refresh()
         elif current_key == "creator_language":
