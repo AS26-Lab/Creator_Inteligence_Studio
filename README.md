@@ -112,8 +112,9 @@ La fase de Thumbnail Lab and Titles Foundation esta documentada en [`docs/THUMBN
 La integracion de YouTube en modo solo lectura esta documentada en [`docs/YOUTUBE_READ_ONLY_INTEGRATION.md`](docs/YOUTUBE_READ_ONLY_INTEGRATION.md).
 La integracion de TikTok en modo solo lectura esta documentada en [`docs/TIKTOK_READ_ONLY_INTEGRATION.md`](docs/TIKTOK_READ_ONLY_INTEGRATION.md).
 La fase de Audience Model Foundation esta documentada en [`docs/AUDIENCE_MODEL_FOUNDATION.md`](docs/AUDIENCE_MODEL_FOUNDATION.md).
+La fase de Market and Trend Intelligence Foundation esta documentada en [`docs/MARKET_AND_TREND_INTELLIGENCE_FOUNDATION.md`](docs/MARKET_AND_TREND_INTELLIGENCE_FOUNDATION.md).
 
-La siguiente fase prevista sigue siendo Multi-Platform Integration Consolidation. Esta base no agrega Trend Radar, scraping ni busqueda web.
+La siguiente fase prevista es Opportunity and Recommendation Engine. Esta base no agrega Trend Radar, scraping ni busqueda web.
 
 ## Base local
 

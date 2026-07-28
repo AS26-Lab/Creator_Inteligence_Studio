@@ -44,3 +44,7 @@ TikTok Read-Only Integration feeds the same local foundation with creator-scoped
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration adds imported account and media snapshots to the same local foundation. Instagram metrics remain semantically separate from YouTube and manual imports, and missing Instagram data stays missing instead of being forced to zero.
+
+## Market and Trend Intelligence Foundation
+
+Market and Trend Intelligence Foundation uses this same local foundation as historical evidence and keeps public cumulative counters separate from manual period imports and private analytics.

@@ -88,6 +88,7 @@ from creator_intelligence_studio.application.services.audience_model_service imp
     AudienceModelService,
 )
 from creator_intelligence_studio.application.services.platform_integration_service import PlatformIntegrationService
+from creator_intelligence_studio.application.services.market_intelligence_service import MarketIntelligenceService
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -324,6 +325,7 @@ class WorkspaceViewModel:
         tiktok_service: TikTokIntegrationService | None = None,
         audience_service: AudienceModelService | None = None,
         platform_service: PlatformIntegrationService | None = None,
+        market_service: MarketIntelligenceService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -457,6 +459,7 @@ class WorkspaceViewModel:
         self.tiktok_service = tiktok_service
         self.audience_service = audience_service
         self.platform_service = platform_service
+        self.market_service = market_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1016,6 +1019,12 @@ class WorkspaceViewModel:
         if self.platform_service is not None and self.selected_creator_id is not None:
             try:
                 for task in self.platform_service.build_background_tasks(self.selected_creator_id):
+                    tasks.append(BackgroundTaskRecord.from_dict(task))
+            except Exception:
+                pass
+        if self.market_service is not None and self.selected_creator_id is not None:
+            try:
+                for task in self.market_service.build_background_tasks(self.selected_creator_id):
                     tasks.append(BackgroundTaskRecord.from_dict(task))
             except Exception:
                 pass

@@ -120,3 +120,7 @@ TikTok Read-Only Integration contributes aggregated, creator-scoped evidence onl
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration now contributes additional local evidence for the same behavioral model. The audience layer remains aggregated and creator-scoped: it consumes Instagram account/media snapshots, captions, covers, insights and links as evidence only, not as personas or demographics.
+
+## Market intelligence note
+
+Market and Trend Intelligence Foundation can feed aggregate consumption, engagement and platform-presence evidence into the audience layer, but it must not invent acquisition source, returning viewers, demographics or individual journeys.

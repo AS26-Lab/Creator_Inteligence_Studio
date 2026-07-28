@@ -365,3 +365,9 @@ flowchart LR
 - Remote Media, Content Links and Insights for local-only review;
 - Sync History, Rate Limits and Privacy for operational tracing and safe handling of credentials;
 - read-only behavior only, with no publication, deletion or comment/message management.
+
+### Market and Trend Intelligence
+
+- Overview, sources, external content, trend signals, patterns, saturation, creator fit, opportunity candidates, research history and privacy;
+- no automatic recommendations, no scraping and no write operations;
+- review-first access to evidence and provenance.

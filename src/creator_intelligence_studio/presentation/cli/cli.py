@@ -231,6 +231,10 @@ from creator_intelligence_studio.presentation.cli.audience_cli import (
     build_audience_parser,
     handle_audience,
 )
+from creator_intelligence_studio.presentation.cli.market_cli import (
+    build_market_parser,
+    handle_market_command,
+)
 from creator_intelligence_studio.presentation.cli.instagram_cli import (
     build_instagram_parser,
     handle_instagram,
@@ -430,6 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="entity")
+    build_market_parser(subparsers)
     build_platforms_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
@@ -5332,6 +5337,7 @@ def dispatch(
     youtube_service: YouTubeIntegrationService | None = None,
     instagram_service: InstagramIntegrationService | None = None,
     tiktok_service=None,
+    market_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -5393,6 +5399,10 @@ def dispatch(
             if tiktok_service is None:
                 raise DomainError("El servicio de tiktok no esta disponible.")
             return handle_tiktok(args, service=tiktok_service, stdout=stdout, stderr=stderr)
+        if args.entity == "market":
+            if market_service is None:
+                raise DomainError("El servicio de mercado no esta disponible.")
+            return handle_market_command(args, service=market_service, stdout=stdout, stderr=stderr)
         if args.entity == "audience":
             if audience_service is None:
                 raise DomainError("El servicio de audiencia no esta disponible.")

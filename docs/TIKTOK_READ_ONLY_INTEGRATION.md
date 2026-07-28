@@ -129,3 +129,7 @@ Analytics Lab, Audience Model Foundation and Thumbnail Lab receive only the comp
 ## Next phase
 
 The next phase after this connector is Multi-Platform Integration Consolidation.
+
+## Market intelligence note
+
+Market and Trend Intelligence Foundation continues to treat TikTok external observation as manual or user-provided evidence only. It does not use Research API, does not scrape, and does not reclassify private analytics as automatically available.

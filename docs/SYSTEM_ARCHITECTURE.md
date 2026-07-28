@@ -394,3 +394,11 @@ Reglas:
 - `infrastructure/instagram` holds OAuth, API, pagination, retry, rate-limit and mapping adapters.
 - `infrastructure/persistence/sqlite_instagram_repository.py` stores creator-scoped Instagram state in SQLite.
 - `presentation/cli/instagram_cli.py` and `presentation/desktop/views/instagram_integration_view.py` expose the feature without exposing tokens or write operations.
+
+## Market and trend architecture
+
+- `domain/market_intelligence` owns the market, observation, trend, pattern, fit and opportunity types.
+- `application/services/market_intelligence_service.py` coordinates sources, research, signals, reports and reviewable candidates.
+- `infrastructure/market_sources` holds the public discovery adapters and quota tracking for official sources.
+- `infrastructure/persistence/sqlite_market_intelligence_repository.py` stores creator-scoped market state in SQLite.
+- `presentation/cli/market_cli.py` and `presentation/desktop/views/market_overview_view.py` expose the phase without scraping, write operations or automatic recommendations.

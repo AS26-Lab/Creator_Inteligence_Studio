@@ -58,3 +58,7 @@ TikTok Read-Only Integration can attach cover metadata and packaging links for r
 ## Instagram Read-Only Integration
 
 Instagram Read-Only Integration may attach cover and thumbnail metadata as observed evidence for Reels, posts and carousels without automatically downloading remote media. Instagram covers are stored as local evidence, not as a replacement for YouTube thumbnail assets.
+
+## Market and Trend Intelligence Foundation
+
+Market and Trend Intelligence Foundation may register external content, cover metadata and reference assets for comparison, but it does not download media automatically or equate external covers with approved thumbnails.

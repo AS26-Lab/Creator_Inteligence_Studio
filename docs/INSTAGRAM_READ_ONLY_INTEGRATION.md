@@ -104,3 +104,7 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 ## Next phase
 
 The next phase is Multi-Platform Integration Consolidation.
+
+## Market intelligence note
+
+Market and Trend Intelligence Foundation can only consume Instagram references that the user imports manually or provides explicitly. It does not add automated Instagram discovery, scraping, or write operations.

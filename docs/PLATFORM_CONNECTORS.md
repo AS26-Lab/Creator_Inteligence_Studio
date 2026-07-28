@@ -95,6 +95,11 @@ YouTube será la primera plataforma objetivo para:
 
 ## Aislamiento por proveedor
 
+## Relacion con market intelligence
+
+Market and Trend Intelligence Foundation consume conectores ya existentes como fuentes de evidencia local y no sustituye sus semanticas nativas.
+La siguiente fase prevista despues de esa consolidacion es Opportunity and Recommendation Engine.
+
 - cada conector debe tener su propio contrato;
 - cada proveedor debe fallar de forma independiente;
 - un error en un proveedor no debe corromper los demás;

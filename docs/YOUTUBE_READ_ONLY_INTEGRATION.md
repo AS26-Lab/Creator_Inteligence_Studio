@@ -65,3 +65,7 @@ Audience Model Foundation consumes the read-only channels, videos, thumbnails an
 
 Instagram Read-Only Integration is documented separately in [`docs/INSTAGRAM_READ_ONLY_INTEGRATION.md`](INSTAGRAM_READ_ONLY_INTEGRATION.md). It uses the same local-evidence principle but a separate connector, separate storage, and no YouTube write operations.
 TikTok Read-Only Integration is documented separately in [`docs/TIKTOK_READ_ONLY_INTEGRATION.md`](TIKTOK_READ_ONLY_INTEGRATION.md). It follows the same local-evidence principle with TikTok Login Kit and Display API only.
+
+## Market intelligence note
+
+Market and Trend Intelligence Foundation may reuse public YouTube discovery evidence, but only through the official public research adapter and without changing YouTube read-only semantics. It does not add broader crawling, scraping, or write operations.

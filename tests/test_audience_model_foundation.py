@@ -279,8 +279,8 @@ class AudienceModelFoundationTests(unittest.TestCase):
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
                 run_migrations(connection)
                 idempotent_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
-            self.assertEqual(versions[-1], 25)
-            self.assertEqual(idempotent_count, 25)
+            self.assertEqual(versions[-1], 26)
+            self.assertEqual(idempotent_count, 26)
             self.assertIn("audience_profiles", tables)
             self.assertIn("audience_model_runs", tables)
 

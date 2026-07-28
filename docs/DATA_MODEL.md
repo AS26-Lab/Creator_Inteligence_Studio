@@ -704,3 +704,7 @@ La base local conserva solo referencias, scopes concedidos, fingerprints, estado
 ## Instagram Read-Only Integration
 
 The Instagram read-only phase adds creator-scoped tables for connections, accounts, remote media, carousel children, caption versions, cover versions, sync runs, sync items, insight imports, insight values, content links, rate limit usage and sync schedules. These tables preserve history, keep tokens out of the main SQLite database and do not overwrite YouTube or manual import data.
+
+## Market and Trend Intelligence Foundation
+
+Market and Trend Intelligence Foundation stores its own sources, observations, trend signals, patterns, fit evaluations, opportunity candidates, reviews, snapshots and reports. It preserves provenance and does not collapse market evidence into a generic metric bucket.

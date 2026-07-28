@@ -58,6 +58,18 @@ from .integrations_overview_view import (
     IntegrationPrivacyView,
     IntegrationOnboardingView,
 )
+from .market_overview_view import MarketOverviewView
+from .market_sources_view import MarketSourcesView
+from .competitor_library_view import CompetitorLibraryView
+from .external_content_view import ExternalContentView
+from .trend_signals_view import TrendSignalsView
+from .topic_landscape_view import TopicLandscapeView
+from .format_patterns_view import FormatPatternsView
+from .saturation_view import SaturationView
+from .creator_fit_view import CreatorFitView
+from .opportunity_candidates_view import OpportunityCandidatesView
+from .research_history_view import ResearchHistoryView
+from .market_privacy_view import MarketPrivacyView
 from .videos_view import VideosView
 
 __all__ = [
@@ -114,6 +126,18 @@ __all__ = [
     "IntegrationHistoryView",
     "IntegrationPrivacyView",
     "IntegrationOnboardingView",
+    "MarketOverviewView",
+    "MarketSourcesView",
+    "CompetitorLibraryView",
+    "ExternalContentView",
+    "TrendSignalsView",
+    "TopicLandscapeView",
+    "FormatPatternsView",
+    "SaturationView",
+    "CreatorFitView",
+    "OpportunityCandidatesView",
+    "ResearchHistoryView",
+    "MarketPrivacyView",
     "PackagingHistoryView",
     "VideosView",
 ]

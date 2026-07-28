@@ -84,3 +84,9 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - Write scopes, scraping and unofficial APIs are rejected.
 - Tokens stay outside the main SQLite database.
 - Instagram evidence can feed Analytics Lab, Audience Model and Thumbnail Lab, but only as local evidence and never as invented personas.
+
+## Market and trend decision
+
+- Market and Trend Intelligence Foundation is evidence-led and local-only.
+- It may observe official public YouTube discovery and user-provided external references, but it does not use scraping, private endpoints, LLMs or ML.
+- It does not turn trends into automatic recommendations yet.

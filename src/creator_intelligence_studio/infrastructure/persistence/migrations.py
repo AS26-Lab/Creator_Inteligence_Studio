@@ -4893,6 +4893,576 @@ def migration_25(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_reports_source_fingerprint ON platform_reports(source_fingerprint)")
 
 
+def migration_26(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_definitions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            market_type TEXT NOT NULL CHECK (market_type IN ('market', 'niche', 'subniche', 'topic_cluster')),
+            primary_language TEXT,
+            primary_region TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'draft')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_definitions_creator_id ON market_definitions(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_definitions_creator_name ON market_definitions(creator_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_topics (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT NOT NULL,
+            parent_topic_id TEXT,
+            canonical_name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            topic_type TEXT NOT NULL CHECK (topic_type IN ('topic', 'subtopic', 'excluded', 'alias', 'reference')),
+            aliases_json TEXT NOT NULL,
+            excluded_terms_json TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'draft')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_topic_id) REFERENCES market_topics(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_topics_creator_id ON market_topics(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_topics_market_id ON market_topics(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_topics_parent_topic_id ON market_topics(parent_topic_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_topics_market_canonical_name ON market_topics(market_id, canonical_name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_sources (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            platform TEXT,
+            name TEXT NOT NULL,
+            source_identifier TEXT,
+            source_url TEXT,
+            access_method TEXT NOT NULL,
+            trust_level TEXT NOT NULL,
+            permission_status TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            configuration_json TEXT NOT NULL,
+            last_checked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_sources_creator_id ON market_sources(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_sources_platform ON market_sources(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_sources_creator_name ON market_sources(creator_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_research_queries (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            platform TEXT NOT NULL,
+            query_text TEXT NOT NULL,
+            query_type TEXT NOT NULL,
+            language TEXT,
+            region TEXT,
+            published_after TEXT,
+            published_before TEXT,
+            max_results INTEGER NOT NULL,
+            filters_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_queries_creator_id ON market_research_queries(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_queries_market_id ON market_research_queries(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_queries_platform ON market_research_queries(platform)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_research_runs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            research_query_id TEXT,
+            status TEXT NOT NULL,
+            configuration_json TEXT NOT NULL,
+            cursor_json TEXT,
+            discovered_count INTEGER NOT NULL,
+            imported_count INTEGER NOT NULL,
+            updated_count INTEGER NOT NULL,
+            skipped_count INTEGER NOT NULL,
+            warning_count INTEGER NOT NULL,
+            error_count INTEGER NOT NULL,
+            estimated_quota_cost INTEGER,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE RESTRICT,
+            FOREIGN KEY (research_query_id) REFERENCES market_research_queries(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_runs_creator_id ON market_research_runs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_runs_source_id ON market_research_runs(source_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_runs_status ON market_research_runs(status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_research_items (
+            id TEXT PRIMARY KEY,
+            research_run_id TEXT NOT NULL,
+            external_entity_type TEXT NOT NULL,
+            external_entity_id TEXT,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (research_run_id) REFERENCES market_research_runs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_items_run_id ON market_research_items(research_run_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_research_items_status ON market_research_items(status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_entities (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            entity_type TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            external_id TEXT,
+            canonical_name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            source_url TEXT,
+            country TEXT,
+            language TEXT,
+            status TEXT NOT NULL,
+            first_observed_at TEXT NOT NULL,
+            last_observed_at TEXT NOT NULL,
+            remote_fingerprint TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_entities_creator_id ON market_entities(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_entities_market_id ON market_entities(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_entities_platform ON market_entities(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_entities_platform_external_id ON market_entities(platform, external_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS competitor_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_entity_id TEXT NOT NULL,
+            relationship_type TEXT NOT NULL,
+            relevance_reason TEXT NOT NULL,
+            relevance_scope TEXT NOT NULL,
+            approval_status TEXT NOT NULL,
+            monitoring_status TEXT NOT NULL,
+            copying_risk_level TEXT NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_entity_id) REFERENCES market_entities(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_competitor_profiles_creator_id ON competitor_profiles(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_competitor_profiles_market_entity_id ON competitor_profiles(market_entity_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS external_content_items (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_entity_id TEXT,
+            source_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            external_content_id TEXT,
+            content_type TEXT NOT NULL,
+            title TEXT,
+            description TEXT,
+            published_at TEXT,
+            duration_seconds INTEGER,
+            language TEXT,
+            region TEXT,
+            source_url TEXT,
+            thumbnail_url TEXT,
+            local_reference_asset_id TEXT,
+            topic_labels_json TEXT NOT NULL,
+            format_labels_json TEXT NOT NULL,
+            public_metrics_json TEXT NOT NULL,
+            remote_fingerprint TEXT,
+            first_observed_at TEXT NOT NULL,
+            last_observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_entity_id) REFERENCES market_entities(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_external_content_items_creator_id ON external_content_items(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_external_content_items_market_entity_id ON external_content_items(market_entity_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_external_content_items_platform ON external_content_items(platform)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_external_content_items_platform_external_id ON external_content_items(platform, external_content_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS external_content_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            external_content_item_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            metrics_json TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            quality_status TEXT NOT NULL,
+            warning_codes_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (external_content_item_id) REFERENCES external_content_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_external_content_snapshots_item_id ON external_content_snapshots(external_content_item_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_external_content_snapshots_observed_at ON external_content_snapshots(observed_at)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_observations (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            topic_id TEXT,
+            source_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            observation_type TEXT NOT NULL,
+            subject_type TEXT NOT NULL,
+            subject_id TEXT,
+            observed_value_json TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            observed_at TEXT NOT NULL,
+            evidence_quality TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL,
+            FOREIGN KEY (topic_id) REFERENCES market_topics(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_observations_creator_id ON market_observations(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_observations_market_id ON market_observations(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_observations_topic_id ON market_observations(topic_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_observations_observed_at ON market_observations(observed_at)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trend_signals (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            topic_id TEXT,
+            platform TEXT NOT NULL,
+            region TEXT,
+            language TEXT,
+            signal_type TEXT NOT NULL,
+            lifecycle_stage TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            magnitude REAL,
+            velocity REAL,
+            acceleration REAL,
+            persistence REAL,
+            saturation_level TEXT NOT NULL,
+            novelty_level REAL,
+            sample_size INTEGER NOT NULL,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            confidence_score REAL,
+            status TEXT NOT NULL,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL,
+            FOREIGN KEY (topic_id) REFERENCES market_topics(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_trend_signals_creator_id ON trend_signals(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_trend_signals_market_id ON trend_signals(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_trend_signals_topic_id ON trend_signals(topic_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_trend_signals_platform ON trend_signals(platform)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trend_signal_evidence (
+            id TEXT PRIMARY KEY,
+            trend_signal_id TEXT NOT NULL,
+            evidence_type TEXT NOT NULL,
+            source_id TEXT,
+            observation_id TEXT,
+            external_content_item_id TEXT,
+            snapshot_id TEXT,
+            supports_signal INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (trend_signal_id) REFERENCES trend_signals(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE SET NULL,
+            FOREIGN KEY (observation_id) REFERENCES market_observations(id) ON DELETE SET NULL,
+            FOREIGN KEY (external_content_item_id) REFERENCES external_content_items(id) ON DELETE SET NULL,
+            FOREIGN KEY (snapshot_id) REFERENCES external_content_snapshots(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_trend_signal_evidence_signal_id ON trend_signal_evidence(trend_signal_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_patterns (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            platform TEXT,
+            pattern_type TEXT NOT NULL,
+            canonical_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            pattern_definition_json TEXT NOT NULL,
+            sample_size INTEGER NOT NULL,
+            supporting_count INTEGER NOT NULL,
+            contradicting_count INTEGER NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            first_observed_at TEXT,
+            last_observed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_patterns_creator_id ON market_patterns(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_patterns_market_id ON market_patterns(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_patterns_platform ON market_patterns(platform)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_pattern_evidence (
+            id TEXT PRIMARY KEY,
+            pattern_id TEXT NOT NULL,
+            external_content_item_id TEXT,
+            observation_id TEXT,
+            evidence_role TEXT NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (pattern_id) REFERENCES market_patterns(id) ON DELETE CASCADE,
+            FOREIGN KEY (external_content_item_id) REFERENCES external_content_items(id) ON DELETE SET NULL,
+            FOREIGN KEY (observation_id) REFERENCES market_observations(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_pattern_evidence_pattern_id ON market_pattern_evidence(pattern_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_market_fit_evaluations (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            audience_profile_snapshot_id TEXT,
+            analytics_context_json TEXT NOT NULL,
+            brand_fit REAL NOT NULL,
+            audience_fit REAL NOT NULL,
+            historical_fit REAL NOT NULL,
+            platform_fit REAL NOT NULL,
+            strategic_fit REAL NOT NULL,
+            authenticity_fit REAL NOT NULL,
+            capability_fit REAL NOT NULL,
+            timing_fit REAL NOT NULL,
+            differentiation_potential REAL NOT NULL,
+            copying_risk REAL NOT NULL,
+            overall_fit REAL NOT NULL,
+            confidence_level TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_market_fit_evaluations_creator_id ON creator_market_fit_evaluations(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_market_fit_evaluations_target ON creator_market_fit_evaluations(target_type, target_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS opportunity_candidates (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            topic_id TEXT,
+            trend_signal_id TEXT,
+            pattern_id TEXT,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            opportunity_type TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            lifecycle_stage TEXT NOT NULL,
+            urgency TEXT NOT NULL,
+            freshness_status TEXT NOT NULL,
+            saturation_level TEXT NOT NULL,
+            creator_fit REAL NOT NULL,
+            audience_fit REAL NOT NULL,
+            historical_fit REAL NOT NULL,
+            differentiation_potential REAL NOT NULL,
+            copying_risk REAL NOT NULL,
+            evidence_quality TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL,
+            FOREIGN KEY (topic_id) REFERENCES market_topics(id) ON DELETE SET NULL,
+            FOREIGN KEY (trend_signal_id) REFERENCES trend_signals(id) ON DELETE SET NULL,
+            FOREIGN KEY (pattern_id) REFERENCES market_patterns(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_candidates_creator_id ON opportunity_candidates(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_candidates_market_id ON opportunity_candidates(market_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_candidates_topic_id ON opportunity_candidates(topic_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS opportunity_candidate_evidence (
+            id TEXT PRIMARY KEY,
+            opportunity_candidate_id TEXT NOT NULL,
+            evidence_type TEXT NOT NULL,
+            source_id TEXT,
+            trend_signal_id TEXT,
+            pattern_id TEXT,
+            external_content_item_id TEXT,
+            internal_publication_id TEXT,
+            supports_candidate INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (opportunity_candidate_id) REFERENCES opportunity_candidates(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_id) REFERENCES market_sources(id) ON DELETE SET NULL,
+            FOREIGN KEY (trend_signal_id) REFERENCES trend_signals(id) ON DELETE SET NULL,
+            FOREIGN KEY (pattern_id) REFERENCES market_patterns(id) ON DELETE SET NULL,
+            FOREIGN KEY (external_content_item_id) REFERENCES external_content_items(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_candidate_evidence_candidate_id ON opportunity_candidate_evidence(opportunity_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            previous_value_json TEXT,
+            new_value_json TEXT,
+            reason TEXT NOT NULL,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_reviews_creator_id ON market_reviews(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_reviews_target ON market_reviews(target_type, target_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            snapshot_type TEXT NOT NULL,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_snapshots_creator_id ON market_snapshots(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_snapshots_market_id ON market_snapshots(market_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_snapshots_source_fingerprint ON market_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS market_reports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            market_id TEXT,
+            report_type TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            source_fingerprint TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (market_id) REFERENCES market_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_reports_creator_id ON market_reports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_market_reports_market_id ON market_reports(market_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_market_reports_source_fingerprint ON market_reports(source_fingerprint)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -4919,6 +5489,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=23, name="instagram_read_only_integration"),
     Migration(version=24, name="tiktok_read_only_integration"),
     Migration(version=25, name="multi_platform_integration_consolidation"),
+    Migration(version=26, name="market_and_trend_intelligence_foundation"),
 )
 
 
@@ -5006,6 +5577,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_24(connection)
                 elif migration.version == 25:
                     migration_25(connection)
+                elif migration.version == 26:
+                    migration_26(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

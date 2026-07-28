@@ -138,6 +138,12 @@ class TaskCenterView(QWidget):
     def _is_platform_sync_group_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "platform_sync_group")
 
+    def _is_market_research_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "market_research_run")
+
+    def _is_market_opportunity_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "market_opportunity_candidate")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -298,6 +304,24 @@ class TaskCenterView(QWidget):
                 f"Grupo consolidado: {group.get('name', task.task_id)} / {group.get('status', task.status)} / items={len(items)}",
             )
             return
+        if self._is_market_research_task(task):
+            payload = getattr(task, "payload", {})
+            run = payload.get("run") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Investigacion de mercado: {run.get('status', task.status)} / {run.get('discovered_count', 0)} elementos",
+            )
+            return
+        if self._is_market_opportunity_task(task):
+            payload = getattr(task, "payload", {})
+            candidate = payload.get("candidate") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Candidato de oportunidad: {candidate.get('title', task.task_id)} / {candidate.get('status', task.status)}",
+            )
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -337,6 +361,9 @@ class TaskCenterView(QWidget):
         elif self._is_platform_sync_group_task(task):
             if self.workspace.platform_service is not None:
                 self.workspace.platform_service.cancel_sync(task.task_id)
+        elif self._is_market_research_task(task):
+            if self.workspace.market_service is not None:
+                self.workspace.market_service.cancel_research_run(task.task_id)
         elif task.title == "Render de clip":
             self.workspace.cancel_render(task.task_id)
         else:
@@ -517,6 +544,11 @@ class TaskCenterView(QWidget):
         if self._is_platform_sync_group_task(task):
             if self.workspace.platform_service is not None:
                 self.workspace.platform_service.resume_sync(task.task_id)
+            self.refresh()
+            return
+        if self._is_market_research_task(task):
+            if self.workspace.market_service is not None:
+                self.workspace.market_service.resume_research_run(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":
