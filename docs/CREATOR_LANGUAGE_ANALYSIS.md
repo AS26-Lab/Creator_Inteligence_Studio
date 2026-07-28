@@ -59,3 +59,4 @@ Thumbnail Lab and Titles Foundation reuses the same language and narrative signa
 ## Next phase
 
 Assisted Writing Foundation / Style-Grounded Drafting.
+Strategic Planning can use language snapshots to keep objectives, pillars and campaign framing aligned with the creator's voice.

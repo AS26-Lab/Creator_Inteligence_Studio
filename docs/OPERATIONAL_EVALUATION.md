@@ -86,3 +86,4 @@ Instagram Read-Only Integration scenarios can validate OAuth flow, professional 
 TikTok Read-Only Integration scenarios can validate desktop OAuth, loopback callbacks, read-only scope validation, profile import, public video sync, cursor resume, cover history, public counters, manual analytics coexistence, rate-limit handling, interruption and resume, exports and GUI/CLI visibility using only synthetic data and fakes.
 
 Market and Trend Intelligence Foundation scenarios should validate provenance, creator isolation, official public discovery boundaries, missing-data handling, reviewable opportunity candidates, and the absence of scraping or automatic recommendation claims.
+Strategic Planning adds local review checkpoints, overload detection and snapshot history for operational inspection.

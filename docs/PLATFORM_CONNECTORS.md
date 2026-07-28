@@ -104,3 +104,4 @@ La siguiente fase prevista despues de esa consolidacion es Opportunity and Recom
 - cada proveedor debe fallar de forma independiente;
 - un error en un proveedor no debe corromper los demás;
 - los datos importados deben registrar su origen.
+Strategic Planning can inspect connector availability and platform status without external writes or calendar sync.

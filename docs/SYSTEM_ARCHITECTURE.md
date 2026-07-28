@@ -402,3 +402,4 @@ Reglas:
 - `infrastructure/market_sources` holds the public discovery adapters and quota tracking for official sources.
 - `infrastructure/persistence/sqlite_market_intelligence_repository.py` stores creator-scoped market state in SQLite.
 - `presentation/cli/market_cli.py` and `presentation/desktop/views/market_overview_view.py` expose the phase without scraping, write operations or automatic recommendations.
+Strategic Planning sits above recommendations, experiments and Content Library as a deterministic local coordination layer, not as an execution engine.

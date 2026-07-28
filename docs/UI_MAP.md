@@ -371,3 +371,4 @@ flowchart LR
 - Overview, sources, external content, trend signals, patterns, saturation, creator fit, opportunity candidates, research history and privacy;
 - no automatic recommendations, no scraping and no write operations;
 - review-first access to evidence and provenance.
+Strategic Planning now exposes overview, plans, objectives, themes, pillars, initiatives, campaigns, series, roadmap, backlog, capacity, dependencies, milestones, scenarios, reviews, history, settings and privacy views.

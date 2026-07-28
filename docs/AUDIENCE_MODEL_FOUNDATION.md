@@ -124,3 +124,4 @@ Instagram Read-Only Integration now contributes additional local evidence for th
 ## Market intelligence note
 
 Market and Trend Intelligence Foundation can feed aggregate consumption, engagement and platform-presence evidence into the audience layer, but it must not invent acquisition source, returning viewers, demographics or individual journeys.
+Strategic Planning reads audience snapshots as immutable context for objectives, pillars and portfolio balance.

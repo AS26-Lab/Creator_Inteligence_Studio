@@ -5916,6 +5916,674 @@ def migration_27(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_recommendation_reports_source_fingerprint ON recommendation_reports(source_fingerprint)")
 
 
+def migration_28(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_context_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            context_version TEXT NOT NULL,
+            recommendation_snapshot_id TEXT,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            audience_snapshot_id TEXT,
+            analytics_snapshot_id TEXT,
+            market_snapshot_id TEXT,
+            experiment_snapshot_id TEXT,
+            content_library_snapshot_id TEXT,
+            platform_snapshot_id TEXT,
+            source_fingerprint TEXT NOT NULL,
+            context_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_context_snapshots_creator_id ON planning_context_snapshots(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_context_snapshots_creator_fingerprint ON planning_context_snapshots(creator_id, source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategic_plans (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL,
+            horizon_type TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            timezone TEXT,
+            primary_objective_id TEXT,
+            context_snapshot_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            parent_plan_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (primary_objective_id) REFERENCES strategic_objectives(id) ON DELETE SET NULL,
+            FOREIGN KEY (context_snapshot_id) REFERENCES planning_context_snapshots(id) ON DELETE RESTRICT,
+            FOREIGN KEY (parent_plan_id) REFERENCES strategic_plans(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_plans_creator_id ON strategic_plans(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_plans_context_snapshot_id ON strategic_plans(context_snapshot_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_plans_parent_plan_id ON strategic_plans(parent_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_strategic_plans_creator_name_version ON strategic_plans(creator_id, name, version)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategic_objectives (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            objective_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            priority_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            target_direction TEXT,
+            baseline_json TEXT,
+            target_json TEXT,
+            measurement_window TEXT,
+            confidence_level TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_objectives_creator_id ON strategic_objectives(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_objectives_plan_id ON strategic_objectives(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_strategic_objectives_plan_title ON strategic_objectives(strategic_plan_id, title)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategic_objective_metrics (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_objective_id TEXT NOT NULL,
+            metric_role TEXT NOT NULL,
+            platform TEXT,
+            metric_key TEXT NOT NULL,
+            internal_metric_key TEXT,
+            unit TEXT,
+            period_semantics TEXT,
+            availability_status TEXT NOT NULL,
+            baseline_value TEXT,
+            target_value TEXT,
+            target_method TEXT,
+            measurement_window TEXT,
+            source_type TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_objective_id) REFERENCES strategic_objectives(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_objective_metrics_objective_id ON strategic_objective_metrics(strategic_objective_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_objective_metrics_metric_key ON strategic_objective_metrics(metric_key)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategy_themes (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            theme_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority_level TEXT NOT NULL,
+            rationale TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategy_themes_plan_id ON strategy_themes(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_strategy_themes_plan_fingerprint ON strategy_themes(strategic_plan_id, source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS content_pillars (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            strategy_theme_id TEXT,
+            name TEXT NOT NULL,
+            description TEXT,
+            purpose TEXT,
+            audience_scope_json TEXT,
+            platform_scope_json TEXT,
+            content_type_scope_json TEXT,
+            target_mix_percentage REAL,
+            minimum_mix_percentage REAL,
+            maximum_mix_percentage REAL,
+            status TEXT NOT NULL,
+            rationale TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategy_theme_id) REFERENCES strategy_themes(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_pillars_plan_id ON content_pillars(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_pillars_theme_id ON content_pillars(strategy_theme_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_content_pillars_plan_name ON content_pillars(strategic_plan_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategic_initiatives (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            strategic_objective_id TEXT,
+            content_pillar_id TEXT,
+            recommendation_candidate_id TEXT,
+            experiment_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            initiative_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority_level TEXT NOT NULL,
+            expected_impact TEXT NOT NULL,
+            expected_learning_value TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            effort_level TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            start_window TEXT,
+            end_window TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_objective_id) REFERENCES strategic_objectives(id) ON DELETE SET NULL,
+            FOREIGN KEY (content_pillar_id) REFERENCES content_pillars(id) ON DELETE SET NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE SET NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_initiatives_plan_id ON strategic_initiatives(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_initiatives_objective_id ON strategic_initiatives(strategic_objective_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_initiatives_pillar_id ON strategic_initiatives(content_pillar_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_strategic_initiatives_recommendation_id ON strategic_initiatives(recommendation_candidate_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_strategic_initiatives_plan_recommendation ON strategic_initiatives(strategic_plan_id, recommendation_candidate_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            strategic_initiative_id TEXT,
+            name TEXT NOT NULL,
+            description TEXT,
+            campaign_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            platform_scope_json TEXT,
+            audience_scope_json TEXT,
+            objective_scope_json TEXT,
+            start_window TEXT,
+            end_window TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_initiative_id) REFERENCES strategic_initiatives(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_plan_id ON campaigns(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_initiative_id ON campaigns(strategic_initiative_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_campaigns_plan_name ON campaigns(strategic_plan_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS content_series (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            strategic_initiative_id TEXT,
+            campaign_id TEXT,
+            name TEXT NOT NULL,
+            description TEXT,
+            series_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            platform_scope_json TEXT,
+            content_type_scope_json TEXT,
+            planned_episode_count INTEGER,
+            minimum_episode_count INTEGER,
+            maximum_episode_count INTEGER,
+            cadence_type TEXT,
+            cadence_value TEXT,
+            success_criteria_json TEXT NOT NULL,
+            stop_criteria_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_initiative_id) REFERENCES strategic_initiatives(id) ON DELETE SET NULL,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_series_plan_id ON content_series(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_series_campaign_id ON content_series(campaign_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_content_series_plan_name ON content_series(strategic_plan_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_cycles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            cycle_type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            status TEXT NOT NULL,
+            locked INTEGER NOT NULL,
+            review_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_cycles_plan_id ON planning_cycles(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_cycles_plan_name ON planning_cycles(strategic_plan_id, name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roadmap_items (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            planning_cycle_id TEXT,
+            strategic_initiative_id TEXT,
+            campaign_id TEXT,
+            content_series_id TEXT,
+            recommendation_candidate_id TEXT,
+            experiment_id TEXT,
+            internal_content_id TEXT,
+            item_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL,
+            priority_level TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            tentative_start TEXT,
+            tentative_end TEXT,
+            confirmed_start TEXT,
+            confirmed_end TEXT,
+            platform_scope_json TEXT,
+            content_type_scope_json TEXT,
+            objective_scope_json TEXT,
+            estimated_effort TEXT,
+            estimated_duration_hours REAL,
+            assigned_capacity_units REAL,
+            confidence_level TEXT,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (planning_cycle_id) REFERENCES planning_cycles(id) ON DELETE SET NULL,
+            FOREIGN KEY (strategic_initiative_id) REFERENCES strategic_initiatives(id) ON DELETE SET NULL,
+            FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL,
+            FOREIGN KEY (content_series_id) REFERENCES content_series(id) ON DELETE SET NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE SET NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_items_plan_id ON roadmap_items(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_items_cycle_id ON roadmap_items(planning_cycle_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_items_initiative_id ON roadmap_items(strategic_initiative_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_items_source_fingerprint ON roadmap_items(source_fingerprint)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_roadmap_items_plan_fingerprint ON roadmap_items(strategic_plan_id, source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roadmap_item_dependencies (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            roadmap_item_id TEXT NOT NULL,
+            depends_on_roadmap_item_id TEXT NOT NULL,
+            dependency_type TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            lag_days INTEGER,
+            reason TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (depends_on_roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_item_dependencies_item_id ON roadmap_item_dependencies(roadmap_item_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_item_dependencies_depends_on_id ON roadmap_item_dependencies(depends_on_roadmap_item_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_roadmap_item_dependencies_unique ON roadmap_item_dependencies(roadmap_item_id, depends_on_roadmap_item_id, dependency_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roadmap_item_milestones (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            roadmap_item_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            milestone_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            target_date TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_item_milestones_item_id ON roadmap_item_milestones(roadmap_item_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roadmap_item_metrics (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            roadmap_item_id TEXT NOT NULL,
+            metric_role TEXT NOT NULL,
+            platform TEXT,
+            metric_key TEXT NOT NULL,
+            internal_metric_key TEXT,
+            measurement_window TEXT,
+            target_direction TEXT,
+            availability_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_item_metrics_item_id ON roadmap_item_metrics(roadmap_item_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roadmap_item_risks (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            roadmap_item_id TEXT NOT NULL,
+            risk_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            likelihood TEXT,
+            impact TEXT,
+            description TEXT NOT NULL,
+            mitigation TEXT,
+            blocking INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_roadmap_item_risks_item_id ON roadmap_item_risks(roadmap_item_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_backlog_items (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            backlog_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority_level TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            objective_scope_json TEXT NOT NULL,
+            freshness_status TEXT,
+            expires_at TEXT,
+            estimated_effort TEXT,
+            reason_not_scheduled TEXT,
+            review_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_backlog_items_plan_id ON planning_backlog_items(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_backlog_items_source_type ON planning_backlog_items(source_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_backlog_items_freshness ON planning_backlog_items(freshness_status)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_backlog_items_plan_source ON planning_backlog_items(strategic_plan_id, source_type, source_id, title)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_backlog_items_source ON planning_backlog_items(strategic_plan_id, source_type, source_id, backlog_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS capacity_profiles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT,
+            name TEXT,
+            status TEXT NOT NULL,
+            period_type TEXT NOT NULL,
+            available_hours REAL,
+            available_capacity_units REAL,
+            maximum_active_items INTEGER,
+            maximum_platforms INTEGER,
+            maximum_publications INTEGER,
+            configuration_json TEXT NOT NULL,
+            effective_from TEXT,
+            effective_to TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_capacity_profiles_creator_id ON capacity_profiles(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_capacity_profiles_plan_id ON capacity_profiles(strategic_plan_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS capacity_allocations (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            planning_cycle_id TEXT,
+            roadmap_item_id TEXT,
+            resource_type TEXT NOT NULL,
+            allocated_hours REAL,
+            allocated_units REAL,
+            allocation_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE,
+            FOREIGN KEY (planning_cycle_id) REFERENCES planning_cycles(id) ON DELETE SET NULL,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_capacity_allocations_plan_id ON capacity_allocations(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_capacity_allocations_cycle_id ON capacity_allocations(planning_cycle_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_capacity_allocations_item_id ON capacity_allocations(roadmap_item_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS resource_constraints (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            constraint_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            available_value_json TEXT,
+            required_value_json TEXT,
+            resolution_action TEXT,
+            effective_from TEXT,
+            effective_to TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_resource_constraints_plan_id ON resource_constraints(strategic_plan_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_conflicts (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            conflict_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            left_target_type TEXT NOT NULL,
+            left_target_id TEXT,
+            right_target_type TEXT,
+            right_target_id TEXT,
+            description TEXT NOT NULL,
+            resolution_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_conflicts_plan_id ON planning_conflicts(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_conflicts_resolution_status ON planning_conflicts(resolution_status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_scenarios (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            scenario_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            assumptions_json TEXT NOT NULL,
+            constraints_json TEXT NOT NULL,
+            capacity_json TEXT NOT NULL,
+            roadmap_summary_json TEXT NOT NULL,
+            risk_summary_json TEXT NOT NULL,
+            tradeoffs_json TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_scenarios_plan_id ON planning_scenarios(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_scenarios_plan_fingerprint ON planning_scenarios(strategic_plan_id, source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            review_type TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            previous_value_json TEXT,
+            new_value_json TEXT,
+            reason TEXT NOT NULL,
+            reviewer TEXT,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_reviews_plan_id ON planning_reviews(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_reviews_target_id ON planning_reviews(target_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            snapshot_type TEXT NOT NULL,
+            plan_version INTEGER NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_snapshots_plan_id ON planning_snapshots(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_snapshots_fingerprint ON planning_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_reports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT,
+            report_type TEXT NOT NULL,
+            period_start TEXT,
+            period_end TEXT,
+            source_fingerprint TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_reports_creator_id ON planning_reports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_reports_plan_id ON planning_reports(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_reports_source_fingerprint ON planning_reports(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planning_content_links (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            strategic_plan_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            internal_content_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_planning_content_links_plan_id ON planning_content_links(strategic_plan_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_content_links_target ON planning_content_links(strategic_plan_id, target_type, target_id, internal_content_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -5944,6 +6612,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=25, name="multi_platform_integration_consolidation"),
     Migration(version=26, name="market_and_trend_intelligence_foundation"),
     Migration(version=27, name="opportunity_and_recommendation_engine_foundation"),
+    Migration(version=28, name="strategic_planning_and_content_roadmap_foundation"),
 )
 
 
@@ -6035,6 +6704,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_26(connection)
                 elif migration.version == 27:
                     migration_27(connection)
+                elif migration.version == 28:
+                    migration_28(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

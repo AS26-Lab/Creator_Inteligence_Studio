@@ -113,3 +113,4 @@ Approved recommendations can be converted into experiment drafts by linking them
 ## Next phase
 
 Strategic Planning and Content Roadmap Foundation.
+Strategic Planning consumes approved, deferred and blocked recommendations as planning inputs without mutating the original recommendation records.

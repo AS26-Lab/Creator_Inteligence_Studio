@@ -38,6 +38,23 @@ from creator_intelligence_studio.presentation.desktop.views import (
     AudienceOverviewView,
     ExperimentsView,
     RecommendationsOverviewView,
+    PlanningOverviewView,
+    StrategicObjectivesView,
+    StrategyThemesView,
+    ContentPillarsView,
+    InitiativesView,
+    CampaignsView,
+    ContentSeriesView,
+    RoadmapView,
+    BacklogView,
+    CapacityView,
+    DependenciesView,
+    MilestonesView,
+    ScenariosView,
+    ReviewsView,
+    PlanningHistoryView,
+    PlanningSettingsView,
+    PlanningPrivacyView,
     CreatorMemoryView,
     CreatorLanguageView,
     OnboardingView,
@@ -85,6 +102,23 @@ class MainWindow(QMainWindow):
             "analytics_lab",
             "experiments",
             "recommendations",
+            "planning_overview",
+            "planning_objectives",
+            "planning_themes",
+            "planning_pillars",
+            "planning_initiatives",
+            "planning_campaigns",
+            "planning_series",
+            "planning_roadmap",
+            "planning_backlog",
+            "planning_capacity",
+            "planning_dependencies",
+            "planning_milestones",
+            "planning_scenarios",
+            "planning_reviews",
+            "planning_history",
+            "planning_settings",
+            "planning_privacy",
             "creator_memory",
             "creator_language",
             "thumbnails",
@@ -182,6 +216,23 @@ class MainWindow(QMainWindow):
         self.analytics_lab_view = AnalyticsLabView(workspace)
         self.experiments_view = ExperimentsView(workspace)
         self.recommendations_view = RecommendationsOverviewView(workspace)
+        self.planning_overview_view = PlanningOverviewView(workspace)
+        self.planning_objectives_view = StrategicObjectivesView(workspace)
+        self.planning_themes_view = StrategyThemesView(workspace)
+        self.planning_pillars_view = ContentPillarsView(workspace)
+        self.planning_initiatives_view = InitiativesView(workspace)
+        self.planning_campaigns_view = CampaignsView(workspace)
+        self.planning_series_view = ContentSeriesView(workspace)
+        self.planning_roadmap_view = RoadmapView(workspace)
+        self.planning_backlog_view = BacklogView(workspace)
+        self.planning_capacity_view = CapacityView(workspace)
+        self.planning_dependencies_view = DependenciesView(workspace)
+        self.planning_milestones_view = MilestonesView(workspace)
+        self.planning_scenarios_view = ScenariosView(workspace)
+        self.planning_reviews_view = ReviewsView(workspace)
+        self.planning_history_view = PlanningHistoryView(workspace)
+        self.planning_settings_view = PlanningSettingsView(workspace)
+        self.planning_privacy_view = PlanningPrivacyView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
         self.creator_language_view = CreatorLanguageView(workspace)
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
@@ -215,6 +266,23 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.analytics_lab_view)
         self.stack.addWidget(self.experiments_view)
         self.stack.addWidget(self.recommendations_view)
+        self.stack.addWidget(self.planning_overview_view)
+        self.stack.addWidget(self.planning_objectives_view)
+        self.stack.addWidget(self.planning_themes_view)
+        self.stack.addWidget(self.planning_pillars_view)
+        self.stack.addWidget(self.planning_initiatives_view)
+        self.stack.addWidget(self.planning_campaigns_view)
+        self.stack.addWidget(self.planning_series_view)
+        self.stack.addWidget(self.planning_roadmap_view)
+        self.stack.addWidget(self.planning_backlog_view)
+        self.stack.addWidget(self.planning_capacity_view)
+        self.stack.addWidget(self.planning_dependencies_view)
+        self.stack.addWidget(self.planning_milestones_view)
+        self.stack.addWidget(self.planning_scenarios_view)
+        self.stack.addWidget(self.planning_reviews_view)
+        self.stack.addWidget(self.planning_history_view)
+        self.stack.addWidget(self.planning_settings_view)
+        self.stack.addWidget(self.planning_privacy_view)
         self.stack.addWidget(self.creator_memory_view)
         self.stack.addWidget(self.creator_language_view)
         self.stack.addWidget(self.thumbnail_lab_view)
@@ -293,6 +361,23 @@ class MainWindow(QMainWindow):
         self.analytics_lab_view.refresh()
         self.experiments_view.refresh()
         self.recommendations_view.refresh()
+        self.planning_overview_view.refresh()
+        self.planning_objectives_view.refresh()
+        self.planning_themes_view.refresh()
+        self.planning_pillars_view.refresh()
+        self.planning_initiatives_view.refresh()
+        self.planning_campaigns_view.refresh()
+        self.planning_series_view.refresh()
+        self.planning_roadmap_view.refresh()
+        self.planning_backlog_view.refresh()
+        self.planning_capacity_view.refresh()
+        self.planning_dependencies_view.refresh()
+        self.planning_milestones_view.refresh()
+        self.planning_scenarios_view.refresh()
+        self.planning_reviews_view.refresh()
+        self.planning_history_view.refresh()
+        self.planning_settings_view.refresh()
+        self.planning_privacy_view.refresh()
         self.creator_memory_view.refresh()
         self.creator_language_view.refresh()
         self.thumbnail_lab_view.refresh()
@@ -426,6 +511,40 @@ class MainWindow(QMainWindow):
             self.experiments_view.refresh()
         elif current_key == "recommendations":
             self.recommendations_view.refresh()
+        elif current_key == "planning_overview":
+            self.planning_overview_view.refresh()
+        elif current_key == "planning_objectives":
+            self.planning_objectives_view.refresh()
+        elif current_key == "planning_themes":
+            self.planning_themes_view.refresh()
+        elif current_key == "planning_pillars":
+            self.planning_pillars_view.refresh()
+        elif current_key == "planning_initiatives":
+            self.planning_initiatives_view.refresh()
+        elif current_key == "planning_campaigns":
+            self.planning_campaigns_view.refresh()
+        elif current_key == "planning_series":
+            self.planning_series_view.refresh()
+        elif current_key == "planning_roadmap":
+            self.planning_roadmap_view.refresh()
+        elif current_key == "planning_backlog":
+            self.planning_backlog_view.refresh()
+        elif current_key == "planning_capacity":
+            self.planning_capacity_view.refresh()
+        elif current_key == "planning_dependencies":
+            self.planning_dependencies_view.refresh()
+        elif current_key == "planning_milestones":
+            self.planning_milestones_view.refresh()
+        elif current_key == "planning_scenarios":
+            self.planning_scenarios_view.refresh()
+        elif current_key == "planning_reviews":
+            self.planning_reviews_view.refresh()
+        elif current_key == "planning_history":
+            self.planning_history_view.refresh()
+        elif current_key == "planning_settings":
+            self.planning_settings_view.refresh()
+        elif current_key == "planning_privacy":
+            self.planning_privacy_view.refresh()
         elif current_key == "creator_memory":
             self.creator_memory_view.refresh()
         elif current_key == "creator_language":

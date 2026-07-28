@@ -447,3 +447,4 @@ La fase de TikTok Read-Only Integration ya esta disponible y se documenta en [`d
 ## Multi-Platform Integration Consolidation
 
 La consolidacion de plataforma ya esta documentada en [`docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md`](docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md).
+La fase de Strategic Planning and Content Roadmap Foundation esta documentada en [`docs/STRATEGIC_PLANNING_AND_CONTENT_ROADMAP_FOUNDATION.md`](docs/STRATEGIC_PLANNING_AND_CONTENT_ROADMAP_FOUNDATION.md).

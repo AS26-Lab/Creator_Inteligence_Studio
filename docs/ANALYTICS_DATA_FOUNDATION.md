@@ -48,3 +48,4 @@ Instagram Read-Only Integration adds imported account and media snapshots to the
 ## Market and Trend Intelligence Foundation
 
 Market and Trend Intelligence Foundation uses this same local foundation as historical evidence and keeps public cumulative counters separate from manual period imports and private analytics.
+Strategic Planning can reference analytics snapshots and metric availability when selecting objectives, metrics and review checkpoints.

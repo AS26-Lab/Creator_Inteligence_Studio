@@ -33,3 +33,4 @@ Creator Language / Narrative Profile se ubica despues como capa local de analisi
 Thumbnail Lab and Titles Foundation can link packaging versions, decisions, experiments, and outcomes so that later learning can retain what was approved, rejected, or selected.
 
 Audience Model Foundation can consume experiment outcomes and human reviews as evidence for segments, journeys, affinities and contradictions, but it does not generate recommendations with LLMs or promote experimental rules automatically.
+Strategic Planning links to existing experiment IDs only; experiments remain their own source of truth.

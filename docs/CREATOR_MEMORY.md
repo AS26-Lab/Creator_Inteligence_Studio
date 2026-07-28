@@ -70,3 +70,4 @@ Thumbnail Lab and Titles Foundation consults this memory for brand fit, approved
 Creator Language Analysis / Narrative Profile.
 
 See [`docs/CREATOR_LANGUAGE_ANALYSIS.md`](CREATOR_LANGUAGE_ANALYSIS.md) for the local language analysis layer that consumes structured sources and can propose reviewable candidates without mutating Creator Memory automatically.
+Strategic Planning reads Creator Memory snapshots as immutable planning context.

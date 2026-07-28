@@ -92,6 +92,7 @@ from creator_intelligence_studio.application.services.audience_model_service imp
 )
 from creator_intelligence_studio.application.services.platform_integration_service import PlatformIntegrationService
 from creator_intelligence_studio.application.services.market_intelligence_service import MarketIntelligenceService
+from creator_intelligence_studio.application.services.strategic_planning_service import StrategicPlanningService
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -330,6 +331,7 @@ class WorkspaceViewModel:
         audience_service: AudienceModelService | None = None,
         platform_service: PlatformIntegrationService | None = None,
         market_service: MarketIntelligenceService | None = None,
+        planning_service: StrategicPlanningService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -465,6 +467,7 @@ class WorkspaceViewModel:
         self.audience_service = audience_service
         self.platform_service = platform_service
         self.market_service = market_service
+        self.planning_service = planning_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1033,6 +1036,31 @@ class WorkspaceViewModel:
                     tasks.append(BackgroundTaskRecord.from_dict(task))
             except Exception:
                 pass
+        if self.planning_service is not None and self.selected_creator_id is not None:
+            try:
+                planning_tasks = self.planning_service.list_tasks(self.selected_creator_id)
+            except Exception:
+                planning_tasks = []
+            for task in planning_tasks:
+                payload = task.to_dict()
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=str(payload.get("id") or ""),
+                        title="Planning estrategico",
+                        status=str(payload.get("status") or "pending"),
+                        stage_name=payload.get("current_stage"),
+                        video_id=None,
+                        video_title=str(payload.get("plan_id") or ""),
+                        action_id=payload.get("open_result"),
+                        progress_percent=float(payload.get("progress_percent") or 0.0),
+                        message=payload.get("warnings") or payload.get("errors") or payload.get("current_stage"),
+                        error=payload.get("errors"),
+                        cancellable=str(payload.get("status") or "") not in {"completed", "cancelled", "failed"},
+                        created_at=str(payload.get("created_at") or ""),
+                        updated_at=str(payload.get("updated_at") or ""),
+                        payload={"kind": "planning_run", "planning_task": payload},
+                    )
+                )
         if self.recommendation_service is not None and self.selected_creator_id is not None:
             try:
                 for task in self.recommendation_service.build_background_tasks(self.selected_creator_id):

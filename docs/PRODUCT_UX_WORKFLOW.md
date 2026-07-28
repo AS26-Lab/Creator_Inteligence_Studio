@@ -161,3 +161,4 @@ TikTok Read-Only Integration uses the same product principle: connect a TikTok a
 Instagram Read-Only Integration uses the same product principle: connect a professional account, verify access, import account and media evidence, review history and links, and export locally only when the user asks. It never publishes or deletes remote content.
 
 Market and Trend Intelligence Foundation uses the same product principle: define a market, register sources, review evidence, inspect trend signals and opportunity candidates, and keep the human in the loop before any future recommendation phase.
+Strategic Planning adds the path from planning context to reviewable roadmap, without crossing into scripting, production or publication.

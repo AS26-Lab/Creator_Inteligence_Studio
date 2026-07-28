@@ -15,6 +15,23 @@ from .audience_affinity_view import AudienceAffinityView
 from .audience_history_view import AudienceHistoryView
 from .experiments_view import ExperimentsView
 from .recommendations_overview_view import RecommendationsOverviewView
+from .planning_overview_view import PlanningOverviewView
+from .strategic_objectives_view import StrategicObjectivesView
+from .strategy_themes_view import StrategyThemesView
+from .content_pillars_view import ContentPillarsView
+from .initiatives_view import InitiativesView
+from .campaigns_view import CampaignsView
+from .content_series_view import ContentSeriesView
+from .roadmap_view import RoadmapView
+from .backlog_view import BacklogView
+from .capacity_view import CapacityView
+from .dependencies_view import DependenciesView
+from .milestones_view import MilestonesView
+from .scenarios_view import ScenariosView
+from .reviews_view import ReviewsView
+from .planning_history_view import PlanningHistoryView
+from .planning_settings_view import PlanningSettingsView
+from .planning_privacy_view import PlanningPrivacyView
 from .recommendation_candidates_view import RecommendationCandidatesView
 from .recommendation_detail_view import RecommendationDetailView
 from .recommendation_evidence_view import RecommendationEvidenceView
@@ -95,6 +112,23 @@ __all__ = [
     "AudienceHistoryView",
     "ExperimentsView",
     "RecommendationsOverviewView",
+    "PlanningOverviewView",
+    "StrategicObjectivesView",
+    "StrategyThemesView",
+    "ContentPillarsView",
+    "InitiativesView",
+    "CampaignsView",
+    "ContentSeriesView",
+    "RoadmapView",
+    "BacklogView",
+    "CapacityView",
+    "DependenciesView",
+    "MilestonesView",
+    "ScenariosView",
+    "ReviewsView",
+    "PlanningHistoryView",
+    "PlanningSettingsView",
+    "PlanningPrivacyView",
     "RecommendationCandidatesView",
     "RecommendationDetailView",
     "RecommendationEvidenceView",

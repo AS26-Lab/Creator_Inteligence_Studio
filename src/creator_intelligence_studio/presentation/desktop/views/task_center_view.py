@@ -144,6 +144,9 @@ class TaskCenterView(QWidget):
     def _is_market_opportunity_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "market_opportunity_candidate")
 
+    def _is_planning_run_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "planning_run")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -322,6 +325,15 @@ class TaskCenterView(QWidget):
                 f"Candidato de oportunidad: {candidate.get('title', task.task_id)} / {candidate.get('status', task.status)}",
             )
             return
+        if self._is_planning_run_task(task):
+            payload = getattr(task, "payload", {})
+            planning_task = payload.get("planning_task") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Planning: {planning_task.get('plan_id', task.task_id)} / {planning_task.get('status', task.status)}",
+            )
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -358,6 +370,8 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_instagram_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_tiktok_sync_task(task):
             self.workspace.interrupt_tiktok_sync_run(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_planning_run_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_platform_sync_group_task(task):
             if self.workspace.platform_service is not None:
                 self.workspace.platform_service.cancel_sync(task.task_id)

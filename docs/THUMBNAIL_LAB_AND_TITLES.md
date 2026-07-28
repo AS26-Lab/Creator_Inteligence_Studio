@@ -62,3 +62,4 @@ Instagram Read-Only Integration may attach cover and thumbnail metadata as obser
 ## Market and Trend Intelligence Foundation
 
 Market and Trend Intelligence Foundation may register external content, cover metadata and reference assets for comparison, but it does not download media automatically or equate external covers with approved thumbnails.
+Strategic Planning may use packaging evidence as input, but it does not generate final thumbnails or titles.

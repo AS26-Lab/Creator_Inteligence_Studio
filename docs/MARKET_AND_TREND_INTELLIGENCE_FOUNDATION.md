@@ -51,4 +51,4 @@ Every signal and candidate remains traceable back to a source, research run or i
 - Audience Model Foundation consumes only aggregate, creator-scoped evidence.
 - Thumbnail Lab can link reference assets and cover metadata without treating them as automatic thumbnails.
 - Multi-Platform Integration Consolidation remains the shared registry and lifecycle layer above native connectors.
-
+Strategic Planning can read market snapshots as immutable input for objectives, freshness and scenario analysis, but it does not scrape or auto-schedule content from them.
