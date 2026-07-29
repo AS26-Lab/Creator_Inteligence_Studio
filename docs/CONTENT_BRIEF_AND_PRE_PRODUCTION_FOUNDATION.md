@@ -125,4 +125,4 @@ Audit trail local.
 La fase exporta reportes locales en JSON, TXT y CSV protegido contra CSV injection.
 
 ## Next Phase
-La siguiente fase prevista es `Script Outline and Production Preparation Foundation`.
+La siguiente fase prevista es [`docs/SCRIPT_OUTLINE_AND_PRODUCTION_PREPARATION_FOUNDATION.md`](docs/SCRIPT_OUTLINE_AND_PRODUCTION_PREPARATION_FOUNDATION.md).
