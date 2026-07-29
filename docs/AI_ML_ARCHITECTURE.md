@@ -1,123 +1,154 @@
-# AI / ML Architecture - Creator Intelligence Studio
+# AI / ML Architecture
 
-## Principios
+## Status
 
-- empezar con reglas, estadísticas y similitud;
-- usar embeddings y ranking antes que modelos complejos;
-- aprender con feedback humano;
-- evaluar de forma reproducible;
-- mantener independencia de proveedor;
-- priorizar CUDA cuando exista GPU compatible;
-- permitir fallback limitado sin GPU.
+This document defines the approved AI/ML operating model for Creator Intelligence Studio. It is subordinate to `docs/PROJECT_BIBLE.md`.
 
-## Componentes
+## Architecture Model
 
-### Rules Engine
+The product uses a hybrid architecture:
 
-- reglas explícitas;
-- heurísticas auditables;
-- decisiones deterministas cuando sea posible.
+- local core for deterministic work and storage;
+- selective external APIs only where they materially improve quality or speed;
+- local processing whenever it is reasonable;
+- replaceable AI roles instead of fixed provider coupling;
+- observable, reproducible outputs;
+- human approval for sensitive decisions.
 
-### Embeddings
+The first stage uses only:
 
-- representación semántica de texto, clips y artefactos;
-- base para búsqueda, similitud y ranking;
-- almacenamiento versionado.
+1. OpenAI
+2. Anthropic
 
-### Classifiers
+No third normal provider is approved for the initial stage.
 
-- clasificación de segmentos;
-- detección de categorías;
-- riesgo de texto artificial;
-- riesgo de caída de retención;
-- compatibilidad con voz del creador.
+## Provider Orientation
 
-### Rankers
+### OpenAI
 
-- ranking de clips;
-- ranking de hooks;
-- ranking de recomendaciones;
-- ranking de candidatos por contexto.
+Initial preferred role:
 
-## Datasets
+- structured tasks;
+- classification;
+- extraction;
+- general reasoning;
+- analytics support;
+- multimodal support;
+- transcription fallback;
+- alternative generation.
 
-- ejemplos aprobados;
-- ejemplos rechazados;
-- correcciones;
-- datos de rendimiento;
-- resultados de análisis;
-- contexto del creador;
-- etiquetas humanas cuando existan.
+### Anthropic
 
-Los datasets deben quedar separados por creador cuando correspondan.
+Initial preferred role:
 
-## Entrenamiento
+- scripts;
+- voice-preserving rewrite;
+- narrative work;
+- copywriting;
+- creative critique;
+- authenticity evaluation.
 
-- entrenamiento incremental o por lotes;
-- control de versión de datos;
-- control de versión de modelo;
-- registro de métricas;
-- comparación con baseline.
+No provider is permanently crowned. Benchmarks decide task-by-task.
 
-No se contempla entrenar un modelo fundacional desde cero.
+## Replaceable Roles
 
-## Evaluación
+The product must depend on conceptual roles, not model names.
 
-- precisión;
-- recall;
-- F1;
-- correlación con feedback;
-- utilidad operativa;
-- estabilidad entre versiones;
-- costo computacional;
-- latencia.
+- `cheap_structured_model`
+- `general_reasoning_model`
+- `creative_writing_model`
+- `multimodal_model`
+- `transcription_fallback_model`
+- `evaluation_model`
 
-## Model Registry
+Each role needs:
 
-- nombre del modelo;
-- versión;
-- backend;
-- entradas esperadas;
-- salidas;
-- métricas;
-- estado;
-- compatibilidad;
-- ubicación local.
+- capabilities;
+- state;
+- version;
+- snapshot;
+- cost;
+- benchmark results;
+- deprecated models;
+- controlled replacement;
+- provider-internal fallback;
+- cross-provider fallback only with permission;
+- no silent change for important tasks.
 
-## Versionado
+## Catalog Requirements
 
-- versiones de dataset;
-- versiones de features;
-- versiones de modelo;
-- versiones de pipeline;
-- versiones de evaluadores.
+The central catalog must record:
 
-## CUDA
+- role;
+- provider;
+- model name;
+- version;
+- capability notes;
+- supported formats;
+- supported modalities;
+- known limits;
+- cost profile;
+- latency profile;
+- benchmark history;
+- status;
+- replacement history;
+- retirement status.
 
-- inferencia acelerada como primera elección;
-- entrenamiento acelerado cuando sea viable;
-- control de memoria;
-- control de batch;
-- fallback de CPU para tareas básicas.
+## Orchestration Requirements
 
-## Proveedores externos
+The orchestrator must:
 
-- uso opcional;
-- no deben ser el único camino;
-- deben producir salidas estructuradas cuando sea posible;
-- sus resultados deben almacenarse como artefactos trazables.
+- select a role;
+- honor task sensitivity;
+- enforce provider policy;
+- record the selected model and provider;
+- preserve prompt and output provenance;
+- route fallbacks explicitly;
+- preserve human override points;
+- avoid silent upgrades on important tasks.
 
-## Reducción gradual de dependencia
+## Privacy And Control
 
-1. empezar con reglas y ranking;
-2. añadir embeddings;
-3. registrar feedback;
-4. entrenar modelos locales por caso de uso;
-5. reservar proveedores externos para cobertura, comparación o generación opcional.
+The AI stack must:
 
-## Pendientes
+- keep creator data isolated by `creator_id`;
+- avoid training on private creator data without explicit approval;
+- keep secrets out of logs, SQLite, and backups;
+- prefer local processing where practical;
+- document every provider exchange that matters.
 
-- framework concreto de ML;
-- esquema final de features;
-- formato exacto del registry.
+## Caching And Observability
+
+Cache and observability must cover:
+
+- prompt templates;
+- provider responses;
+- retries;
+- costs;
+- token usage;
+- latency;
+- fallback reason;
+- benchmark version;
+- task role;
+- creator scope.
+
+## Benchmarks
+
+Benchmarks are required before provider choice becomes canonical.
+
+They must compare:
+
+- authenticity;
+- rewriting quality;
+- strategic quality;
+- multimodal extraction;
+- structured extraction;
+- latency;
+- cost;
+- stability;
+- creator fit.
+
+## Discrepancy Note
+
+The older conceptual doc focused on rules, embeddings, classifiers, and rankers. That is still useful, but it no longer defines the top-level contract. The current authority is the Project Bible plus the catch-up decisions.
 

@@ -2,6 +2,17 @@
 
 Creator Intelligence Studio es una aplicacion de escritorio para Windows orientada al analisis inteligente de contenido audiovisual para creadores.
 
+## Canon documental
+
+La biblia oficial del producto esta en [`docs/PROJECT_BIBLE.md`](docs/PROJECT_BIBLE.md).
+La arquitectura aprobada para IA y ML esta en [`docs/AI_ML_ARCHITECTURE.md`](docs/AI_ML_ARCHITECTURE.md).
+La secuencia obligatoria de implementacion esta en [`docs/AI_IMPLEMENTATION_ROADMAP.md`](docs/AI_IMPLEMENTATION_ROADMAP.md).
+
+El corte canonico actual es v30. `Human-Guided Script Drafting Foundation` no ha comenzado.
+El siguiente bloque aprobado para IA es `AI Runtime and Provider Orchestration Foundation`, pero todavia no esta implementado.
+
+La referencia externa del catch-up debe vivir en [`docs/reference/README.md`](docs/reference/README.md) y, cuando exista el archivo, en `docs/reference/Creator_Intelligence_Studio_Catch_Up_IA_ML_2026-07-29.pdf`.
+
 ## Estado actual
 
 El proyecto ya dispone de:
