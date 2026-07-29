@@ -87,3 +87,5 @@ TikTok Read-Only Integration scenarios can validate desktop OAuth, loopback call
 
 Market and Trend Intelligence Foundation scenarios should validate provenance, creator isolation, official public discovery boundaries, missing-data handling, reviewable opportunity candidates, and the absence of scraping or automatic recommendation claims.
 Strategic Planning adds local review checkpoints, overload detection and snapshot history for operational inspection.
+
+[`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) adds local readiness, gate and blocker inspection for briefs before production.

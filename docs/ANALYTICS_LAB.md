@@ -42,3 +42,5 @@ TikTok Read-Only Integration feeds Analytics Lab only through compatible public 
 
 Market and Trend Intelligence Foundation contributes external trend signals as local evidence, but Analytics Lab keeps cumulative public counters, manual period imports and platform-specific semantics separate.
 Strategic Planning links to Analytics Lab reports for measurement and review, but does not invent missing metrics.
+
+The brief phase can link to Analytics Lab reports from [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) without duplicating experiment evidence.

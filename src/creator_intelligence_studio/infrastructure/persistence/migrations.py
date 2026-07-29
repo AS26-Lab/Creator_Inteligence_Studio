@@ -6584,6 +6584,791 @@ def migration_28(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planning_content_links_target ON planning_content_links(strategic_plan_id, target_type, target_id, internal_content_id)")
 
 
+def migration_29(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_context_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            context_version TEXT NOT NULL,
+            roadmap_item_id TEXT,
+            strategic_plan_id TEXT,
+            recommendation_candidate_id TEXT,
+            experiment_id TEXT,
+            internal_content_id TEXT,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            audience_snapshot_id TEXT,
+            analytics_snapshot_id TEXT,
+            market_snapshot_id TEXT,
+            platform_snapshot_id TEXT,
+            packaging_snapshot_id TEXT,
+            source_fingerprint TEXT NOT NULL,
+            context_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_context_snapshots_creator_id ON brief_context_snapshots(creator_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_context_snapshots_creator_fingerprint ON brief_context_snapshots(creator_id, source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_requests (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            request_type TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            objective_scope_json TEXT NOT NULL,
+            constraints_json TEXT NOT NULL,
+            preferences_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_requests_creator_id ON brief_requests(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_requests_source_type ON brief_requests(source_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_requests_status ON brief_requests(status)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_requests_source ON brief_requests(creator_id, source_type, source_id, request_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS content_briefs (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            brief_request_id TEXT,
+            context_snapshot_id TEXT NOT NULL,
+            strategic_plan_id TEXT,
+            roadmap_item_id TEXT,
+            recommendation_candidate_id TEXT,
+            experiment_id TEXT,
+            internal_content_id TEXT,
+            parent_brief_id TEXT,
+            version INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            working_title TEXT,
+            summary TEXT NOT NULL,
+            brief_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            primary_objective TEXT NOT NULL,
+            secondary_objectives_json TEXT NOT NULL,
+            non_goals_json TEXT NOT NULL,
+            audience_summary TEXT NOT NULL,
+            content_promise TEXT NOT NULL,
+            core_message TEXT NOT NULL,
+            desired_audience_action TEXT,
+            creator_fit TEXT NOT NULL,
+            audience_fit TEXT NOT NULL,
+            strategic_fit TEXT NOT NULL,
+            platform_fit TEXT NOT NULL,
+            operational_feasibility TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            copying_risk TEXT NOT NULL,
+            readiness_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (brief_request_id) REFERENCES brief_requests(id) ON DELETE SET NULL,
+            FOREIGN KEY (context_snapshot_id) REFERENCES brief_context_snapshots(id) ON DELETE RESTRICT,
+            FOREIGN KEY (strategic_plan_id) REFERENCES strategic_plans(id) ON DELETE SET NULL,
+            FOREIGN KEY (roadmap_item_id) REFERENCES roadmap_items(id) ON DELETE SET NULL,
+            FOREIGN KEY (recommendation_candidate_id) REFERENCES recommendation_candidates(id) ON DELETE SET NULL,
+            FOREIGN KEY (experiment_id) REFERENCES experiment_definitions(id) ON DELETE SET NULL,
+            FOREIGN KEY (parent_brief_id) REFERENCES content_briefs(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_creator_id ON content_briefs(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_context_snapshot_id ON content_briefs(context_snapshot_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_plan_id ON content_briefs(strategic_plan_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_roadmap_item_id ON content_briefs(roadmap_item_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_recommendation_id ON content_briefs(recommendation_candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_experiment_id ON content_briefs(experiment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_content_briefs_request_id ON content_briefs(brief_request_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_content_briefs_request_id ON content_briefs(brief_request_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_content_briefs_parent_version ON content_briefs(creator_id, parent_brief_id, version)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_sections (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            section_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content_json TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            required INTEGER NOT NULL,
+            completion_status TEXT NOT NULL,
+            source_fingerprint TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_sections_brief_id ON brief_sections(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_sections_unique ON brief_sections(content_brief_id, section_type, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_audience_definitions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            audience_type TEXT NOT NULL,
+            segment_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            needs_json TEXT NOT NULL,
+            pain_points_json TEXT NOT NULL,
+            desired_outcomes_json TEXT NOT NULL,
+            awareness_level TEXT,
+            relationship_stage TEXT,
+            platform_behavior_json TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            confidence_level TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_audience_definitions_brief_id ON brief_audience_definitions(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_audience_definitions_unique ON brief_audience_definitions(content_brief_id, audience_type, segment_name)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_content_promises (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            promise_type TEXT NOT NULL,
+            statement TEXT NOT NULL,
+            audience_value TEXT NOT NULL,
+            credibility_basis TEXT NOT NULL,
+            required_proof_json TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_content_promises_brief_id ON brief_content_promises(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_content_promises_unique ON brief_content_promises(content_brief_id, promise_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_content_angles (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            angle_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            differentiation TEXT NOT NULL,
+            creator_fit TEXT NOT NULL,
+            audience_fit TEXT NOT NULL,
+            market_fit TEXT NOT NULL,
+            copying_risk TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_content_angles_brief_id ON brief_content_angles(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_content_angles_unique ON brief_content_angles(content_brief_id, angle_type, title)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_message_hierarchy (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            message_level TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            message_role TEXT NOT NULL,
+            supporting_evidence_json TEXT NOT NULL,
+            mandatory INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_message_hierarchy_brief_id ON brief_message_hierarchy(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_message_hierarchy_unique ON brief_message_hierarchy(content_brief_id, message_level, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_hook_directions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            hook_type TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            constraints_json TEXT NOT NULL,
+            risks_json TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_hook_directions_brief_id ON brief_hook_directions(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_hook_directions_unique ON brief_hook_directions(content_brief_id, platform, hook_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_narrative_outlines (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            outline_type TEXT NOT NULL,
+            platform TEXT,
+            structure_json TEXT NOT NULL,
+            target_duration_seconds INTEGER,
+            pacing_direction TEXT,
+            transition_notes_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_narrative_outlines_brief_id ON brief_narrative_outlines(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_narrative_outlines_unique ON brief_narrative_outlines(content_brief_id, outline_type, platform)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_talking_points (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            point_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            required INTEGER NOT NULL,
+            evidence_required INTEGER NOT NULL,
+            claim_id TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE,
+            FOREIGN KEY (claim_id) REFERENCES brief_claims(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_talking_points_brief_id ON brief_talking_points(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_talking_points_unique ON brief_talking_points(content_brief_id, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_claims (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            claim_type TEXT NOT NULL,
+            claim_text TEXT NOT NULL,
+            fact_inference_hypothesis TEXT NOT NULL,
+            source_type TEXT,
+            source_id TEXT,
+            verification_status TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            required_before_production INTEGER NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_claims_brief_id ON brief_claims(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_claims_unique ON brief_claims(content_brief_id, claim_text)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_fact_checks (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            claim_id TEXT NOT NULL,
+            check_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            source_url TEXT,
+            source_reference TEXT,
+            checked_at TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE,
+            FOREIGN KEY (claim_id) REFERENCES brief_claims(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_fact_checks_brief_id ON brief_fact_checks(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_fact_checks_unique ON brief_fact_checks(content_brief_id, claim_id, check_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_packaging_directions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            packaging_type TEXT NOT NULL,
+            title_direction TEXT,
+            thumbnail_direction TEXT,
+            cover_direction TEXT,
+            visual_promise TEXT,
+            text_constraints_json TEXT NOT NULL,
+            brand_constraints_json TEXT NOT NULL,
+            copying_risk TEXT NOT NULL,
+            source_thumbnail_lab_id TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_packaging_directions_brief_id ON brief_packaging_directions(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_packaging_directions_unique ON brief_packaging_directions(content_brief_id, platform, packaging_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_visual_directions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            direction_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            composition_notes_json TEXT NOT NULL,
+            color_notes_json TEXT NOT NULL,
+            typography_notes_json TEXT NOT NULL,
+            motion_notes_json TEXT NOT NULL,
+            prohibited_elements_json TEXT NOT NULL,
+            reference_scope_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_visual_directions_brief_id ON brief_visual_directions(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_visual_directions_unique ON brief_visual_directions(content_brief_id, direction_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_audio_directions (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            direction_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            voice_notes_json TEXT NOT NULL,
+            music_notes_json TEXT NOT NULL,
+            sound_effect_notes_json TEXT NOT NULL,
+            rights_required INTEGER NOT NULL,
+            prohibited_elements_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_audio_directions_brief_id ON brief_audio_directions(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_audio_directions_unique ON brief_audio_directions(content_brief_id, direction_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_platform_adaptations (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            adaptation_type TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            duration_target INTEGER,
+            aspect_ratio TEXT,
+            safe_area_notes TEXT,
+            caption_direction TEXT,
+            metadata_direction_json TEXT NOT NULL,
+            platform_constraints_json TEXT NOT NULL,
+            measurement_plan_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_platform_adaptations_brief_id ON brief_platform_adaptations(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_platform_adaptations_unique ON brief_platform_adaptations(content_brief_id, platform, adaptation_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_boundaries (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            boundary_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            description TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_boundaries_brief_id ON brief_boundaries(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_boundaries_unique ON brief_boundaries(content_brief_id, boundary_type, source)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_references (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            reference_type TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            source_url TEXT,
+            local_asset_id TEXT,
+            title TEXT,
+            description TEXT NOT NULL,
+            usage_purpose TEXT NOT NULL,
+            allowed_usage TEXT NOT NULL,
+            copying_risk TEXT NOT NULL,
+            permission_status TEXT NOT NULL,
+            observed_at TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_references_brief_id ON brief_references(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_references_unique ON brief_references(content_brief_id, reference_type, source_type, source_id, source_url, local_asset_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_rights_checks (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            reference_id TEXT,
+            rights_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            owner TEXT,
+            permission_evidence TEXT,
+            expiration_date TEXT,
+            restrictions_json TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE,
+            FOREIGN KEY (reference_id) REFERENCES brief_references(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_rights_checks_brief_id ON brief_rights_checks(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_rights_checks_unique ON brief_rights_checks(content_brief_id, rights_type, reference_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_asset_requirements (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            asset_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            existing_asset_id TEXT,
+            required INTEGER NOT NULL,
+            rights_status TEXT NOT NULL,
+            readiness_status TEXT NOT NULL,
+            assigned_owner TEXT,
+            due_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_asset_requirements_brief_id ON brief_asset_requirements(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_asset_requirements_unique ON brief_asset_requirements(content_brief_id, asset_type, title)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_production_requirements (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            requirement_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            required INTEGER NOT NULL,
+            availability_status TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            estimated_effort TEXT,
+            assigned_owner TEXT,
+            due_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_production_requirements_brief_id ON brief_production_requirements(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_production_requirements_unique ON brief_production_requirements(content_brief_id, requirement_type, title)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_shot_plan_items (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            shot_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            location TEXT,
+            participants_json TEXT NOT NULL,
+            props_json TEXT NOT NULL,
+            equipment_json TEXT NOT NULL,
+            estimated_duration_seconds INTEGER,
+            required INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_shot_plan_items_brief_id ON brief_shot_plan_items(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_shot_plan_items_unique ON brief_shot_plan_items(content_brief_id, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_checklists (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            checklist_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_checklists_brief_id ON brief_checklists(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_checklists_unique ON brief_checklists(content_brief_id, checklist_type)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_checklist_items (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            checklist_id TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            item_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            required INTEGER NOT NULL,
+            blocking INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            completed_at TEXT,
+            completed_by TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (checklist_id) REFERENCES brief_checklists(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_checklist_items_checklist_id ON brief_checklist_items(checklist_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_checklist_items_unique ON brief_checklist_items(checklist_id, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_approval_gates (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            gate_type TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
+            required INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            approver TEXT,
+            approved_at TEXT,
+            rejection_reason TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_approval_gates_brief_id ON brief_approval_gates(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_approval_gates_unique ON brief_approval_gates(content_brief_id, gate_type, sequence_order)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_risks (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            risk_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            likelihood TEXT,
+            impact TEXT,
+            description TEXT NOT NULL,
+            mitigation TEXT,
+            blocking INTEGER NOT NULL,
+            owner TEXT,
+            review_at TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_risks_brief_id ON brief_risks(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_risks_unique ON brief_risks(content_brief_id, risk_type, description)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_dependencies (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            dependency_type TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            description TEXT NOT NULL,
+            blocking INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            due_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_dependencies_brief_id ON brief_dependencies(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_dependencies_unique ON brief_dependencies(content_brief_id, dependency_type, source_type, source_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_reviews (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            review_type TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            previous_status TEXT NOT NULL,
+            new_status TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            reviewer TEXT,
+            reviewed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_reviews_brief_id ON brief_reviews(content_brief_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            snapshot_type TEXT NOT NULL,
+            brief_version INTEGER NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_snapshots_brief_id ON brief_snapshots(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_snapshots_source_fingerprint ON brief_snapshots(source_fingerprint)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brief_reports (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT,
+            report_type TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_reports_creator_id ON brief_reports(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_brief_reports_brief_id ON brief_reports(content_brief_id)")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_reports_source_fingerprint ON brief_reports(source_fingerprint)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -6613,6 +7398,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=26, name="market_and_trend_intelligence_foundation"),
     Migration(version=27, name="opportunity_and_recommendation_engine_foundation"),
     Migration(version=28, name="strategic_planning_and_content_roadmap_foundation"),
+    Migration(version=29, name="content_brief_and_pre_production_foundation"),
 )
 
 
@@ -6706,6 +7492,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_27(connection)
                 elif migration.version == 28:
                     migration_28(connection)
+                elif migration.version == 29:
+                    migration_29(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

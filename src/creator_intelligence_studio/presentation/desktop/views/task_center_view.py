@@ -147,6 +147,9 @@ class TaskCenterView(QWidget):
     def _is_planning_run_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "planning_run")
 
+    def _is_brief_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "brief_run")
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -334,6 +337,15 @@ class TaskCenterView(QWidget):
                 f"Planning: {planning_task.get('plan_id', task.task_id)} / {planning_task.get('status', task.status)}",
             )
             return
+        if self._is_brief_task(task):
+            payload = getattr(task, "payload", {})
+            brief_task = payload.get("brief_task") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Brief: {brief_task.get('title', task.task_id)} / {brief_task.get('status', task.status)}",
+            )
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
@@ -372,6 +384,9 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_tiktok_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_planning_run_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_brief_task(task):
+            if self.workspace.brief_service is not None:
+                self.workspace.brief_service.cancel_run(task.task_id)
         elif self._is_platform_sync_group_task(task):
             if self.workspace.platform_service is not None:
                 self.workspace.platform_service.cancel_sync(task.task_id)
@@ -563,6 +578,11 @@ class TaskCenterView(QWidget):
         if self._is_market_research_task(task):
             if self.workspace.market_service is not None:
                 self.workspace.market_service.resume_research_run(task.task_id)
+            self.refresh()
+            return
+        if self._is_brief_task(task):
+            if self.workspace.brief_service is not None:
+                self.workspace.brief_service.resume_run(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

@@ -91,3 +91,5 @@ Los runtimes NVIDIA se instalan como paquetes `nvidia-*` dentro de `.venv`; no s
 - It may observe official public YouTube discovery and user-provided external references, but it does not use scraping, private endpoints, LLMs or ML.
 - It does not turn trends into automatic recommendations yet.
 Decision: Strategic Planning remains local, human-reviewed, non-automated and separate from external calendars and publication flows.
+
+Decision: [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) keeps briefs, readiness and preproduction local, human-reviewed and non-executable.

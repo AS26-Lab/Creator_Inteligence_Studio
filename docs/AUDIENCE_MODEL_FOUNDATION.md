@@ -125,3 +125,5 @@ Instagram Read-Only Integration now contributes additional local evidence for th
 
 Market and Trend Intelligence Foundation can feed aggregate consumption, engagement and platform-presence evidence into the audience layer, but it must not invent acquisition source, returning viewers, demographics or individual journeys.
 Strategic Planning reads audience snapshots as immutable context for objectives, pillars and portfolio balance.
+
+Audience snapshots also inform [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) for audience definitions, promises and constraints.

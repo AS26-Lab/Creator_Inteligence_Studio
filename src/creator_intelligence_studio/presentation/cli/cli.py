@@ -243,6 +243,10 @@ from creator_intelligence_studio.presentation.cli.planning_cli import (
     build_planning_parser,
     handle_planning_command,
 )
+from creator_intelligence_studio.presentation.cli.briefs_cli import (
+    build_briefs_parser,
+    handle_briefs_command,
+)
 from creator_intelligence_studio.presentation.cli.instagram_cli import (
     build_instagram_parser,
     handle_instagram,
@@ -445,6 +449,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_market_parser(subparsers)
     build_platforms_parser(subparsers)
     build_planning_parser(subparsers)
+    build_briefs_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
     creator_sub = creator_parser.add_subparsers(dest="action", required=True)
@@ -5320,6 +5325,7 @@ def dispatch(
     market_service=None,
     recommendation_service=None,
     planning_service=None,
+    brief_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -5409,6 +5415,10 @@ def dispatch(
             if planning_service is None:
                 raise DomainError("El servicio de planning no esta disponible.")
             return handle_planning_command(args, service=planning_service, stdout=stdout, stderr=stderr)
+        if args.entity == "briefs":
+            if brief_service is None:
+                raise DomainError("El servicio de briefs no esta disponible.")
+            return handle_briefs_command(args, service=brief_service, stdout=stdout, stderr=stderr)
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

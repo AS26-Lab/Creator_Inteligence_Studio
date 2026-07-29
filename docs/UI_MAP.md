@@ -372,3 +372,5 @@ flowchart LR
 - no automatic recommendations, no scraping and no write operations;
 - review-first access to evidence and provenance.
 Strategic Planning now exposes overview, plans, objectives, themes, pillars, initiatives, campaigns, series, roadmap, backlog, capacity, dependencies, milestones, scenarios, reviews, history, settings and privacy views.
+
+The UI also adds a `Content Briefs` area for requests, briefs, audience, promise, message, structure, claims, packaging, adaptations, references, rights, assets, preproduction, shot plan, checklists, approval gates, readiness, risks, reviews, history, settings and privacy, as documented in [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md).

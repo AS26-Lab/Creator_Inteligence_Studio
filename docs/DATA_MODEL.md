@@ -709,3 +709,5 @@ The Instagram read-only phase adds creator-scoped tables for connections, accoun
 
 Market and Trend Intelligence Foundation stores its own sources, observations, trend signals, patterns, fit evaluations, opportunity candidates, reviews, snapshots and reports. It preserves provenance and does not collapse market evidence into a generic metric bucket.
 Version v28 adds the Strategic Planning tables for contexts, plans, objectives, themes, pillars, initiatives, campaigns, series, cycles, roadmap, backlog, capacity, dependencies, milestones, risks, scenarios, reviews, snapshots, reports and content links.
+
+Version v29 extends the local model with brief context snapshots, brief requests, content briefs, sections, claims, references, rights, assets, checklists, approval gates, readiness, snapshots and reports for [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md).

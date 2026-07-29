@@ -105,3 +105,5 @@ La siguiente fase prevista despues de esa consolidacion es Opportunity and Recom
 - un error en un proveedor no debe corromper los demás;
 - los datos importados deben registrar su origen.
 Strategic Planning can inspect connector availability and platform status without external writes or calendar sync.
+
+[`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) reuses connector availability as a brief constraint and does not write back to platforms.

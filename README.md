@@ -116,6 +116,8 @@ La fase de Market and Trend Intelligence Foundation esta documentada en [`docs/M
 
 La siguiente fase prevista es [`docs/OPPORTUNITY_AND_RECOMMENDATION_ENGINE_FOUNDATION.md`](docs/OPPORTUNITY_AND_RECOMMENDATION_ENGINE_FOUNDATION.md). Esta base no agrega Trend Radar, scraping ni busqueda web.
 
+La fase de `Content Brief and Pre-Production Foundation` esta documentada en [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md).
+
 ## Base local
 
 La base estructurada inicial se guarda en:

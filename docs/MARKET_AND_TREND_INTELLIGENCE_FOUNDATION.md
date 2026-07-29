@@ -52,3 +52,5 @@ Every signal and candidate remains traceable back to a source, research run or i
 - Thumbnail Lab can link reference assets and cover metadata without treating them as automatic thumbnails.
 - Multi-Platform Integration Consolidation remains the shared registry and lifecycle layer above native connectors.
 Strategic Planning can read market snapshots as immutable input for objectives, freshness and scenario analysis, but it does not scrape or auto-schedule content from them.
+
+Those market and trend inputs can later feed [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) without turning evidence into automatic production.

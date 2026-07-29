@@ -55,6 +55,30 @@ from creator_intelligence_studio.presentation.desktop.views import (
     PlanningHistoryView,
     PlanningSettingsView,
     PlanningPrivacyView,
+    BriefsOverviewView,
+    BriefRequestsView,
+    ContentBriefsView,
+    BriefDetailView,
+    BriefAudienceView,
+    BriefPromiseAngleView,
+    BriefMessageView,
+    BriefStructureView,
+    BriefClaimsView,
+    BriefPackagingView,
+    BriefPlatformAdaptationsView,
+    BriefReferencesView,
+    BriefRightsView,
+    BriefAssetsView,
+    BriefPreproductionView,
+    BriefShotPlanView,
+    BriefChecklistView,
+    BriefApprovalGatesView,
+    BriefReadinessView,
+    BriefRisksView,
+    BriefReviewsView,
+    BriefHistoryView,
+    BriefSettingsView,
+    BriefPrivacyView,
     CreatorMemoryView,
     CreatorLanguageView,
     OnboardingView,
@@ -119,6 +143,30 @@ class MainWindow(QMainWindow):
             "planning_history",
             "planning_settings",
             "planning_privacy",
+            "briefs_overview",
+            "brief_requests",
+            "briefs",
+            "brief_detail",
+            "brief_audience",
+            "brief_promise_angle",
+            "brief_message",
+            "brief_structure",
+            "brief_claims",
+            "brief_packaging",
+            "brief_platform_adaptations",
+            "brief_references",
+            "brief_rights",
+            "brief_assets",
+            "brief_preproduction",
+            "brief_shot_plan",
+            "brief_checklist",
+            "brief_approval_gates",
+            "brief_readiness",
+            "brief_risks",
+            "brief_reviews",
+            "brief_history",
+            "brief_settings",
+            "brief_privacy",
             "creator_memory",
             "creator_language",
             "thumbnails",
@@ -233,6 +281,30 @@ class MainWindow(QMainWindow):
         self.planning_history_view = PlanningHistoryView(workspace)
         self.planning_settings_view = PlanningSettingsView(workspace)
         self.planning_privacy_view = PlanningPrivacyView(workspace)
+        self.briefs_overview_view = BriefsOverviewView(workspace)
+        self.brief_requests_view = BriefRequestsView(workspace)
+        self.content_briefs_view = ContentBriefsView(workspace)
+        self.brief_detail_view = BriefDetailView(workspace)
+        self.brief_audience_view = BriefAudienceView(workspace)
+        self.brief_promise_angle_view = BriefPromiseAngleView(workspace)
+        self.brief_message_view = BriefMessageView(workspace)
+        self.brief_structure_view = BriefStructureView(workspace)
+        self.brief_claims_view = BriefClaimsView(workspace)
+        self.brief_packaging_view = BriefPackagingView(workspace)
+        self.brief_platform_adaptations_view = BriefPlatformAdaptationsView(workspace)
+        self.brief_references_view = BriefReferencesView(workspace)
+        self.brief_rights_view = BriefRightsView(workspace)
+        self.brief_assets_view = BriefAssetsView(workspace)
+        self.brief_preproduction_view = BriefPreproductionView(workspace)
+        self.brief_shot_plan_view = BriefShotPlanView(workspace)
+        self.brief_checklist_view = BriefChecklistView(workspace)
+        self.brief_approval_gates_view = BriefApprovalGatesView(workspace)
+        self.brief_readiness_view = BriefReadinessView(workspace)
+        self.brief_risks_view = BriefRisksView(workspace)
+        self.brief_reviews_view = BriefReviewsView(workspace)
+        self.brief_history_view = BriefHistoryView(workspace)
+        self.brief_settings_view = BriefSettingsView(workspace)
+        self.brief_privacy_view = BriefPrivacyView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
         self.creator_language_view = CreatorLanguageView(workspace)
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
@@ -283,6 +355,30 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.planning_history_view)
         self.stack.addWidget(self.planning_settings_view)
         self.stack.addWidget(self.planning_privacy_view)
+        self.stack.addWidget(self.briefs_overview_view)
+        self.stack.addWidget(self.brief_requests_view)
+        self.stack.addWidget(self.content_briefs_view)
+        self.stack.addWidget(self.brief_detail_view)
+        self.stack.addWidget(self.brief_audience_view)
+        self.stack.addWidget(self.brief_promise_angle_view)
+        self.stack.addWidget(self.brief_message_view)
+        self.stack.addWidget(self.brief_structure_view)
+        self.stack.addWidget(self.brief_claims_view)
+        self.stack.addWidget(self.brief_packaging_view)
+        self.stack.addWidget(self.brief_platform_adaptations_view)
+        self.stack.addWidget(self.brief_references_view)
+        self.stack.addWidget(self.brief_rights_view)
+        self.stack.addWidget(self.brief_assets_view)
+        self.stack.addWidget(self.brief_preproduction_view)
+        self.stack.addWidget(self.brief_shot_plan_view)
+        self.stack.addWidget(self.brief_checklist_view)
+        self.stack.addWidget(self.brief_approval_gates_view)
+        self.stack.addWidget(self.brief_readiness_view)
+        self.stack.addWidget(self.brief_risks_view)
+        self.stack.addWidget(self.brief_reviews_view)
+        self.stack.addWidget(self.brief_history_view)
+        self.stack.addWidget(self.brief_settings_view)
+        self.stack.addWidget(self.brief_privacy_view)
         self.stack.addWidget(self.creator_memory_view)
         self.stack.addWidget(self.creator_language_view)
         self.stack.addWidget(self.thumbnail_lab_view)
@@ -378,6 +474,30 @@ class MainWindow(QMainWindow):
         self.planning_history_view.refresh()
         self.planning_settings_view.refresh()
         self.planning_privacy_view.refresh()
+        self.briefs_overview_view.refresh()
+        self.brief_requests_view.refresh()
+        self.content_briefs_view.refresh()
+        self.brief_detail_view.refresh()
+        self.brief_audience_view.refresh()
+        self.brief_promise_angle_view.refresh()
+        self.brief_message_view.refresh()
+        self.brief_structure_view.refresh()
+        self.brief_claims_view.refresh()
+        self.brief_packaging_view.refresh()
+        self.brief_platform_adaptations_view.refresh()
+        self.brief_references_view.refresh()
+        self.brief_rights_view.refresh()
+        self.brief_assets_view.refresh()
+        self.brief_preproduction_view.refresh()
+        self.brief_shot_plan_view.refresh()
+        self.brief_checklist_view.refresh()
+        self.brief_approval_gates_view.refresh()
+        self.brief_readiness_view.refresh()
+        self.brief_risks_view.refresh()
+        self.brief_reviews_view.refresh()
+        self.brief_history_view.refresh()
+        self.brief_settings_view.refresh()
+        self.brief_privacy_view.refresh()
         self.creator_memory_view.refresh()
         self.creator_language_view.refresh()
         self.thumbnail_lab_view.refresh()
@@ -545,6 +665,54 @@ class MainWindow(QMainWindow):
             self.planning_settings_view.refresh()
         elif current_key == "planning_privacy":
             self.planning_privacy_view.refresh()
+        elif current_key == "briefs_overview":
+            self.briefs_overview_view.refresh()
+        elif current_key == "brief_requests":
+            self.brief_requests_view.refresh()
+        elif current_key == "briefs":
+            self.content_briefs_view.refresh()
+        elif current_key == "brief_detail":
+            self.brief_detail_view.refresh()
+        elif current_key == "brief_audience":
+            self.brief_audience_view.refresh()
+        elif current_key == "brief_promise_angle":
+            self.brief_promise_angle_view.refresh()
+        elif current_key == "brief_message":
+            self.brief_message_view.refresh()
+        elif current_key == "brief_structure":
+            self.brief_structure_view.refresh()
+        elif current_key == "brief_claims":
+            self.brief_claims_view.refresh()
+        elif current_key == "brief_packaging":
+            self.brief_packaging_view.refresh()
+        elif current_key == "brief_platform_adaptations":
+            self.brief_platform_adaptations_view.refresh()
+        elif current_key == "brief_references":
+            self.brief_references_view.refresh()
+        elif current_key == "brief_rights":
+            self.brief_rights_view.refresh()
+        elif current_key == "brief_assets":
+            self.brief_assets_view.refresh()
+        elif current_key == "brief_preproduction":
+            self.brief_preproduction_view.refresh()
+        elif current_key == "brief_shot_plan":
+            self.brief_shot_plan_view.refresh()
+        elif current_key == "brief_checklist":
+            self.brief_checklist_view.refresh()
+        elif current_key == "brief_approval_gates":
+            self.brief_approval_gates_view.refresh()
+        elif current_key == "brief_readiness":
+            self.brief_readiness_view.refresh()
+        elif current_key == "brief_risks":
+            self.brief_risks_view.refresh()
+        elif current_key == "brief_reviews":
+            self.brief_reviews_view.refresh()
+        elif current_key == "brief_history":
+            self.brief_history_view.refresh()
+        elif current_key == "brief_settings":
+            self.brief_settings_view.refresh()
+        elif current_key == "brief_privacy":
+            self.brief_privacy_view.refresh()
         elif current_key == "creator_memory":
             self.creator_memory_view.refresh()
         elif current_key == "creator_language":

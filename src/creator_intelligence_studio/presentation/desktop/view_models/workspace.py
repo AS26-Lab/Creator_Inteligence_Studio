@@ -62,6 +62,9 @@ from creator_intelligence_studio.application.services.experiment_service import 
 from creator_intelligence_studio.application.services.recommendation_engine_service import (
     RecommendationEngineService,
 )
+from creator_intelligence_studio.application.services.content_brief_service import (
+    ContentBriefService,
+)
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
@@ -332,6 +335,7 @@ class WorkspaceViewModel:
         platform_service: PlatformIntegrationService | None = None,
         market_service: MarketIntelligenceService | None = None,
         planning_service: StrategicPlanningService | None = None,
+        brief_service: ContentBriefService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -468,6 +472,7 @@ class WorkspaceViewModel:
         self.platform_service = platform_service
         self.market_service = market_service
         self.planning_service = planning_service
+        self.brief_service = brief_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1059,6 +1064,33 @@ class WorkspaceViewModel:
                         created_at=str(payload.get("created_at") or ""),
                         updated_at=str(payload.get("updated_at") or ""),
                         payload={"kind": "planning_run", "planning_task": payload},
+                    )
+                )
+        if self.brief_service is not None and self.selected_creator_id is not None:
+            try:
+                brief_tasks = self.brief_service.list_tasks(self.selected_creator_id)
+            except Exception:
+                brief_tasks = []
+            for task in brief_tasks:
+                payload = task.to_dict()
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=str(payload.get("id") or ""),
+                        title="Content Brief",
+                        status=str(payload.get("status") or "pending"),
+                        stage_name=payload.get("stage_name") or payload.get("status"),
+                        video_id=None,
+                        video_title=str(payload.get("brief_id") or payload.get("source_id") or ""),
+                        action_id=payload.get("brief_id") or payload.get("source_id"),
+                        progress_percent=float(payload.get("progress_percent") or 0.0),
+                        message=payload.get("message") or payload.get("status"),
+                        error=payload.get("error"),
+                        cancellable=bool(payload.get("cancellable", True)),
+                        created_at=str(payload.get("created_at") or ""),
+                        updated_at=str(payload.get("updated_at") or ""),
+                        interrupted_at=str(payload.get("interrupted_at")) if payload.get("interrupted_at") else None,
+                        completed_at=str(payload.get("completed_at")) if payload.get("completed_at") else None,
+                        payload={"kind": "brief_run", "brief_task": payload},
                     )
                 )
         if self.recommendation_service is not None and self.selected_creator_id is not None:

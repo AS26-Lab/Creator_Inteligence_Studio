@@ -32,6 +32,30 @@ from .reviews_view import ReviewsView
 from .planning_history_view import PlanningHistoryView
 from .planning_settings_view import PlanningSettingsView
 from .planning_privacy_view import PlanningPrivacyView
+from .briefs_overview_view import BriefsOverviewView
+from .brief_requests_view import BriefRequestsView
+from .content_briefs_view import ContentBriefsView
+from .brief_detail_view import BriefDetailView
+from .brief_audience_view import BriefAudienceView
+from .brief_promise_angle_view import BriefPromiseAngleView
+from .brief_message_view import BriefMessageView
+from .brief_structure_view import BriefStructureView
+from .brief_claims_view import BriefClaimsView
+from .brief_packaging_view import BriefPackagingView
+from .brief_platform_adaptations_view import BriefPlatformAdaptationsView
+from .brief_references_view import BriefReferencesView
+from .brief_rights_view import BriefRightsView
+from .brief_assets_view import BriefAssetsView
+from .brief_preproduction_view import BriefPreproductionView
+from .brief_shot_plan_view import BriefShotPlanView
+from .brief_checklist_view import BriefChecklistView
+from .brief_approval_gates_view import BriefApprovalGatesView
+from .brief_readiness_view import BriefReadinessView
+from .brief_risks_view import BriefRisksView
+from .brief_reviews_view import BriefReviewsView
+from .brief_history_view import BriefHistoryView
+from .brief_settings_view import BriefSettingsView
+from .brief_privacy_view import BriefPrivacyView
 from .recommendation_candidates_view import RecommendationCandidatesView
 from .recommendation_detail_view import RecommendationDetailView
 from .recommendation_evidence_view import RecommendationEvidenceView
@@ -129,6 +153,30 @@ __all__ = [
     "PlanningHistoryView",
     "PlanningSettingsView",
     "PlanningPrivacyView",
+    "BriefsOverviewView",
+    "BriefRequestsView",
+    "ContentBriefsView",
+    "BriefDetailView",
+    "BriefAudienceView",
+    "BriefPromiseAngleView",
+    "BriefMessageView",
+    "BriefStructureView",
+    "BriefClaimsView",
+    "BriefPackagingView",
+    "BriefPlatformAdaptationsView",
+    "BriefReferencesView",
+    "BriefRightsView",
+    "BriefAssetsView",
+    "BriefPreproductionView",
+    "BriefShotPlanView",
+    "BriefChecklistView",
+    "BriefApprovalGatesView",
+    "BriefReadinessView",
+    "BriefRisksView",
+    "BriefReviewsView",
+    "BriefHistoryView",
+    "BriefSettingsView",
+    "BriefPrivacyView",
     "RecommendationCandidatesView",
     "RecommendationDetailView",
     "RecommendationEvidenceView",

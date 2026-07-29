@@ -114,3 +114,5 @@ Approved recommendations can be converted into experiment drafts by linking them
 
 Strategic Planning and Content Roadmap Foundation.
 Strategic Planning consumes approved, deferred and blocked recommendations as planning inputs without mutating the original recommendation records.
+
+The downstream brief and preproduction layer is documented in [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md).

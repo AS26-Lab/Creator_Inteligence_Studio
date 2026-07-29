@@ -24,3 +24,5 @@ Esta fase introduce una capa comun para YouTube, Instagram, TikTok y fuentes man
 
 Multi-Platform Integration Consolidation prepara el terreno para `Market and Trend Intelligence Foundation` sin iniciar esa fase.
 Strategic Planning can inspect platform snapshot state for capacity and balance, while preserving the connector layer as read-only in this phase.
+
+The same platform state can be reused by [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) to shape platform-specific brief adaptations.

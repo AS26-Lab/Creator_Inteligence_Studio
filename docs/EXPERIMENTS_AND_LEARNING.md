@@ -34,3 +34,5 @@ Thumbnail Lab and Titles Foundation can link packaging versions, decisions, expe
 
 Audience Model Foundation can consume experiment outcomes and human reviews as evidence for segments, journeys, affinities and contradictions, but it does not generate recommendations with LLMs or promote experimental rules automatically.
 Strategic Planning links to existing experiment IDs only; experiments remain their own source of truth.
+
+[`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) reuses those same experiment IDs for hypothesis-preserving briefs.

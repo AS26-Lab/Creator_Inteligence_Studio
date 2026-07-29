@@ -49,3 +49,5 @@ Instagram Read-Only Integration adds imported account and media snapshots to the
 
 Market and Trend Intelligence Foundation uses this same local foundation as historical evidence and keeps public cumulative counters separate from manual period imports and private analytics.
 Strategic Planning can reference analytics snapshots and metric availability when selecting objectives, metrics and review checkpoints.
+
+The same analytics snapshots can be reused by [`docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md`](docs/CONTENT_BRIEF_AND_PRE_PRODUCTION_FOUNDATION.md) for measurement planning and readiness checks.
