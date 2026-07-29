@@ -55,6 +55,41 @@ from creator_intelligence_studio.presentation.desktop.views import (
     PlanningHistoryView,
     PlanningSettingsView,
     PlanningPrivacyView,
+    ProductionOverviewView,
+    ProductionRequestsView,
+    ScriptOutlinesView,
+    OutlineDetailView,
+    BeatsView,
+    SegmentsView,
+    ClaimsProofView,
+    ScenesView,
+    ShotsView,
+    ShotGroupsView,
+    RecordingBlocksView,
+    RecordingOrderView,
+    VisualCuesView,
+    AudioCuesView,
+    OnScreenTextView,
+    BrollRequirementsView,
+    GraphicsRequirementsView,
+    ScreenRecordingsView,
+    ParticipantsView,
+    LocationsView,
+    PropsView,
+    WardrobeView,
+    EquipmentView,
+    ContinuityView,
+    PlatformVariantsView,
+    ReusableSegmentsView,
+    ProductionDependenciesView,
+    ProductionMilestonesView,
+    ProductionChecklistsView,
+    ProductionReadinessView,
+    ProductionRisksView,
+    ProductionReviewsView,
+    ProductionHistoryView,
+    ProductionSettingsView,
+    ProductionPrivacyView,
     BriefsOverviewView,
     BriefRequestsView,
     ContentBriefsView,
@@ -143,6 +178,41 @@ class MainWindow(QMainWindow):
             "planning_history",
             "planning_settings",
             "planning_privacy",
+            "production_overview",
+            "production_requests",
+            "production_outlines",
+            "production_outline_detail",
+            "production_beats",
+            "production_segments",
+            "production_claims_proof",
+            "production_scenes",
+            "production_shots",
+            "production_shot_groups",
+            "production_recording_blocks",
+            "production_recording_order",
+            "production_visual_cues",
+            "production_audio_cues",
+            "production_on_screen_text",
+            "production_broll",
+            "production_graphics",
+            "production_screen_recordings",
+            "production_participants",
+            "production_locations",
+            "production_props",
+            "production_wardrobe",
+            "production_equipment",
+            "production_continuity",
+            "production_variants",
+            "production_reusable_segments",
+            "production_dependencies",
+            "production_milestones",
+            "production_checklists",
+            "production_readiness",
+            "production_risks",
+            "production_reviews",
+            "production_history",
+            "production_settings",
+            "production_privacy",
             "briefs_overview",
             "brief_requests",
             "briefs",
@@ -281,6 +351,41 @@ class MainWindow(QMainWindow):
         self.planning_history_view = PlanningHistoryView(workspace)
         self.planning_settings_view = PlanningSettingsView(workspace)
         self.planning_privacy_view = PlanningPrivacyView(workspace)
+        self.production_overview_view = ProductionOverviewView(workspace)
+        self.production_requests_view = ProductionRequestsView(workspace)
+        self.production_outlines_view = ScriptOutlinesView(workspace)
+        self.production_outline_detail_view = OutlineDetailView(workspace)
+        self.production_beats_view = BeatsView(workspace)
+        self.production_segments_view = SegmentsView(workspace)
+        self.production_claims_proof_view = ClaimsProofView(workspace)
+        self.production_scenes_view = ScenesView(workspace)
+        self.production_shots_view = ShotsView(workspace)
+        self.production_shot_groups_view = ShotGroupsView(workspace)
+        self.production_recording_blocks_view = RecordingBlocksView(workspace)
+        self.production_recording_order_view = RecordingOrderView(workspace)
+        self.production_visual_cues_view = VisualCuesView(workspace)
+        self.production_audio_cues_view = AudioCuesView(workspace)
+        self.production_on_screen_text_view = OnScreenTextView(workspace)
+        self.production_broll_view = BrollRequirementsView(workspace)
+        self.production_graphics_view = GraphicsRequirementsView(workspace)
+        self.production_screen_recordings_view = ScreenRecordingsView(workspace)
+        self.production_participants_view = ParticipantsView(workspace)
+        self.production_locations_view = LocationsView(workspace)
+        self.production_props_view = PropsView(workspace)
+        self.production_wardrobe_view = WardrobeView(workspace)
+        self.production_equipment_view = EquipmentView(workspace)
+        self.production_continuity_view = ContinuityView(workspace)
+        self.production_variants_view = PlatformVariantsView(workspace)
+        self.production_reusable_segments_view = ReusableSegmentsView(workspace)
+        self.production_dependencies_view = ProductionDependenciesView(workspace)
+        self.production_milestones_view = ProductionMilestonesView(workspace)
+        self.production_checklists_view = ProductionChecklistsView(workspace)
+        self.production_readiness_view = ProductionReadinessView(workspace)
+        self.production_risks_view = ProductionRisksView(workspace)
+        self.production_reviews_view = ProductionReviewsView(workspace)
+        self.production_history_view = ProductionHistoryView(workspace)
+        self.production_settings_view = ProductionSettingsView(workspace)
+        self.production_privacy_view = ProductionPrivacyView(workspace)
         self.briefs_overview_view = BriefsOverviewView(workspace)
         self.brief_requests_view = BriefRequestsView(workspace)
         self.content_briefs_view = ContentBriefsView(workspace)
@@ -355,6 +460,41 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.planning_history_view)
         self.stack.addWidget(self.planning_settings_view)
         self.stack.addWidget(self.planning_privacy_view)
+        self.stack.addWidget(self.production_overview_view)
+        self.stack.addWidget(self.production_requests_view)
+        self.stack.addWidget(self.production_outlines_view)
+        self.stack.addWidget(self.production_outline_detail_view)
+        self.stack.addWidget(self.production_beats_view)
+        self.stack.addWidget(self.production_segments_view)
+        self.stack.addWidget(self.production_claims_proof_view)
+        self.stack.addWidget(self.production_scenes_view)
+        self.stack.addWidget(self.production_shots_view)
+        self.stack.addWidget(self.production_shot_groups_view)
+        self.stack.addWidget(self.production_recording_blocks_view)
+        self.stack.addWidget(self.production_recording_order_view)
+        self.stack.addWidget(self.production_visual_cues_view)
+        self.stack.addWidget(self.production_audio_cues_view)
+        self.stack.addWidget(self.production_on_screen_text_view)
+        self.stack.addWidget(self.production_broll_view)
+        self.stack.addWidget(self.production_graphics_view)
+        self.stack.addWidget(self.production_screen_recordings_view)
+        self.stack.addWidget(self.production_participants_view)
+        self.stack.addWidget(self.production_locations_view)
+        self.stack.addWidget(self.production_props_view)
+        self.stack.addWidget(self.production_wardrobe_view)
+        self.stack.addWidget(self.production_equipment_view)
+        self.stack.addWidget(self.production_continuity_view)
+        self.stack.addWidget(self.production_variants_view)
+        self.stack.addWidget(self.production_reusable_segments_view)
+        self.stack.addWidget(self.production_dependencies_view)
+        self.stack.addWidget(self.production_milestones_view)
+        self.stack.addWidget(self.production_checklists_view)
+        self.stack.addWidget(self.production_readiness_view)
+        self.stack.addWidget(self.production_risks_view)
+        self.stack.addWidget(self.production_reviews_view)
+        self.stack.addWidget(self.production_history_view)
+        self.stack.addWidget(self.production_settings_view)
+        self.stack.addWidget(self.production_privacy_view)
         self.stack.addWidget(self.briefs_overview_view)
         self.stack.addWidget(self.brief_requests_view)
         self.stack.addWidget(self.content_briefs_view)
@@ -474,6 +614,41 @@ class MainWindow(QMainWindow):
         self.planning_history_view.refresh()
         self.planning_settings_view.refresh()
         self.planning_privacy_view.refresh()
+        self.production_overview_view.refresh()
+        self.production_requests_view.refresh()
+        self.production_outlines_view.refresh()
+        self.production_outline_detail_view.refresh()
+        self.production_beats_view.refresh()
+        self.production_segments_view.refresh()
+        self.production_claims_proof_view.refresh()
+        self.production_scenes_view.refresh()
+        self.production_shots_view.refresh()
+        self.production_shot_groups_view.refresh()
+        self.production_recording_blocks_view.refresh()
+        self.production_recording_order_view.refresh()
+        self.production_visual_cues_view.refresh()
+        self.production_audio_cues_view.refresh()
+        self.production_on_screen_text_view.refresh()
+        self.production_broll_view.refresh()
+        self.production_graphics_view.refresh()
+        self.production_screen_recordings_view.refresh()
+        self.production_participants_view.refresh()
+        self.production_locations_view.refresh()
+        self.production_props_view.refresh()
+        self.production_wardrobe_view.refresh()
+        self.production_equipment_view.refresh()
+        self.production_continuity_view.refresh()
+        self.production_variants_view.refresh()
+        self.production_reusable_segments_view.refresh()
+        self.production_dependencies_view.refresh()
+        self.production_milestones_view.refresh()
+        self.production_checklists_view.refresh()
+        self.production_readiness_view.refresh()
+        self.production_risks_view.refresh()
+        self.production_reviews_view.refresh()
+        self.production_history_view.refresh()
+        self.production_settings_view.refresh()
+        self.production_privacy_view.refresh()
         self.briefs_overview_view.refresh()
         self.brief_requests_view.refresh()
         self.content_briefs_view.refresh()
@@ -665,6 +840,76 @@ class MainWindow(QMainWindow):
             self.planning_settings_view.refresh()
         elif current_key == "planning_privacy":
             self.planning_privacy_view.refresh()
+        elif current_key == "production_overview":
+            self.production_overview_view.refresh()
+        elif current_key == "production_requests":
+            self.production_requests_view.refresh()
+        elif current_key == "production_outlines":
+            self.production_outlines_view.refresh()
+        elif current_key == "production_outline_detail":
+            self.production_outline_detail_view.refresh()
+        elif current_key == "production_beats":
+            self.production_beats_view.refresh()
+        elif current_key == "production_segments":
+            self.production_segments_view.refresh()
+        elif current_key == "production_claims_proof":
+            self.production_claims_proof_view.refresh()
+        elif current_key == "production_scenes":
+            self.production_scenes_view.refresh()
+        elif current_key == "production_shots":
+            self.production_shots_view.refresh()
+        elif current_key == "production_shot_groups":
+            self.production_shot_groups_view.refresh()
+        elif current_key == "production_recording_blocks":
+            self.production_recording_blocks_view.refresh()
+        elif current_key == "production_recording_order":
+            self.production_recording_order_view.refresh()
+        elif current_key == "production_visual_cues":
+            self.production_visual_cues_view.refresh()
+        elif current_key == "production_audio_cues":
+            self.production_audio_cues_view.refresh()
+        elif current_key == "production_on_screen_text":
+            self.production_on_screen_text_view.refresh()
+        elif current_key == "production_broll":
+            self.production_broll_view.refresh()
+        elif current_key == "production_graphics":
+            self.production_graphics_view.refresh()
+        elif current_key == "production_screen_recordings":
+            self.production_screen_recordings_view.refresh()
+        elif current_key == "production_participants":
+            self.production_participants_view.refresh()
+        elif current_key == "production_locations":
+            self.production_locations_view.refresh()
+        elif current_key == "production_props":
+            self.production_props_view.refresh()
+        elif current_key == "production_wardrobe":
+            self.production_wardrobe_view.refresh()
+        elif current_key == "production_equipment":
+            self.production_equipment_view.refresh()
+        elif current_key == "production_continuity":
+            self.production_continuity_view.refresh()
+        elif current_key == "production_variants":
+            self.production_variants_view.refresh()
+        elif current_key == "production_reusable_segments":
+            self.production_reusable_segments_view.refresh()
+        elif current_key == "production_dependencies":
+            self.production_dependencies_view.refresh()
+        elif current_key == "production_milestones":
+            self.production_milestones_view.refresh()
+        elif current_key == "production_checklists":
+            self.production_checklists_view.refresh()
+        elif current_key == "production_readiness":
+            self.production_readiness_view.refresh()
+        elif current_key == "production_risks":
+            self.production_risks_view.refresh()
+        elif current_key == "production_reviews":
+            self.production_reviews_view.refresh()
+        elif current_key == "production_history":
+            self.production_history_view.refresh()
+        elif current_key == "production_settings":
+            self.production_settings_view.refresh()
+        elif current_key == "production_privacy":
+            self.production_privacy_view.refresh()
         elif current_key == "briefs_overview":
             self.briefs_overview_view.refresh()
         elif current_key == "brief_requests":

@@ -150,6 +150,15 @@ class TaskCenterView(QWidget):
     def _is_brief_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "brief_run")
 
+    def _is_production_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "production_run")
+
+    def _task_video_id(self, task) -> str | None:
+        return getattr(task, "video_id", None)
+
+    def _task_video_title(self, task) -> str | None:
+        return getattr(task, "video_title", None)
+
     def refresh(self) -> None:
         tasks = self.workspace.background_tasks()
         self.table.setRowCount(0)
@@ -166,7 +175,7 @@ class TaskCenterView(QWidget):
             self.table.insertRow(row_index)
             values = [
                 task.title,
-                task.video_title or task.video_id or "",
+                self._task_video_title(task) or self._task_video_id(task) or "",
                 task.stage_name or "",
                 task.status,
                 f"{task.progress_percent:.1f}%",
@@ -346,19 +355,28 @@ class TaskCenterView(QWidget):
                 f"Brief: {brief_task.get('title', task.task_id)} / {brief_task.get('status', task.status)}",
             )
             return
+        if self._is_production_task(task):
+            payload = getattr(task, "payload", {})
+            production_task = payload.get("production_task") or {}
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Production: {production_task.get('title', task.task_id)} / {production_task.get('status', task.status)}",
+            )
+            return
         if self._is_experiment_evaluation_task(task):
             payload = getattr(task, "payload", {})
             experiment = payload.get("experiment") or {}
             QMessageBox.information(
                 self,
                 "Task Center",
-                f"Evaluacion de experimento: {experiment.get('name', task.video_title or task.task_id)} / {task.status}",
+                f"Evaluacion de experimento: {experiment.get('name', self._task_video_title(task) or task.task_id)} / {task.status}",
             )
             return
-        if task.video_id is None:
+        if self._task_video_id(task) is None:
             return
-        self.workspace.select_video(task.video_id)
-        QMessageBox.information(self, "Task Center", f"Video seleccionado: {task.video_title or task.video_id}")
+        self.workspace.select_video(self._task_video_id(task))
+        QMessageBox.information(self, "Task Center", f"Video seleccionado: {self._task_video_title(task) or self._task_video_id(task)}")
 
     def _interrupt_task(self) -> None:
         task = self._selected_task()
@@ -387,6 +405,9 @@ class TaskCenterView(QWidget):
         elif self._is_brief_task(task):
             if self.workspace.brief_service is not None:
                 self.workspace.brief_service.cancel_run(task.task_id)
+        elif self._is_production_task(task):
+            if self.workspace.production_service is not None:
+                self.workspace.production_service.cancel_run(task.task_id)
         elif self._is_platform_sync_group_task(task):
             if self.workspace.platform_service is not None:
                 self.workspace.platform_service.cancel_sync(task.task_id)
@@ -403,8 +424,8 @@ class TaskCenterView(QWidget):
         task = self._selected_task()
         if task is None:
             return
-        if task.video_id:
-            self.workspace.select_video(task.video_id)
+        if self._task_video_id(task):
+            self.workspace.select_video(self._task_video_id(task))
         if self._is_delivery_task(task):
             self.workspace.retry_delivery(task.task_id)
             self.refresh()
@@ -583,6 +604,11 @@ class TaskCenterView(QWidget):
         if self._is_brief_task(task):
             if self.workspace.brief_service is not None:
                 self.workspace.brief_service.resume_run(task.task_id)
+            self.refresh()
+            return
+        if self._is_production_task(task):
+            if self.workspace.production_service is not None:
+                self.workspace.production_service.resume_run(task.task_id)
             self.refresh()
             return
         if task.title == "Render de clip":

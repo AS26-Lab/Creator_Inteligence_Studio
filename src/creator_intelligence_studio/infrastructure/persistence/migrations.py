@@ -7369,6 +7369,859 @@ def migration_29(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_brief_reports_source_fingerprint ON brief_reports(source_fingerprint)")
 
 
+def migration_30(connection: sqlite3.Connection) -> None:
+    def create(sql: str) -> None:
+        connection.execute(sql)
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS production_context_snapshots (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            context_version TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            brief_version INTEGER NOT NULL,
+            strategic_plan_id TEXT,
+            roadmap_item_id TEXT,
+            recommendation_candidate_id TEXT,
+            experiment_id TEXT,
+            internal_content_id TEXT,
+            creator_memory_snapshot_id TEXT,
+            creator_language_snapshot_id TEXT,
+            audience_snapshot_id TEXT,
+            platform_snapshot_id TEXT,
+            packaging_snapshot_id TEXT,
+            source_fingerprint TEXT NOT NULL,
+            context_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_context_snapshots_creator_fingerprint ON production_context_snapshots(creator_id, source_fingerprint)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_context_snapshots_brief_id ON production_context_snapshots(content_brief_id)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS script_outline_requests (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            content_brief_id TEXT NOT NULL,
+            request_type TEXT NOT NULL,
+            platform_scope_json TEXT NOT NULL,
+            content_type_scope_json TEXT NOT NULL,
+            constraints_json TEXT NOT NULL,
+            preferences_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_script_outline_requests_unique ON script_outline_requests(creator_id, content_brief_id, request_type)")
+    create("CREATE INDEX IF NOT EXISTS idx_script_outline_requests_creator_id ON script_outline_requests(creator_id)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS script_outlines (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            script_outline_request_id TEXT,
+            content_brief_id TEXT NOT NULL,
+            production_context_snapshot_id TEXT NOT NULL,
+            parent_outline_id TEXT,
+            version INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            outline_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            primary_platform TEXT,
+            platform_scope_json TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            target_duration_seconds INTEGER,
+            target_word_range_json TEXT,
+            target_segment_count INTEGER,
+            primary_objective TEXT NOT NULL,
+            audience_summary TEXT NOT NULL,
+            content_promise TEXT NOT NULL,
+            core_message TEXT NOT NULL,
+            narrative_structure TEXT NOT NULL,
+            pacing_direction TEXT,
+            confidence_level TEXT NOT NULL,
+            copying_risk TEXT NOT NULL,
+            readiness_status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (script_outline_request_id) REFERENCES script_outline_requests(id) ON DELETE SET NULL,
+            FOREIGN KEY (content_brief_id) REFERENCES content_briefs(id) ON DELETE CASCADE,
+            FOREIGN KEY (production_context_snapshot_id) REFERENCES production_context_snapshots(id) ON DELETE RESTRICT,
+            FOREIGN KEY (parent_outline_id) REFERENCES script_outlines(id) ON DELETE SET NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_script_outlines_request_id ON script_outlines(script_outline_request_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_script_outlines_parent_version ON script_outlines(creator_id, parent_outline_id, version)")
+    create("CREATE INDEX IF NOT EXISTS idx_script_outlines_creator_id ON script_outlines(creator_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_script_outlines_brief_id ON script_outlines(content_brief_id)")
+
+    table_defs = {
+        "outline_sections": """
+            CREATE TABLE IF NOT EXISTS outline_sections (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                section_type TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                description TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                target_duration_seconds INTEGER,
+                target_word_range_json TEXT,
+                status TEXT NOT NULL,
+                source_fingerprint TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "outline_beats": """
+            CREATE TABLE IF NOT EXISTS outline_beats (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_section_id TEXT,
+                sequence_order INTEGER NOT NULL,
+                beat_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                description TEXT NOT NULL,
+                audience_state_before TEXT,
+                audience_state_after TEXT,
+                required INTEGER NOT NULL,
+                estimated_duration_seconds INTEGER,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_section_id) REFERENCES outline_sections(id) ON DELETE CASCADE
+            )
+        """,
+        "outline_segments": """
+            CREATE TABLE IF NOT EXISTS outline_segments (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_section_id TEXT,
+                outline_beat_id TEXT,
+                sequence_order INTEGER NOT NULL,
+                segment_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                content_direction TEXT NOT NULL,
+                transition_in TEXT,
+                transition_out TEXT,
+                required INTEGER NOT NULL,
+                estimated_duration_seconds INTEGER,
+                reusable INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_section_id) REFERENCES outline_sections(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_beat_id) REFERENCES outline_beats(id) ON DELETE CASCADE
+            )
+        """,
+        "outline_talking_point_links": """
+            CREATE TABLE IF NOT EXISTS outline_talking_point_links (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT NOT NULL,
+                brief_talking_point_id TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                required INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_segment_id) REFERENCES outline_segments(id) ON DELETE CASCADE
+            )
+        """,
+        "outline_claim_links": """
+            CREATE TABLE IF NOT EXISTS outline_claim_links (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT NOT NULL,
+                brief_claim_id TEXT NOT NULL,
+                usage_type TEXT NOT NULL,
+                verification_required TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_segment_id) REFERENCES outline_segments(id) ON DELETE CASCADE
+            )
+        """,
+        "outline_proof_requirements": """
+            CREATE TABLE IF NOT EXISTS outline_proof_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT NOT NULL,
+                proof_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                source_type TEXT,
+                source_id TEXT,
+                required INTEGER NOT NULL,
+                readiness_status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_segment_id) REFERENCES outline_segments(id) ON DELETE CASCADE
+            )
+        """,
+        "production_scene_plans": """
+            CREATE TABLE IF NOT EXISTS production_scene_plans (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_number INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                description TEXT NOT NULL,
+                location_requirement_id TEXT,
+                continuity_group TEXT,
+                estimated_duration_seconds INTEGER,
+                priority_level INTEGER NOT NULL,
+                required INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_shot_items": """
+            CREATE TABLE IF NOT EXISTS production_shot_items (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                scene_plan_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                shot_number INTEGER NOT NULL,
+                shot_type TEXT NOT NULL,
+                framing TEXT,
+                angle TEXT,
+                movement TEXT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                visual_cue TEXT,
+                audio_cue TEXT,
+                on_screen_text_direction TEXT,
+                estimated_recording_seconds INTEGER,
+                estimated_final_seconds INTEGER,
+                required INTEGER NOT NULL,
+                priority_level INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (scene_plan_id) REFERENCES production_scene_plans(id) ON DELETE CASCADE
+            )
+        """,
+        "production_shot_groups": """
+            CREATE TABLE IF NOT EXISTS production_shot_groups (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                grouping_type TEXT NOT NULL,
+                location_id TEXT,
+                participant_scope_json TEXT NOT NULL,
+                equipment_scope_json TEXT NOT NULL,
+                continuity_scope_json TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                rationale TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_shot_group_items": """
+            CREATE TABLE IF NOT EXISTS production_shot_group_items (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                shot_group_id TEXT NOT NULL,
+                shot_item_id TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (shot_group_id) REFERENCES production_shot_groups(id) ON DELETE CASCADE,
+                FOREIGN KEY (shot_item_id) REFERENCES production_shot_items(id) ON DELETE CASCADE
+            )
+        """,
+    }
+    for sql in table_defs.values():
+        create(sql)
+    create("CREATE INDEX IF NOT EXISTS idx_outline_sections_outline_id ON outline_sections(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_sections_unique ON outline_sections(script_outline_id, section_type, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_outline_beats_outline_id ON outline_beats(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_beats_unique ON outline_beats(script_outline_id, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_outline_segments_outline_id ON outline_segments(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_segments_unique ON outline_segments(script_outline_id, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_outline_talking_point_links_outline_id ON outline_talking_point_links(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_talking_point_links_unique ON outline_talking_point_links(script_outline_id, outline_segment_id, brief_talking_point_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_outline_claim_links_outline_id ON outline_claim_links(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_claim_links_unique ON outline_claim_links(script_outline_id, outline_segment_id, brief_claim_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_outline_proof_requirements_outline_id ON outline_proof_requirements(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_outline_proof_requirements_unique ON outline_proof_requirements(script_outline_id, outline_segment_id, proof_type)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_scene_plans_outline_id ON production_scene_plans(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_scene_plans_unique ON production_scene_plans(script_outline_id, scene_number)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_shot_items_outline_id ON production_shot_items(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_shot_items_unique ON production_shot_items(script_outline_id, shot_number)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_shot_groups_outline_id ON production_shot_groups(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_shot_groups_unique ON production_shot_groups(script_outline_id, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_shot_group_items_group_id ON production_shot_group_items(shot_group_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_shot_group_items_unique ON production_shot_group_items(shot_group_id, sequence_order)")
+
+    more_tables = {
+        "production_recording_blocks": """
+            CREATE TABLE IF NOT EXISTS production_recording_blocks (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                block_type TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                location_id TEXT,
+                participant_scope_json TEXT NOT NULL,
+                equipment_scope_json TEXT NOT NULL,
+                estimated_duration_minutes INTEGER,
+                setup_duration_minutes INTEGER,
+                teardown_duration_minutes INTEGER,
+                status TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_recording_block_items": """
+            CREATE TABLE IF NOT EXISTS production_recording_block_items (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                recording_block_id TEXT NOT NULL,
+                scene_plan_id TEXT,
+                shot_item_id TEXT,
+                sequence_order INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (recording_block_id) REFERENCES production_recording_blocks(id) ON DELETE CASCADE
+            )
+        """,
+        "production_visual_cues": """
+            CREATE TABLE IF NOT EXISTS production_visual_cues (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                shot_item_id TEXT,
+                cue_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                timing_direction TEXT,
+                reference_id TEXT,
+                copying_risk TEXT NOT NULL,
+                rights_status TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_audio_cues": """
+            CREATE TABLE IF NOT EXISTS production_audio_cues (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                shot_item_id TEXT,
+                cue_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                timing_direction TEXT,
+                source_type TEXT,
+                source_id TEXT,
+                rights_status TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_on_screen_text": """
+            CREATE TABLE IF NOT EXISTS production_on_screen_text (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                shot_item_id TEXT,
+                text_type TEXT NOT NULL,
+                text_direction TEXT NOT NULL,
+                exact_text TEXT,
+                exact_text_approved INTEGER NOT NULL,
+                character_limit INTEGER,
+                safe_area_notes TEXT,
+                platform_scope_json TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_broll_requirements": """
+            CREATE TABLE IF NOT EXISTS production_broll_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                existing_asset_id TEXT,
+                rights_status TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                readiness_status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_graphic_requirements": """
+            CREATE TABLE IF NOT EXISTS production_graphic_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                graphic_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                data_source_id TEXT,
+                existing_asset_id TEXT,
+                rights_status TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                readiness_status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_screen_recordings": """
+            CREATE TABLE IF NOT EXISTS production_screen_recordings (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT,
+                scene_plan_id TEXT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                application_name TEXT,
+                account_scope TEXT,
+                privacy_notes TEXT,
+                data_redaction_required INTEGER NOT NULL,
+                required INTEGER NOT NULL,
+                readiness_status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+    }
+    for sql in more_tables.values():
+        create(sql)
+    create("CREATE INDEX IF NOT EXISTS idx_production_recording_blocks_outline_id ON production_recording_blocks(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_recording_blocks_unique ON production_recording_blocks(script_outline_id, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_recording_block_items_block_id ON production_recording_block_items(recording_block_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_recording_block_items_unique ON production_recording_block_items(recording_block_id, sequence_order)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_visual_cues_outline_id ON production_visual_cues(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_visual_cues_unique ON production_visual_cues(script_outline_id, outline_segment_id, shot_item_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_audio_cues_outline_id ON production_audio_cues(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_audio_cues_unique ON production_audio_cues(script_outline_id, outline_segment_id, shot_item_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_on_screen_text_outline_id ON production_on_screen_text(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_on_screen_text_unique ON production_on_screen_text(script_outline_id, outline_segment_id, shot_item_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_broll_requirements_outline_id ON production_broll_requirements(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_broll_requirements_unique ON production_broll_requirements(script_outline_id, outline_segment_id, title)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_graphic_requirements_outline_id ON production_graphic_requirements(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_graphic_requirements_unique ON production_graphic_requirements(script_outline_id, outline_segment_id, title)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_screen_recordings_outline_id ON production_screen_recordings(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_screen_recordings_unique ON production_screen_recordings(script_outline_id, outline_segment_id, title)")
+
+    final_tables = {
+        "production_participant_requirements": """
+            CREATE TABLE IF NOT EXISTS production_participant_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                participant_type TEXT NOT NULL,
+                display_name TEXT,
+                role TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                permission_status TEXT NOT NULL,
+                release_required INTEGER NOT NULL,
+                release_status TEXT NOT NULL,
+                availability_status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_location_requirements": """
+            CREATE TABLE IF NOT EXISTS production_location_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                location_type TEXT NOT NULL,
+                name TEXT,
+                description TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                permission_required INTEGER NOT NULL,
+                permission_status TEXT NOT NULL,
+                availability_status TEXT NOT NULL,
+                sound_constraints_json TEXT NOT NULL,
+                light_constraints_json TEXT NOT NULL,
+                privacy_constraints_json TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_prop_requirements": """
+            CREATE TABLE IF NOT EXISTS production_prop_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                source_type TEXT NOT NULL,
+                existing_asset_id TEXT,
+                availability_status TEXT NOT NULL,
+                rights_status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_wardrobe_requirements": """
+            CREATE TABLE IF NOT EXISTS production_wardrobe_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                participant_requirement_id TEXT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                availability_status TEXT NOT NULL,
+                rights_or_brand_status TEXT NOT NULL,
+                continuity_notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_equipment_requirements": """
+            CREATE TABLE IF NOT EXISTS production_equipment_requirements (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                equipment_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                required INTEGER NOT NULL,
+                availability_status TEXT NOT NULL,
+                assigned_item TEXT,
+                backup_required INTEGER NOT NULL,
+                backup_status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_continuity_rules": """
+            CREATE TABLE IF NOT EXISTS production_continuity_rules (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                continuity_type TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_id TEXT,
+                description TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                blocking INTEGER NOT NULL,
+                validation_status TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_platform_variants": """
+            CREATE TABLE IF NOT EXISTS production_platform_variants (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                source_outline_segment_id TEXT,
+                variant_type TEXT NOT NULL,
+                duration_target INTEGER,
+                aspect_ratio TEXT,
+                hook_adjustment TEXT,
+                structure_adjustment_json TEXT NOT NULL,
+                on_screen_text_adjustment_json TEXT NOT NULL,
+                caption_direction TEXT,
+                packaging_direction_json TEXT NOT NULL,
+                measurement_plan_json TEXT NOT NULL,
+                limitations_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_reusable_segments": """
+            CREATE TABLE IF NOT EXISTS production_reusable_segments (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                outline_segment_id TEXT NOT NULL,
+                reuse_type TEXT NOT NULL,
+                target_platforms_json TEXT NOT NULL,
+                target_content_types_json TEXT NOT NULL,
+                reuse_constraints_json TEXT NOT NULL,
+                adaptation_required INTEGER NOT NULL,
+                rights_status TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE,
+                FOREIGN KEY (outline_segment_id) REFERENCES outline_segments(id) ON DELETE CASCADE
+            )
+        """,
+        "production_dependencies": """
+            CREATE TABLE IF NOT EXISTS production_dependencies (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                dependency_type TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id TEXT,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                description TEXT NOT NULL,
+                blocking INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                due_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_milestones": """
+            CREATE TABLE IF NOT EXISTS production_milestones (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                milestone_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                target_date TEXT,
+                status TEXT NOT NULL,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_checklists": """
+            CREATE TABLE IF NOT EXISTS production_checklists (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                checklist_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_checklist_items": """
+            CREATE TABLE IF NOT EXISTS production_checklist_items (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                production_checklist_id TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                required INTEGER NOT NULL,
+                blocking INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                evidence_reference TEXT,
+                completed_at TEXT,
+                completed_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (production_checklist_id) REFERENCES production_checklists(id) ON DELETE CASCADE
+            )
+        """,
+        "production_approval_gates": """
+            CREATE TABLE IF NOT EXISTS production_approval_gates (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                gate_type TEXT NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                required INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                approver TEXT,
+                approved_at TEXT,
+                rejection_reason TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_risks": """
+            CREATE TABLE IF NOT EXISTS production_risks (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                risk_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                likelihood TEXT,
+                impact TEXT,
+                description TEXT NOT NULL,
+                mitigation TEXT,
+                blocking INTEGER NOT NULL,
+                owner TEXT,
+                review_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_reviews": """
+            CREATE TABLE IF NOT EXISTS production_reviews (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                review_type TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                previous_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                reviewer TEXT,
+                reviewed_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_snapshots": """
+            CREATE TABLE IF NOT EXISTS production_snapshots (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT NOT NULL,
+                snapshot_type TEXT NOT NULL,
+                outline_version INTEGER NOT NULL,
+                source_fingerprint TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
+            )
+        """,
+        "production_reports": """
+            CREATE TABLE IF NOT EXISTS production_reports (
+                id TEXT PRIMARY KEY,
+                creator_id TEXT NOT NULL,
+                script_outline_id TEXT,
+                report_type TEXT NOT NULL,
+                source_fingerprint TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+                FOREIGN KEY (script_outline_id) REFERENCES script_outlines(id) ON DELETE SET NULL
+            )
+        """,
+    }
+    for sql in final_tables.values():
+        create(sql)
+    create("CREATE INDEX IF NOT EXISTS idx_production_participant_requirements_outline_id ON production_participant_requirements(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_location_requirements_outline_id ON production_location_requirements(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_prop_requirements_outline_id ON production_prop_requirements(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_wardrobe_requirements_outline_id ON production_wardrobe_requirements(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_equipment_requirements_outline_id ON production_equipment_requirements(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_continuity_rules_outline_id ON production_continuity_rules(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_platform_variants_outline_id ON production_platform_variants(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_reusable_segments_outline_id ON production_reusable_segments(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_dependencies_outline_id ON production_dependencies(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_milestones_outline_id ON production_milestones(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_checklists_outline_id ON production_checklists(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_checklist_items_checklist_id ON production_checklist_items(production_checklist_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_approval_gates_outline_id ON production_approval_gates(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_risks_outline_id ON production_risks(script_outline_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_production_reviews_outline_id ON production_reviews(script_outline_id)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_snapshots_source_fingerprint ON production_snapshots(source_fingerprint)")
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_reports_source_fingerprint ON production_reports(source_fingerprint)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -7399,6 +8252,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=27, name="opportunity_and_recommendation_engine_foundation"),
     Migration(version=28, name="strategic_planning_and_content_roadmap_foundation"),
     Migration(version=29, name="content_brief_and_pre_production_foundation"),
+    Migration(version=30, name="script_outline_and_production_preparation_foundation"),
 )
 
 
@@ -7494,6 +8348,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_28(connection)
                 elif migration.version == 29:
                     migration_29(connection)
+                elif migration.version == 30:
+                    migration_30(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

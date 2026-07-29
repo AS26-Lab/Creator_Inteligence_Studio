@@ -224,8 +224,8 @@ class RecommendationEngineFoundationTests(unittest.TestCase):
                 run_migrations(connection)
                 second = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            self.assertEqual(first, 29)
-            self.assertEqual(second, 29)
+            self.assertEqual(first, 30)
+            self.assertEqual(second, 30)
             self.assertTrue({"recommendation_context_snapshots", "recommendation_candidates", "recommendation_reports"}.issubset(tables))
 
     def test_generation_review_feedback_and_reports(self) -> None:

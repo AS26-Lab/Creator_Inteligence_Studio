@@ -39,6 +39,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         recommendation_service=context.recommendation_service,
         planning_service=context.planning_service,
         brief_service=context.brief_service,
+        production_service=context.production_service,
         creator_memory_service=context.creator_memory_service,
         creator_language_service=context.creator_language_service,
         creative_packaging_service=context.creative_packaging_service,

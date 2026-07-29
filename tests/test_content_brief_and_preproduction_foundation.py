@@ -541,7 +541,7 @@ class ContentBriefFoundationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._qt_app = QApplication.instance() or QApplication([])
 
-    def test_migration_v29_is_idempotent_and_creates_tables(self) -> None:
+    def test_migration_v30_is_idempotent_and_creates_tables(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = make_settings()
             paths = ProjectPaths.from_settings(Path(temp_dir), settings)
@@ -555,7 +555,7 @@ class ContentBriefFoundationTests(unittest.TestCase):
                 self.assertIn("content_briefs", tables)
                 self.assertIn("brief_reports", tables)
                 schema_version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
-            self.assertEqual(schema_version, 29)
+                self.assertEqual(schema_version, 30)
 
     def test_brief_generation_links_sources_and_preserves_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

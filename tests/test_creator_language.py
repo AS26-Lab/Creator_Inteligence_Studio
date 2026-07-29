@@ -292,7 +292,7 @@ class CreatorLanguageAnalysisTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
-            self.assertEqual(versions[-1], 29)
+            self.assertEqual(versions[-1], 30)
             self.assertIn("creator_language_corpora", tables)
             self.assertIn("creator_language_profile_snapshots", tables)
             self.assertEqual(len(fixture.language_service.list_corpora(fixture.creator_a.id)), 1)

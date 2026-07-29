@@ -110,6 +110,10 @@ from creator_intelligence_studio.application.services.content_brief_service impo
     ContentBriefService,
     build_content_brief_service,
 )
+from creator_intelligence_studio.application.services.production_preparation_service import (
+    ProductionPreparationService,
+    build_production_preparation_service,
+)
 from creator_intelligence_studio.application.services.strategic_planning_service import (
     StrategicPlanningService,
     build_strategic_planning_service,
@@ -206,6 +210,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_recommendatio
 from creator_intelligence_studio.infrastructure.persistence.sqlite_content_brief_repository import (
     SQLiteContentBriefRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_production_preparation_repository import (
+    SQLiteProductionPreparationRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_strategic_planning_repository import (
     SQLiteStrategicPlanningRepository,
 )
@@ -261,6 +268,7 @@ class ServiceContext(BootstrapContext):
     recommendation_service: RecommendationEngineService | None = None
     planning_service: StrategicPlanningService | None = None
     brief_service: ContentBriefService | None = None
+    production_service: ProductionPreparationService | None = None
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
@@ -541,6 +549,22 @@ def _load_service_context() -> ServiceContext:
         packaging_service=creative_packaging_service,
         logger=context.logger,
     )
+    production_service = build_production_preparation_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteProductionPreparationRepository(database),
+        brief_service=brief_service,
+        planning_service=planning_service,
+        recommendation_service=recommendation_service,
+        experiment_service=experiment_service,
+        content_library_service=service,
+        creator_memory_service=creator_memory_service,
+        creator_language_service=creator_language_service,
+        audience_service=audience_service,
+        platform_service=platform_service,
+        packaging_service=creative_packaging_service,
+        logger=context.logger,
+    )
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -604,6 +628,7 @@ def _load_service_context() -> ServiceContext:
         recommendation_service=recommendation_service,
         planning_service=planning_service,
         brief_service=brief_service,
+        production_service=production_service,
         personalization_service=personalization_service,
         model_service=model_service,
         evaluation_service=evaluation_service,
@@ -687,6 +712,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             recommendation_service=context.recommendation_service,
             planning_service=context.planning_service,
             brief_service=context.brief_service,
+            production_service=context.production_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

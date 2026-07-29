@@ -56,6 +56,42 @@ from .brief_reviews_view import BriefReviewsView
 from .brief_history_view import BriefHistoryView
 from .brief_settings_view import BriefSettingsView
 from .brief_privacy_view import BriefPrivacyView
+from .production_base_view import ProductionSectionView
+from .production_overview_view import ProductionOverviewView
+from .production_requests_view import ProductionRequestsView
+from .script_outlines_view import ScriptOutlinesView
+from .outline_detail_view import OutlineDetailView
+from .beats_view import BeatsView
+from .segments_view import SegmentsView
+from .claims_proof_view import ClaimsProofView
+from .scenes_view import ScenesView
+from .shots_view import ShotsView
+from .shot_groups_view import ShotGroupsView
+from .recording_blocks_view import RecordingBlocksView
+from .recording_order_view import RecordingOrderView
+from .visual_cues_view import VisualCuesView
+from .audio_cues_view import AudioCuesView
+from .on_screen_text_view import OnScreenTextView
+from .broll_requirements_view import BrollRequirementsView
+from .graphics_requirements_view import GraphicsRequirementsView
+from .screen_recordings_view import ScreenRecordingsView
+from .participants_view import ParticipantsView
+from .locations_view import LocationsView
+from .props_view import PropsView
+from .wardrobe_view import WardrobeView
+from .equipment_view import EquipmentView
+from .continuity_view import ContinuityView
+from .platform_variants_view import PlatformVariantsView
+from .reusable_segments_view import ReusableSegmentsView
+from .production_dependencies_view import ProductionDependenciesView
+from .production_milestones_view import ProductionMilestonesView
+from .production_checklists_view import ProductionChecklistsView
+from .production_readiness_view import ProductionReadinessView
+from .production_risks_view import ProductionRisksView
+from .production_reviews_view import ProductionReviewsView
+from .production_history_view import ProductionHistoryView
+from .production_settings_view import ProductionSettingsView
+from .production_privacy_view import ProductionPrivacyView
 from .recommendation_candidates_view import RecommendationCandidatesView
 from .recommendation_detail_view import RecommendationDetailView
 from .recommendation_evidence_view import RecommendationEvidenceView
@@ -177,6 +213,42 @@ __all__ = [
     "BriefHistoryView",
     "BriefSettingsView",
     "BriefPrivacyView",
+    "ProductionSectionView",
+    "ProductionOverviewView",
+    "ProductionRequestsView",
+    "ScriptOutlinesView",
+    "OutlineDetailView",
+    "BeatsView",
+    "SegmentsView",
+    "ClaimsProofView",
+    "ScenesView",
+    "ShotsView",
+    "ShotGroupsView",
+    "RecordingBlocksView",
+    "RecordingOrderView",
+    "VisualCuesView",
+    "AudioCuesView",
+    "OnScreenTextView",
+    "BrollRequirementsView",
+    "GraphicsRequirementsView",
+    "ScreenRecordingsView",
+    "ParticipantsView",
+    "LocationsView",
+    "PropsView",
+    "WardrobeView",
+    "EquipmentView",
+    "ContinuityView",
+    "PlatformVariantsView",
+    "ReusableSegmentsView",
+    "ProductionDependenciesView",
+    "ProductionMilestonesView",
+    "ProductionChecklistsView",
+    "ProductionReadinessView",
+    "ProductionRisksView",
+    "ProductionReviewsView",
+    "ProductionHistoryView",
+    "ProductionSettingsView",
+    "ProductionPrivacyView",
     "RecommendationCandidatesView",
     "RecommendationDetailView",
     "RecommendationEvidenceView",
