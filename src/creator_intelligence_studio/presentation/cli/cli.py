@@ -251,6 +251,10 @@ from creator_intelligence_studio.presentation.cli.production_cli import (
     build_production_parser,
     handle_production_command,
 )
+from creator_intelligence_studio.presentation.cli.ai_runtime_cli import (
+    build_ai_parser,
+    handle_ai_command,
+)
 from creator_intelligence_studio.presentation.cli.instagram_cli import (
     build_instagram_parser,
     handle_instagram,
@@ -455,6 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_planning_parser(subparsers)
     build_briefs_parser(subparsers)
     build_production_parser(subparsers)
+    build_ai_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
     creator_sub = creator_parser.add_subparsers(dest="action", required=True)
@@ -5348,6 +5353,7 @@ def dispatch(
     stderr=None,
     model_service: PersonalizationTrainingService | None = None,
     evaluation_service: OperationalEvaluationService | None = None,
+    ai_runtime_service=None,
 ) -> int:
     """Ejecuta el comando solicitado."""
 
@@ -5465,6 +5471,8 @@ def dispatch(
             if evaluation_service is None:
                 raise DomainError("El servicio de evaluacion operativa no esta disponible.")
             return _handle_evaluation(args, evaluation_service, stdout, stderr)
+        if args.entity == "ai":
+            return handle_ai_command(args, service=ai_runtime_service, stdout=stdout, stderr=stderr)
         raise ValueError("Comando no reconocido.")
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

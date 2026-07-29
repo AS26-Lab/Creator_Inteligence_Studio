@@ -6,10 +6,12 @@ Creator Intelligence Studio es una aplicacion de escritorio para Windows orienta
 
 La biblia oficial del producto esta en [`docs/PROJECT_BIBLE.md`](docs/PROJECT_BIBLE.md).
 La arquitectura aprobada para IA y ML esta en [`docs/AI_ML_ARCHITECTURE.md`](docs/AI_ML_ARCHITECTURE.md).
+La fundacion de runtime de IA ya implementada esta en [`docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md`](docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md).
 La secuencia obligatoria de implementacion esta en [`docs/AI_IMPLEMENTATION_ROADMAP.md`](docs/AI_IMPLEMENTATION_ROADMAP.md).
 
-El corte canonico actual es v30. `Human-Guided Script Drafting Foundation` no ha comenzado.
-El siguiente bloque aprobado para IA es `AI Runtime and Provider Orchestration Foundation`, pero todavia no esta implementado.
+El corte canonico actual es v31. `Human-Guided Script Drafting Foundation` no ha comenzado.
+`AI Runtime and Provider Orchestration Foundation` ya esta implementado como capa segura y acotada de ejecucion de proveedores.
+El siguiente bloque aprobado es `Component Manager and Local Transcription Foundation`.
 
 La referencia externa del catch-up debe vivir en [`docs/reference/README.md`](docs/reference/README.md) y, cuando exista el archivo, en `docs/reference/Creator_Intelligence_Studio_Catch_Up_IA_ML_2026-07-29.pdf`.
 
@@ -28,12 +30,16 @@ El proyecto ya dispone de:
 
 Todavia no existen:
 
-- analisis audiovisual semantico con IA generativa;
-- PyTorch;
-- CUDA Toolkit;
-- modelos descargados;
-- conectores reales;
-- Script & Voice Studio como flujo obligatorio.
+- Creator Corpus Foundation;
+- Semantic Retrieval Foundation;
+- Feedback Learning Foundation;
+- Creator Voice Workbench;
+- Human-Guided Script Drafting Foundation;
+- editor automatico de video;
+- PyTorch como requisito de producto;
+- CUDA Toolkit como requisito de producto;
+- modelos creativos descargados por defecto;
+- conectores adicionales normalizados.
 
 ## Plataforma principal
 

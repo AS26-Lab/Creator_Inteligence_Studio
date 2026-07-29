@@ -7,10 +7,10 @@ This document records what is actually implemented in the repository at the v30 
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v30`
+- current migration ceiling: `v31`
 - repository state at inspection time: clean
-- no `v31` exists
-- no AI runtime has started
+- `v31` exists and introduces the first AI runtime foundation
+- AI runtime orchestration has started as a controlled provider layer
 
 ## What Is Implemented
 
@@ -82,6 +82,20 @@ Status: `deterministic`
 - render verification and manifest history
 
 Status: ranking `deterministic`; rendering `implemented`
+
+### AI Runtime And Provider Orchestration
+
+- provider credential storage through the OS credential backend or explicit development fallback
+- provider diagnostics for OpenAI and Anthropic
+- role-based model registry
+- versioned prompt template registry
+- budget policy checks
+- privacy policy checks
+- execution and usage persistence
+- exact-match cache entries
+- CLI exposure for providers, models, roles, budgets, diagnostics, and history
+
+Status: `implemented` for the foundation layer; only `provider_diagnostic` task support is enabled in v31.
 
 ### Subtitles
 

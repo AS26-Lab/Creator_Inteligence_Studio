@@ -18,6 +18,7 @@ This document maps original product intent to the current repository state. It i
 | Creator decision authority | UI, workflow docs, approval flows | implemented structurally | AI decisions not yet present | human approvals remain final | all future AI stages |
 | Privacy, traceability, cost, human control | `docs/ACCOUNT_SAFETY.md`, `docs/COST_POLICY.md`, this Project Bible | partial | AI-specific policy still needed | document provider and corpus rules | AI architecture + privacy docs |
 | Local-first, but quality over dogma | `README.md`, `docs/AI_ML_ARCHITECTURE.md` | implemented as direction | needs AI-specific contract | hybrid architecture is approved | AI Runtime and Provider Orchestration Foundation |
+| Safe provider execution through a central AI runtime | `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` | implemented | only provider diagnostics are enabled in v31 | keep modules off direct provider calls | Component Manager and Local Transcription Foundation |
 
 ## Requirement Groups
 

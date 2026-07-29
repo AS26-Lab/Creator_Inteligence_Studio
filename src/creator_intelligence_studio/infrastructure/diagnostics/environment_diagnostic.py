@@ -12,6 +12,7 @@ from pathlib import Path
 
 from creator_intelligence_studio import APP_NAME, VERSION
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
+from creator_intelligence_studio.infrastructure.ai_runtime.credentials import CredentialStore
 from creator_intelligence_studio.infrastructure.diagnostics.models import (
     DiagnosticState,
     EnvironmentDiagnostic,
@@ -152,6 +153,7 @@ def collect_environment_diagnostic(
         cuda_runtime_not_verified=cuda_runtime_not_verified,
         warnings=tuple(warnings),
     )
+    credential_store_available = CredentialStore.build_default().is_available()
 
     return EnvironmentDiagnostic(
         application_name=APP_NAME,
@@ -172,6 +174,12 @@ def collect_environment_diagnostic(
         git_version=git_version,
         free_space_bytes=(disk_usage.free if disk_usage else None),
         preferred_compute_backend=settings.preferred_compute_backend,
+        ai_runtime_available=settings.external_ai_enabled,
+        openai_configured=bool(os.environ.get("OPENAI_API_KEY")),
+        anthropic_configured=bool(os.environ.get("ANTHROPIC_API_KEY")),
+        model_roles_configured=False,
+        budget_policy_configured=False,
+        credential_store_available=credential_store_available,
         state=state,
         warnings=tuple(warnings),
         errors=tuple(errors),

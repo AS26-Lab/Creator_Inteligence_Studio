@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from logging import Logger
 from typing import Sequence
 
@@ -121,6 +121,10 @@ from creator_intelligence_studio.application.services.strategic_planning_service
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionService,
     build_transcription_service,
+)
+from creator_intelligence_studio.application.services.ai_runtime_service import (
+    AIRuntimeService,
+    build_ai_runtime_service,
 )
 from creator_intelligence_studio.infrastructure.configuration.settings import (
     AppSettings,
@@ -272,6 +276,7 @@ class ServiceContext(BootstrapContext):
     personalization_service: PersonalizationDatasetService | None = None
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
+    ai_runtime_service: AIRuntimeService | None = None
 
 
 def _load_context() -> BootstrapContext:
@@ -298,6 +303,21 @@ def _load_service_context() -> ServiceContext:
     database = build_database(context.settings, context.paths)
     with database.connect() as connection:
         run_migrations(connection)
+    ai_runtime_service = build_ai_runtime_service(
+        settings=context.settings,
+        paths=context.paths,
+        database=database,
+    )
+    ai_status = ai_runtime_service.status()
+    diagnostic = replace(
+        context.diagnostic,
+        ai_runtime_available=ai_status.ai_runtime_available,
+        openai_configured=ai_status.openai_configured,
+        anthropic_configured=ai_status.anthropic_configured,
+        model_roles_configured=ai_status.model_roles_configured,
+        budget_policy_configured=ai_status.budget_policy_configured,
+        credential_store_available=ai_status.credential_store_available,
+    )
     service = build_catalog_service(
         settings=context.settings,
         paths=context.paths,
@@ -601,9 +621,10 @@ def _load_service_context() -> ServiceContext:
     return ServiceContext(
         settings=context.settings,
         paths=context.paths,
-        diagnostic=context.diagnostic,
+        diagnostic=diagnostic,
         logger=context.logger,
         service=service,
+        ai_runtime_service=ai_runtime_service,
         media_service=media_service,
         audio_service=audio_service,
         transcription_service=transcription_service,
@@ -722,6 +743,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             render_service=context.render_service,
             subtitle_service=context.subtitle_service,
             personalization_service=context.personalization_service,
+            ai_runtime_service=context.ai_runtime_service,
             model_service=context.model_service,
             evaluation_service=context.evaluation_service,
             diagnostic=context.diagnostic,

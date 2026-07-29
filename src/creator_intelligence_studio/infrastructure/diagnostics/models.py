@@ -49,6 +49,12 @@ class EnvironmentDiagnostic:
     git_version: str | None = None
     free_space_bytes: int | None = None
     preferred_compute_backend: str = "cuda"
+    ai_runtime_available: bool = False
+    openai_configured: bool = False
+    anthropic_configured: bool = False
+    model_roles_configured: bool = False
+    budget_policy_configured: bool = False
+    credential_store_available: bool = False
     state: DiagnosticState = field(
         default_factory=lambda: DiagnosticState(
             ready_for_basic_mode=True,
@@ -86,6 +92,12 @@ class EnvironmentDiagnostic:
             f"Git disponible: {'si' if self.git_available else 'no'}",
             f"nvidia-smi disponible: {'si' if self.nvidia_smi_available else 'no'}",
             f"Backend preferido: {self.preferred_compute_backend}",
+            f"AI runtime disponible: {'si' if self.ai_runtime_available else 'no'}",
+            f"OpenAI configurado: {'si' if self.openai_configured else 'no'}",
+            f"Anthropic configurado: {'si' if self.anthropic_configured else 'no'}",
+            f"Modelos por rol configurados: {'si' if self.model_roles_configured else 'no'}",
+            f"Presupuesto AI configurado: {'si' if self.budget_policy_configured else 'no'}",
+            f"Credential store disponible: {'si' if self.credential_store_available else 'no'}",
             f"Modo basico listo: {'si' if self.state.ready_for_basic_mode else 'no'}",
         ]
         if self.gpu_devices:
@@ -111,4 +123,3 @@ class EnvironmentDiagnostic:
 
     def __str__(self) -> str:
         return "\n".join(self.summary_lines())
-

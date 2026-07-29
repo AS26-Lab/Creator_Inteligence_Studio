@@ -29,8 +29,9 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-07-29 | Approved AI providers in stage one are OpenAI and Anthropic only | approved | keep initial surface controlled | `docs/AI_ML_ARCHITECTURE.md` | third-provider normalization |
 | 2026-07-29 | Provider choice must depend on roles, benchmarks, and replaceable catalogs | approved | avoid fixed-model coupling | `docs/AI_ML_ARCHITECTURE.md` | hard-coded model names |
 | 2026-07-29 | Default MP4 retention is not allowed | approved | storage and privacy discipline | `docs/CREATOR_MEMORY_AND_LEARNING.md`, `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` | permanent duplicate media storage |
-| 2026-07-29 | The next approved AI block is AI Runtime and Provider Orchestration Foundation | approved | roadmap order | `docs/AI_IMPLEMENTATION_ROADMAP.md`, `README.md` | skipping directly to later AI layers |
+| 2026-07-29 | AI Runtime and Provider Orchestration Foundation is the approved first provider execution layer | approved | roadmap order | `docs/AI_IMPLEMENTATION_ROADMAP.md`, `README.md`, `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` | skipping directly to later AI layers |
 | 2026-07-29 | The catch-up PDF is a canonical architecture source and must be kept at `docs/reference/Creator_Intelligence_Studio_Catch_Up_IA_ML_2026-07-29.pdf` when available | approved | preserve the approved catch-up decisions without regeneration | `docs/PROJECT_BIBLE.md`, `docs/reference/README.md` | informal or missing reference handling |
+| 2026-07-29 | AI Runtime and Provider Orchestration Foundation v31 is implemented as the first provider execution layer | approved | establish safe, replaceable, role-based AI execution before any creative AI feature | `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md`, `docs/PROJECT_BIBLE.md`, `docs/AI_ML_ARCHITECTURE.md`, `README.md` | direct provider calls from product modules, ad hoc AI plumbing, and uncontrolled provider drift |
 
 ## Replaced Or Limited Decisions
 
@@ -42,8 +43,6 @@ This register keeps the canonical decisions, their status, and what they replace
 
 ## Pending Decisions
 
-- exact AI runtime contract and provider orchestration interface;
-- secure credential storage implementation detail for provider APIs;
 - benchmark protocol and scoring schema for provider competition;
 - model registry schema and lifecycle;
 - embedding model winner and vector-store backend selection;

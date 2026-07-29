@@ -8222,6 +8222,272 @@ def migration_30(connection: sqlite3.Connection) -> None:
     create("CREATE UNIQUE INDEX IF NOT EXISTS uq_production_reports_source_fingerprint ON production_reports(source_fingerprint)")
 
 
+def migration_31(connection: sqlite3.Connection) -> None:
+    def create(sql: str) -> None:
+        connection.execute(sql)
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_model_catalog (
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+            model_id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            snapshot_or_version TEXT,
+            status TEXT NOT NULL CHECK (status IN ('testing', 'approved', 'deprecated', 'unavailable', 'blocked')),
+            capabilities_json TEXT NOT NULL DEFAULT '{}',
+            context_limit INTEGER,
+            supports_structured_output INTEGER NOT NULL DEFAULT 1,
+            supports_image_input INTEGER NOT NULL DEFAULT 0,
+            supports_audio_input INTEGER NOT NULL DEFAULT 0,
+            input_price_per_million REAL,
+            output_price_per_million REAL,
+            cached_input_price_per_million REAL,
+            pricing_currency TEXT DEFAULT 'USD',
+            pricing_effective_at TEXT,
+            last_verified_at TEXT,
+            replacement_model_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (replacement_model_id) REFERENCES ai_model_catalog(id) ON DELETE SET NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_model_catalog_provider_model_snapshot ON ai_model_catalog(provider, model_id, IFNULL(snapshot_or_version, ''))")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_model_catalog_provider_status ON ai_model_catalog(provider, status)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_model_catalog_replacement_model_id ON ai_model_catalog(replacement_model_id)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_model_role_assignments (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT,
+            role TEXT NOT NULL CHECK (role IN (
+                'cheap_structured_model',
+                'general_reasoning_model',
+                'creative_writing_model',
+                'multimodal_model',
+                'transcription_fallback_model',
+                'evaluation_model'
+            )),
+            provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+            model_catalog_id TEXT NOT NULL,
+            quality_level TEXT NOT NULL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            fallback_policy TEXT NOT NULL DEFAULT 'none',
+            approved_benchmark_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (model_catalog_id) REFERENCES ai_model_catalog(id) ON DELETE RESTRICT
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_model_role_assignments_scope_role_provider ON ai_model_role_assignments(IFNULL(creator_id, ''), role, provider)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_model_role_assignments_model_catalog_id ON ai_model_role_assignments(model_catalog_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_model_role_assignments_provider_role ON ai_model_role_assignments(provider, role)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_prompt_templates (
+            id TEXT PRIMARY KEY,
+            template_key TEXT NOT NULL,
+            task_type TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('draft', 'testing', 'approved', 'deprecated', 'retired')),
+            required_capabilities_json TEXT NOT NULL DEFAULT '{}',
+            instruction_layers_json TEXT NOT NULL DEFAULT '{}',
+            input_schema_json TEXT NOT NULL DEFAULT '{}',
+            output_schema_json TEXT NOT NULL DEFAULT '{}',
+            validation_profile_json TEXT NOT NULL DEFAULT '{}',
+            benchmark_id TEXT,
+            change_notes TEXT,
+            approved_at TEXT,
+            deprecated_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_prompt_templates_key_version ON ai_prompt_templates(template_key, version)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_prompt_templates_status ON ai_prompt_templates(status)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_prompt_templates_task_operation ON ai_prompt_templates(task_type, operation)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_executions (
+            id TEXT PRIMARY KEY,
+            execution_uuid TEXT NOT NULL UNIQUE,
+            creator_id TEXT,
+            project_id TEXT,
+            task_type TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN (
+                'queued',
+                'preparing_context',
+                'awaiting_approval',
+                'running',
+                'validating',
+                'completed',
+                'completed_with_warnings',
+                'failed',
+                'cancelled',
+                'blocked_by_budget',
+                'blocked_by_privacy',
+                'blocked_by_credentials',
+                'blocked_by_provider',
+                'blocked_by_model'
+            )),
+            requested_model_role TEXT,
+            provider TEXT CHECK (provider IN ('openai', 'anthropic')),
+            model_catalog_id TEXT,
+            template_id TEXT,
+            privacy_class TEXT NOT NULL,
+            quality_level TEXT NOT NULL,
+            context_fingerprint TEXT,
+            request_fingerprint TEXT NOT NULL,
+            input_summary_json TEXT NOT NULL,
+            output_reference TEXT,
+            validation_status TEXT,
+            cache_status TEXT NOT NULL,
+            fallback_policy TEXT NOT NULL,
+            approval_required INTEGER NOT NULL DEFAULT 0,
+            approved_at TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            latency_ms INTEGER,
+            error_category TEXT,
+            error_code TEXT,
+            error_message_safe TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (model_catalog_id) REFERENCES ai_model_catalog(id) ON DELETE SET NULL,
+            FOREIGN KEY (template_id) REFERENCES ai_prompt_templates(id) ON DELETE SET NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_executions_request_fingerprint ON ai_executions(request_fingerprint)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_executions_creator_id ON ai_executions(creator_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_executions_provider_model ON ai_executions(provider, model_catalog_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_executions_status ON ai_executions(status)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_executions_task_type ON ai_executions(task_type, operation)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_execution_payloads (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            payload_type TEXT NOT NULL,
+            content_json TEXT,
+            content_text TEXT,
+            content_hash TEXT NOT NULL,
+            is_redacted INTEGER NOT NULL DEFAULT 0,
+            retention_class TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (execution_id) REFERENCES ai_executions(execution_uuid) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_ai_execution_payloads_execution_id ON ai_execution_payloads(execution_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_execution_payloads_type ON ai_execution_payloads(payload_type)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_usage_records (
+            id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL,
+            provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+            model_catalog_id TEXT,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER,
+            provider_reported_cost REAL,
+            calculated_cost REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            pricing_version TEXT,
+            calculation_notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (execution_id) REFERENCES ai_executions(execution_uuid) ON DELETE CASCADE,
+            FOREIGN KEY (model_catalog_id) REFERENCES ai_model_catalog(id) ON DELETE SET NULL
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_ai_usage_records_execution_id ON ai_usage_records(execution_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_usage_records_provider_model ON ai_usage_records(provider, model_catalog_id)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_budget_policies (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT,
+            provider TEXT CHECK (provider IN ('openai', 'anthropic')),
+            daily_limit REAL,
+            monthly_limit REAL,
+            per_task_limit REAL,
+            warning_threshold_50 REAL NOT NULL DEFAULT 0.5,
+            warning_threshold_75 REAL NOT NULL DEFAULT 0.75,
+            warning_threshold_90 REAL NOT NULL DEFAULT 0.9,
+            hard_block_enabled INTEGER NOT NULL DEFAULT 1,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            effective_from TEXT,
+            effective_until TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_ai_budget_policies_scope ON ai_budget_policies(creator_id, provider)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_cache_entries (
+            id TEXT PRIMARY KEY,
+            cache_key TEXT NOT NULL UNIQUE,
+            task_type TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+            model_catalog_id TEXT,
+            template_id TEXT,
+            request_fingerprint TEXT NOT NULL,
+            context_fingerprint TEXT,
+            result_reference TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('active', 'stale', 'invalidated', 'expired')),
+            created_at TEXT NOT NULL,
+            expires_at TEXT,
+            last_accessed_at TEXT NOT NULL,
+            hit_count INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (model_catalog_id) REFERENCES ai_model_catalog(id) ON DELETE SET NULL,
+            FOREIGN KEY (template_id) REFERENCES ai_prompt_templates(id) ON DELETE SET NULL,
+            FOREIGN KEY (result_reference) REFERENCES ai_executions(execution_uuid) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_ai_cache_entries_provider_model ON ai_cache_entries(provider, model_catalog_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_cache_entries_status ON ai_cache_entries(status)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS ai_runtime_settings (
+            id TEXT PRIMARY KEY,
+            scope_type TEXT NOT NULL,
+            scope_id TEXT,
+            setting_key TEXT NOT NULL,
+            setting_value_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_runtime_settings_scope_key ON ai_runtime_settings(scope_type, IFNULL(scope_id, ''), setting_key)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_runtime_settings_scope ON ai_runtime_settings(scope_type, scope_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -8253,6 +8519,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=28, name="strategic_planning_and_content_roadmap_foundation"),
     Migration(version=29, name="content_brief_and_pre_production_foundation"),
     Migration(version=30, name="script_outline_and_production_preparation_foundation"),
+    Migration(version=31, name="ai_runtime_and_provider_orchestration_foundation"),
 )
 
 
@@ -8350,6 +8617,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_29(connection)
                 elif migration.version == 30:
                     migration_30(connection)
+                elif migration.version == 31:
+                    migration_31(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

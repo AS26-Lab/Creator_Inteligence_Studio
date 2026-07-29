@@ -144,6 +144,9 @@ from creator_intelligence_studio.domain.videos.entities import (
     VideoSourceType,
 )
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
+from creator_intelligence_studio.application.services.ai_runtime_service import (
+    AIRuntimeService,
+)
 from creator_intelligence_studio.infrastructure.diagnostics.models import EnvironmentDiagnostic
 from creator_intelligence_studio.shared.dates import to_iso_z
 from creator_intelligence_studio.shared.paths import ProjectPaths
@@ -321,6 +324,7 @@ class WorkspaceViewModel:
         diagnostic: EnvironmentDiagnostic,
         settings: AppSettings,
         paths: ProjectPaths,
+        ai_runtime_service: AIRuntimeService | None = None,
         personalization_service: PersonalizationDatasetService | None = None,
         model_service: PersonalizationTrainingService | None = None,
         evaluation_service: OperationalEvaluationService | None = None,
@@ -462,6 +466,7 @@ class WorkspaceViewModel:
             )
         self.render_service = render_service
         self.subtitle_service = subtitle_service
+        self.ai_runtime_service = ai_runtime_service
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
         self.experiment_service = experiment_service
@@ -1388,6 +1393,40 @@ class WorkspaceViewModel:
         self._update_tasks(tuple(self.ui_state.tasks) + (task,))
         return task
 
+    def ai_runtime_status(self):
+        if self.ai_runtime_service is None:
+            return {
+                "ai_runtime_available": False,
+                "openai_configured": False,
+                "anthropic_configured": False,
+                "model_roles_configured": False,
+                "budget_policy_configured": False,
+                "credential_store_available": False,
+            }
+        return self.ai_runtime_service.diagnostics_snapshot()
+
+    def run_ai_runtime_diagnostic(self, *, provider: str | None = None, role: str | None = None, cache_policy: str = "use"):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        task = self.register_background_task(
+            title="AI Provider Diagnostics",
+            status="running",
+            stage_name="diagnostic",
+            video_title=provider or role or "provider_diagnostic",
+            action_id="provider_diagnostic",
+            progress_percent=5.0,
+            message="Ejecutando diagnostico de proveedor de IA",
+            cancellable=True,
+            payload={"kind": "ai_runtime_diagnostic", "provider": provider, "role": role, "cache_policy": cache_policy},
+        )
+        try:
+            result = self.ai_runtime_service.diagnostic_run(provider=provider, role=role, cache_policy=cache_policy)
+        except Exception as exc:
+            self.fail_background_task(task.task_id, f"Diagnostico de IA fallido: {exc}")
+            raise
+        self.complete_background_task(task.task_id, "Diagnostico de IA completado")
+        return result
+
     def update_background_task(self, task_id: str, **changes) -> BackgroundTaskRecord | None:
         from datetime import datetime, timezone
 
@@ -1552,6 +1591,7 @@ class WorkspaceViewModel:
     def system_items(self) -> list[SystemItemViewModel]:
         gpu = self.diagnostic.gpu_devices[0] if self.diagnostic.gpu_devices else None
         tools = self.media_tools()
+        ai_status = self.ai_runtime_status()
         return [
             SystemItemViewModel("Aplicacion", f"{self.diagnostic.application_name} {self.diagnostic.application_version}"),
             SystemItemViewModel("Sistema operativo", f"{self.diagnostic.os_name} {self.diagnostic.os_version or 'no verificado'}"),
@@ -1574,6 +1614,10 @@ class WorkspaceViewModel:
             SystemItemViewModel("Espacio libre", f"{_humanize_bytes(self.paths.free_space_bytes())} disponibles"),
             SystemItemViewModel("Modo basico", "Disponible" if self.diagnostic.state.ready_for_basic_mode else "No disponible"),
             SystemItemViewModel("Backend activo", self.diagnostic.preferred_compute_backend),
+            SystemItemViewModel("AI runtime", "Disponible" if ai_status.get("ai_runtime_available") else "No disponible"),
+            SystemItemViewModel("OpenAI", "Configurado" if ai_status.get("openai_configured") else "No configurado"),
+            SystemItemViewModel("Anthropic", "Configurado" if ai_status.get("anthropic_configured") else "No configurado"),
+            SystemItemViewModel("Credenciales IA", "Disponible" if ai_status.get("credential_store_available") else "No disponible"),
             SystemItemViewModel("ffmpeg", f"{tools.ffmpeg.version or 'No verificada'}"),
             SystemItemViewModel("ffprobe", f"{tools.ffprobe.version or 'No verificada'}"),
         ]

@@ -87,6 +87,9 @@ class TaskCenterView(QWidget):
     def _is_experiment_report_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "experiment_report")
 
+    def _is_ai_runtime_diagnostic_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "ai_runtime_diagnostic")
+
     def _is_creator_language_analysis_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "creator_language_analysis")
 
@@ -235,6 +238,14 @@ class TaskCenterView(QWidget):
                 QMessageBox.information(self, "Task Center", "El reporte de experimento no tiene una salida disponible.")
             else:
                 QMessageBox.information(self, "Task Center", f"Reporte de experimento disponible en: {report}")
+            return
+        if self._is_ai_runtime_diagnostic_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(
+                self,
+                "Task Center",
+                f"Diagnostico IA: {payload.get('provider') or 'auto'} / {payload.get('role') or 'provider_diagnostic'} / {task.status}",
+            )
             return
         if self._is_creator_language_analysis_task(task):
             payload = getattr(task, "payload", {})
@@ -388,6 +399,8 @@ class TaskCenterView(QWidget):
             self.workspace.cancel_analytics_import(task.task_id)
         elif self._is_analytics_lab_analysis_task(task) or self._is_analytics_lab_report_task(task) or self._is_experiment_evaluation_task(task) or self._is_experiment_report_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_ai_runtime_diagnostic_task(task):
+            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_creator_language_analysis_task(task) or self._is_creator_language_snapshot_task(task) or self._is_creator_language_export_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_packaging_title_analysis_task(task) or self._is_packaging_thumbnail_analysis_task(task) or self._is_packaging_brand_profile_task(task) or self._is_packaging_pair_evaluation_task(task) or self._is_packaging_frame_candidates_task(task) or self._is_packaging_concept_task(task) or self._is_packaging_prompt_task(task) or self._is_packaging_review_task(task) or self._is_packaging_export_task(task):
@@ -469,6 +482,17 @@ class TaskCenterView(QWidget):
             evaluation_id = payload.get("evaluation_id")
             if experiment_id:
                 self.workspace.generate_experiment_report(str(experiment_id), str(evaluation_id) if evaluation_id else None)
+            self.refresh()
+            return
+        if self._is_ai_runtime_diagnostic_task(task):
+            payload = getattr(task, "payload", {})
+            if self.workspace.ai_runtime_service is not None:
+                self.workspace.ai_runtime_service.diagnostic_run(
+                    provider=payload.get("provider"),
+                    role=payload.get("role"),
+                    cache_policy=payload.get("cache_policy") or "use",
+                )
+                self.workspace.complete_background_task(task.task_id, "Diagnostico de IA completado")
             self.refresh()
             return
         if self._is_creator_language_analysis_task(task):

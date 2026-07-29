@@ -135,7 +135,7 @@ class ScriptOutlineAndProductionPreparationFoundationTests(unittest.TestCase):
                 run_migrations(connection)
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
-            self.assertEqual(versions[-1], 30)
+            self.assertEqual(versions[-1], 31)
             self.assertIn("production_context_snapshots", tables)
             self.assertIn("script_outlines", tables)
             self.assertIn("production_reports", tables)

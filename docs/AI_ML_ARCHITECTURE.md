@@ -4,6 +4,8 @@
 
 This document defines the approved AI/ML operating model for Creator Intelligence Studio. It is subordinate to `docs/PROJECT_BIBLE.md`.
 
+The first approved implementation block is now present as `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` and is limited to controlled provider diagnostics, role catalogs, budgets, privacy policy, execution persistence, and safe CLI/GUI exposure.
+
 ## Architecture Model
 
 The product uses a hybrid architecture:
@@ -107,6 +109,10 @@ The orchestrator must:
 - preserve human override points;
 - avoid silent upgrades on important tasks.
 
+The first concrete execution path is provider diagnostics:
+
+`AIExecutionRequest -> AIOrchestrator -> privacy -> budget -> role resolution -> provider -> validation -> persistence -> AIExecutionResult`
+
 ## Privacy And Control
 
 The AI stack must:
@@ -151,4 +157,3 @@ They must compare:
 ## Discrepancy Note
 
 The older conceptual doc focused on rules, embeddings, classifiers, and rankers. That is still useful, but it no longer defines the top-level contract. The current authority is the Project Bible plus the catch-up decisions.
-

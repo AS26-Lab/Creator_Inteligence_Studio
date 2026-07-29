@@ -18,6 +18,8 @@ If there is a contradiction, apply this order:
 
 The latest approved canonical decision wins when two sources conflict. The conflict must be recorded, not silently corrected.
 
+The approved catch-up PDF at `docs/reference/Creator_Intelligence_Studio_Catch_Up_IA_ML_2026-07-29.pdf` is a canonical source for the AI catch-up architecture. It remains subordinate to this Project Bible whenever a later approved decision narrows or replaces it.
+
 ## Product Vision
 
 Creator Intelligence Studio is a strategic and creative copilot for creators.

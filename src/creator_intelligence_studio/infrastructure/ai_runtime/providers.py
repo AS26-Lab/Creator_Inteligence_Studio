@@ -1,0 +1,412 @@
+"""Provider adapters for AI runtime."""
+
+from __future__ import annotations
+
+import json
+import time
+from dataclasses import dataclass
+from typing import Any, Protocol
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from .models import (
+    AIErrorCategory,
+    AIExecutionError,
+    AIExecutionRequest,
+    AIExecutionUsage,
+    AIProviderCapabilities,
+    AIProviderDiagnostic,
+    AIProviderName,
+    AIProviderResponse,
+)
+
+
+class AIProvider(Protocol):
+    provider_name: AIProviderName
+
+    def capabilities(self) -> AIProviderCapabilities: ...
+
+    def test_credentials(self, api_key: str) -> AIProviderDiagnostic: ...
+
+    def execute(
+        self,
+        request: AIExecutionRequest,
+        *,
+        api_key: str,
+        model_id: str,
+        prompt_text: str,
+    ) -> AIProviderResponse: ...
+
+
+def _safe_error_message(message: str | None) -> str:
+    if not message:
+        return "Provider request failed."
+    cleaned = message.replace("\r", " ").replace("\n", " ")
+    return cleaned[:300]
+
+
+def _http_json(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict[str, Any] | None = None,
+    timeout: float = 20.0,
+) -> tuple[int, dict[str, Any] | str, int]:
+    body = None
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {**headers, "Content-Type": "application/json"}
+    request = Request(url, data=body, headers=headers, method=method)
+    started = time.perf_counter()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            raw = response.read().decode("utf-8")
+            elapsed = int((time.perf_counter() - started) * 1000)
+            return response.status, json.loads(raw) if raw else {}, elapsed
+    except HTTPError as exc:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        try:
+            raw = exc.read().decode("utf-8")
+            data: dict[str, Any] | str = json.loads(raw) if raw else {}
+        except Exception:
+            data = _safe_error_message(str(exc))
+        return exc.code, data, elapsed
+    except URLError as exc:
+        elapsed = int((time.perf_counter() - started) * 1000)
+        raise ConnectionError(_safe_error_message(str(exc))) from exc
+
+
+def _map_error_category(status_code: int, payload: dict[str, Any] | str) -> AIErrorCategory:
+    text = json.dumps(payload, ensure_ascii=False) if isinstance(payload, dict) else str(payload)
+    lowered = text.lower()
+    if status_code in (401, 403):
+        if "billing" in lowered:
+            return "billing_error"
+        return "authentication_error" if status_code == 401 else "authorization_error"
+    if status_code == 404:
+        return "model_unavailable"
+    if status_code == 408:
+        return "timeout"
+    if status_code == 429:
+        return "rate_limit_error" if "rate" in lowered else "quota_error"
+    if 500 <= status_code < 600:
+        return "provider_error"
+    return "invalid_request"
+
+
+def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[str, Any] | str, *, provider_code: str | None = None) -> AIExecutionError:
+    text = json.dumps(payload, ensure_ascii=False) if isinstance(payload, dict) else str(payload)
+    if isinstance(payload, dict):
+        if "error" in payload and isinstance(payload["error"], dict):
+            error = payload["error"]
+            text = str(error.get("message") or error.get("type") or text)
+            provider_code = provider_code or error.get("code") or error.get("type")
+    safe_message = _safe_error_message(text)
+    suggested_action = {
+        "authentication_error": "Check the stored API key.",
+        "authorization_error": "Check provider permissions and account access.",
+        "billing_error": "Open provider billing and verify the plan.",
+        "rate_limit_error": "Retry later or lower request frequency.",
+        "quota_error": "Check provider quota and available credits.",
+        "model_unavailable": "Select a different model or verify the catalog.",
+        "model_deprecated": "Replace the model assignment.",
+        "invalid_request": "Review the request payload and prompt template.",
+        "invalid_response": "Repair or reject the provider response.",
+        "schema_validation_error": "Adjust the output contract or prompt template.",
+        "privacy_block": "Relax the privacy policy or reduce the shared content.",
+        "budget_block": "Reduce scope or increase the budget.",
+        "timeout": "Retry the request or reduce prompt size.",
+        "network_error": "Check network connectivity.",
+        "provider_error": "Retry or switch provider with permission.",
+        "cancelled_by_user": "No action required.",
+        "internal_error": "Inspect local logs and repository state.",
+    }.get(category, "Inspect the provider error.")
+    retryable = category in {"timeout", "network_error", "rate_limit_error", "provider_error"}
+    return AIExecutionError(
+        category=category,
+        safe_message=safe_message,
+        provider_code=str(provider_code or status_code),
+        retryable=retryable,
+        suggested_action=suggested_action,
+        technical_reference=f"HTTP {status_code}",
+    )
+
+
+@dataclass
+class OpenAIProvider:
+    provider_name: AIProviderName = "openai"
+    base_url: str = "https://api.openai.com/v1"
+
+    def capabilities(self) -> AIProviderCapabilities:
+        return AIProviderCapabilities(
+            supports_structured_output=True,
+            supports_image_input=True,
+            supports_audio_input=True,
+            supports_retry=True,
+            supports_fallback=False,
+            modalities=("text", "image", "audio"),
+        )
+
+    def test_credentials(self, api_key: str) -> AIProviderDiagnostic:
+        started = time.perf_counter()
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "GET",
+                f"{self.base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                payload=None,
+                timeout=20.0,
+            )
+            if status_code >= 400:
+                error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+                return AIProviderDiagnostic(
+                    provider=self.provider_name,
+                    configured=True,
+                    model_id=None,
+                    status="failed",
+                    message=error.safe_message,
+                    latency_ms=latency_ms,
+                    error=error.to_dict(),
+                )
+            return AIProviderDiagnostic(
+                provider=self.provider_name,
+                configured=True,
+                model_id=None,
+                status="ok",
+                message="OpenAI credentials validated.",
+                latency_ms=latency_ms,
+                usage={"models": len(payload.get("data", [])) if isinstance(payload, dict) else None},
+            )
+        except ConnectionError as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Check network connectivity.",
+                technical_reference="network",
+            )
+            return AIProviderDiagnostic(
+                provider=self.provider_name,
+                configured=True,
+                model_id=None,
+                status="failed",
+                message=error.safe_message,
+                latency_ms=latency_ms,
+                error=error.to_dict(),
+            )
+
+    def execute(
+        self,
+        request: AIExecutionRequest,
+        *,
+        api_key: str,
+        model_id: str,
+        prompt_text: str,
+    ) -> AIProviderResponse:
+        started = time.perf_counter()
+        status_code, payload, latency_ms = _http_json(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            payload={
+                "model": model_id,
+                "messages": [
+                    {"role": "system", "content": "Return only the requested JSON object."},
+                    {"role": "user", "content": prompt_text},
+                ],
+                "temperature": 0,
+                "max_tokens": 128,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=30.0,
+        )
+        if status_code >= 400:
+            error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
+        output_text = ""
+        structured_output = None
+        usage = AIExecutionUsage()
+        model_version = None
+        raw_finish_reason = None
+        if isinstance(payload, dict):
+            choices = payload.get("choices") or []
+            if choices:
+                choice = choices[0] or {}
+                message = choice.get("message") or {}
+                output_text = str(message.get("content") or "")
+                raw_finish_reason = choice.get("finish_reason")
+            model_version = payload.get("model")
+            usage_payload = payload.get("usage") or {}
+            usage = AIExecutionUsage(
+                input_tokens=int(usage_payload.get("prompt_tokens") or 0),
+                output_tokens=int(usage_payload.get("completion_tokens") or 0),
+                cached_input_tokens=int(usage_payload.get("cached_tokens") or 0),
+                provider_reported_cost=None,
+                calculated_cost=0.0,
+                currency="USD",
+                pricing_version=None,
+                calculation_notes="Provider reported usage normalized locally.",
+            )
+        try:
+            structured_output = json.loads(output_text)
+        except Exception:
+            structured_output = None
+        return AIProviderResponse(
+            provider=self.provider_name,
+            model_id=model_id,
+            model_version=model_version,
+            output_text=output_text,
+            structured_output=structured_output,
+            usage=usage,
+            latency_ms=latency_ms,
+            raw_finish_reason=raw_finish_reason,
+        )
+
+
+@dataclass
+class AnthropicProvider:
+    provider_name: AIProviderName = "anthropic"
+    base_url: str = "https://api.anthropic.com/v1"
+    api_version: str = "2023-06-01"
+
+    def capabilities(self) -> AIProviderCapabilities:
+        return AIProviderCapabilities(
+            supports_structured_output=True,
+            supports_image_input=True,
+            supports_audio_input=False,
+            supports_retry=True,
+            supports_fallback=False,
+            modalities=("text", "image"),
+        )
+
+    def test_credentials(self, api_key: str) -> AIProviderDiagnostic:
+        started = time.perf_counter()
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "GET",
+                f"{self.base_url}/models",
+                headers={"x-api-key": api_key, "anthropic-version": self.api_version},
+                payload=None,
+                timeout=20.0,
+            )
+            if status_code >= 400:
+                error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+                return AIProviderDiagnostic(
+                    provider=self.provider_name,
+                    configured=True,
+                    model_id=None,
+                    status="failed",
+                    message=error.safe_message,
+                    latency_ms=latency_ms,
+                    error=error.to_dict(),
+                )
+            return AIProviderDiagnostic(
+                provider=self.provider_name,
+                configured=True,
+                model_id=None,
+                status="ok",
+                message="Anthropic credentials validated.",
+                latency_ms=latency_ms,
+                usage={"models": len(payload.get("data", [])) if isinstance(payload, dict) else None},
+            )
+        except ConnectionError as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Check network connectivity.",
+                technical_reference="network",
+            )
+            return AIProviderDiagnostic(
+                provider=self.provider_name,
+                configured=True,
+                model_id=None,
+                status="failed",
+                message=error.safe_message,
+                latency_ms=latency_ms,
+                error=error.to_dict(),
+            )
+
+    def execute(
+        self,
+        request: AIExecutionRequest,
+        *,
+        api_key: str,
+        model_id: str,
+        prompt_text: str,
+    ) -> AIProviderResponse:
+        status_code, payload, latency_ms = _http_json(
+            "POST",
+            f"{self.base_url}/messages",
+            headers={"x-api-key": api_key, "anthropic-version": self.api_version},
+            payload={
+                "model": model_id,
+                "max_tokens": 128,
+                "temperature": 0,
+                "messages": [
+                    {"role": "user", "content": prompt_text},
+                ],
+            },
+            timeout=30.0,
+        )
+        if status_code >= 400:
+            error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
+        output_text = ""
+        structured_output = None
+        usage = AIExecutionUsage()
+        model_version = None
+        raw_finish_reason = None
+        if isinstance(payload, dict):
+            content = payload.get("content") or []
+            if content:
+                first = content[0] or {}
+                output_text = str(first.get("text") or first.get("content") or "")
+            model_version = payload.get("model")
+            raw_finish_reason = payload.get("stop_reason")
+            usage_payload = payload.get("usage") or {}
+            usage = AIExecutionUsage(
+                input_tokens=int(usage_payload.get("input_tokens") or 0),
+                output_tokens=int(usage_payload.get("output_tokens") or 0),
+                cached_input_tokens=int(usage_payload.get("cache_read_input_tokens") or 0),
+                provider_reported_cost=None,
+                calculated_cost=0.0,
+                currency="USD",
+                pricing_version=None,
+                calculation_notes="Provider reported usage normalized locally.",
+            )
+        try:
+            structured_output = json.loads(output_text)
+        except Exception:
+            structured_output = None
+        return AIProviderResponse(
+            provider=self.provider_name,
+            model_id=model_id,
+            model_version=model_version,
+            output_text=output_text,
+            structured_output=structured_output,
+            usage=usage,
+            latency_ms=latency_ms,
+            raw_finish_reason=raw_finish_reason,
+        )
