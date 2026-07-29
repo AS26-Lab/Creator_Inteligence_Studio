@@ -27,6 +27,18 @@ This document records what is actually implemented in the repository at the v30 
 
 Status: `implemented`
 
+## Audited Capability Classes
+
+| Capability | Classification | Evidence | Notes |
+|---|---|---|---|
+| Transcripcion local | `implemented` | `TranscriptionService.transcribe_video` drives `FasterWhisperEngine`, model download/verify commands, persistence, export, and stale detection. | Real local transcription exists and is model-backed. |
+| Analisis acustico | `deterministic` | `AcousticAnalysisService.analyze_acoustics` computes frame metrics, pauses, events, and global metrics from local WAV data. | It is technical signal processing, not semantic audio understanding. |
+| Analisis visual | `deterministic` | `VisualAnalysisService.analyze_visuals` samples frames with FFmpeg, computes frame metrics, detects cuts/scenes, and extracts keyframes. | It is local visual signal analysis, not model-based narrative comprehension. |
+| Analisis multimodal | `deterministic` | `MultimodalAnalysisService.analyze_multimodal` aligns transcription, acoustic, and visual outputs, then applies deterministic candidate scoring and fusion. | It combines existing signals; it does not understand content semantically. |
+| Ranking de clips | `deterministic` | `ClipRankingService.rank_clip_candidates` scores candidates from multimodal windows, resolves overlaps, applies diversity, and preserves human review state. | It is heuristic ranking, not creative judgment. |
+| Render local de clips | `implemented` | `ClipRenderService.render_candidate`, `create_sidecar_delivery`, and `create_burn_in_render` call FFmpeg, verify output, and persist artifacts. | Existing reusable utility; not automatic editing intelligence. |
+| Subtitulos | `implemented` | `SubtitleService.generate_video_subtitles`, `generate_clip_subtitles`, `import_subtitles`, `export_subtitles`, and edit history flows are present. | Editorial subtitle workflows exist and are traceable. |
+
 ### Creator, Project, Video Core
 
 - creator CRUD and archive flows
@@ -60,7 +72,7 @@ Status: `implemented`
 - visual analysis services and artifacts
 - multimodal aggregation with candidate timelines
 
-Status: `implemented`
+Status: `deterministic`
 
 ### Clip Ranking And Clip Rendering
 
@@ -69,7 +81,7 @@ Status: `implemented`
 - local FFmpeg clip rendering
 - render verification and manifest history
 
-Status: `implemented`
+Status: ranking `deterministic`; rendering `implemented`
 
 ### Subtitles
 
@@ -132,6 +144,7 @@ Status: `implemented`
 - the current codebase has no component manager for models and FFmpeg;
 - the current codebase has no collective intelligence sharing pipeline;
 - the current codebase has no automatic video editing pipeline.
+- acoustic, visual, multimodal, and clip ranking pipelines are deterministic signal-processing and scoring layers, not semantic AI.
 
 Status: `infrastructure_only` or `deterministic`, depending on module
 
@@ -207,4 +220,3 @@ The existing repo already provides reusable infrastructure for future AI work:
 - creator isolation
 
 These are mostly structural, deterministic, and traceable foundations. They should not be documented as mature creative intelligence until they are connected to models, retrieval, and learning.
-

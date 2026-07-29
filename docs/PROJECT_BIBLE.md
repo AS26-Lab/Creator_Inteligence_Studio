@@ -9,7 +9,7 @@ This document is the top-level authority for Creator Intelligence Studio. It def
 If there is a contradiction, apply this order:
 
 1. `docs/PROJECT_BIBLE.md`
-2. The original vision documents and the approved IA/ML catch-up PDF
+2. The original vision documents and the approved IA/ML catch-up PDF stored under `docs/reference/`
 3. `docs/AI_ML_ARCHITECTURE.md`
 4. Specialized docs for memory, components, privacy, and roadmap
 5. The real state of the code and migrations
@@ -173,6 +173,7 @@ If a feature is ambiguous, classify it as paused until the next approved contrac
 ## Relationship To Subordinate Documents
 
 - `docs/AI_ML_ARCHITECTURE.md` defines the AI/ML operating model.
+- `docs/reference/README.md` indexes the approved catch-up PDF reference.
 - `docs/CREATOR_MEMORY_AND_LEARNING.md` defines memory, corpus, retrieval, and learning.
 - `docs/LOCAL_COMPONENTS_AND_TRANSCRIPTION.md` defines local installation, FFmpeg, transcription, and onboarding.
 - `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` defines collective sharing and privacy.
@@ -186,4 +187,4 @@ If a feature is ambiguous, classify it as paused until the next approved contrac
 - The repository already contains deterministic, structural, and workflow infrastructure for many future AI features. Those modules are not equivalent to creative intelligence.
 - The older `docs/AI_ML_ARCHITECTURE.md` was conceptual. It is now subordinate to this Project Bible and to the catch-up decisions.
 - `Human-Guided Script Drafting Foundation` is still not started. The next approved block is `AI Runtime and Provider Orchestration Foundation`, but it is not implemented yet.
-
+- The approved IA/ML catch-up PDF is a canonical reference, but the workspace may not always contain a local copy. If it is missing, the repository must keep the expected path documented and the file must be copied in without regeneration.

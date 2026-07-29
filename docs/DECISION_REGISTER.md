@@ -30,6 +30,7 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-07-29 | Provider choice must depend on roles, benchmarks, and replaceable catalogs | approved | avoid fixed-model coupling | `docs/AI_ML_ARCHITECTURE.md` | hard-coded model names |
 | 2026-07-29 | Default MP4 retention is not allowed | approved | storage and privacy discipline | `docs/CREATOR_MEMORY_AND_LEARNING.md`, `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` | permanent duplicate media storage |
 | 2026-07-29 | The next approved AI block is AI Runtime and Provider Orchestration Foundation | approved | roadmap order | `docs/AI_IMPLEMENTATION_ROADMAP.md`, `README.md` | skipping directly to later AI layers |
+| 2026-07-29 | The catch-up PDF is a canonical architecture source and must be kept at `docs/reference/Creator_Intelligence_Studio_Catch_Up_IA_ML_2026-07-29.pdf` when available | approved | preserve the approved catch-up decisions without regeneration | `docs/PROJECT_BIBLE.md`, `docs/reference/README.md` | informal or missing reference handling |
 
 ## Replaced Or Limited Decisions
 
@@ -48,4 +49,4 @@ This register keeps the canonical decisions, their status, and what they replace
 - embedding model winner and vector-store backend selection;
 - component manager packaging and download policy details;
 - future collective intelligence server rules once enough data exists.
-
+- whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.

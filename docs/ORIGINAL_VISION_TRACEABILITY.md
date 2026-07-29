@@ -31,6 +31,18 @@ This document maps original product intent to the current repository state. It i
 - planning base
 - briefs and production preparation
 
+### Audited capability classes
+
+| Capability | Current classification | Evidence anchor | Resolution |
+|---|---|---|---|
+| Transcripcion local | `implemented` | `TranscriptionService.transcribe_video` and `FasterWhisperEngine` | Keep as a real local capability and reuse it for future AI fallback paths. |
+| Analisis acustico | `deterministic` | `AcousticAnalysisService.analyze_acoustics` | Document as technical signal processing, not semantic understanding. |
+| Analisis visual | `deterministic` | `VisualAnalysisService.analyze_visuals` | Document as technical signal processing with keyframes and scene heuristics. |
+| Analisis multimodal | `deterministic` | `MultimodalAnalysisService.analyze_multimodal` | Document as signal fusion and candidate generation only. |
+| Ranking de clips | `deterministic` | `ClipRankingService.rank_clip_candidates` | Document as heuristic scoring and human-review workflow. |
+| Render local de clips | `implemented` | `ClipRenderService.render_candidate` | Keep as reusable rendering utility, not as automatic editing intelligence. |
+| Subtitulos | `implemented` | `SubtitleService.generate_video_subtitles` and related flows | Keep as editorial subtitle workflow built on transcription. |
+
 ### Explicitly paused
 
 - automatic video editing
@@ -49,4 +61,3 @@ This document maps original product intent to the current repository state. It i
 ## Discrepancy Note
 
 Older phase documentation treated some deterministic foundations as if they were near intelligence. The current resolution is to keep those foundations, but classify them correctly and prevent scope drift.
-
