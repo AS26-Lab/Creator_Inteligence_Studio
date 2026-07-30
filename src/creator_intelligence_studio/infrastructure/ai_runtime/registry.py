@@ -53,18 +53,26 @@ class ModelRegistry:
         capabilities_json: dict[str, object] | None = None,
         snapshot_or_version: str | None = None,
     ) -> AIRoleAssignment:
-        model = self.repository.upsert_model_catalog_entry(
-            AIModelCatalogEntry(
-                provider=provider,
-                model_id=model_id,
-                display_name=display_name or model_id,
-                snapshot_or_version=snapshot_or_version,
-                status=status,
-                capabilities_json=capabilities_json or {},
-                created_at=_utc_now(),
-                updated_at=_utc_now(),
+        existing_models = [
+            entry
+            for entry in self.repository.list_model_catalog_entries(provider)
+            if entry.model_id == model_id and entry.snapshot_or_version == snapshot_or_version
+        ]
+        if existing_models:
+            model = existing_models[0]
+        else:
+            model = self.repository.upsert_model_catalog_entry(
+                AIModelCatalogEntry(
+                    provider=provider,
+                    model_id=model_id,
+                    display_name=display_name or model_id,
+                    snapshot_or_version=snapshot_or_version,
+                    status=status,
+                    capabilities_json=capabilities_json or {},
+                    created_at=_utc_now(),
+                    updated_at=_utc_now(),
+                )
             )
-        )
         assignment = AIRoleAssignment(
             creator_id=creator_id,
             role=role,

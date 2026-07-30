@@ -1405,6 +1405,68 @@ class WorkspaceViewModel:
             }
         return self.ai_runtime_service.diagnostics_snapshot()
 
+    def ai_runtime_provider_status(self) -> dict[str, dict[str, object]]:
+        if self.ai_runtime_service is None:
+            return {}
+        return self.ai_runtime_service.provider_status()
+
+    def ai_runtime_store_provider_credential(self, provider: str, api_key: str) -> None:
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        self.ai_runtime_service.store_provider_credential(provider, api_key)
+
+    def ai_runtime_delete_provider_credential(self, provider: str) -> None:
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        self.ai_runtime_service.delete_provider_credential(provider)
+
+    def ai_runtime_test_provider(self, provider: str):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.test_provider(provider)
+
+    def ai_runtime_list_models(self, provider: str | None = None):
+        if self.ai_runtime_service is None:
+            return []
+        return self.ai_runtime_service.list_models(provider)
+
+    def ai_runtime_assign_role(self, *, role: str, provider: str, model_id: str, creator_id: str | None = None, display_name: str | None = None, is_default: bool = False):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.assign_role(
+            role=role,
+            provider=provider,
+            model_id=model_id,
+            creator_id=creator_id,
+            display_name=display_name,
+            is_default=is_default,
+        )
+
+    def ai_runtime_get_budget_policy(self, creator_id: str | None = None, provider: str | None = None):
+        if self.ai_runtime_service is None:
+            return None
+        return self.ai_runtime_service.get_budget_policy(creator_id=creator_id, provider=provider)
+
+    def ai_runtime_set_monthly_budget(self, amount: float, currency: str, creator_id: str | None = None, provider: str | None = None):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.set_monthly_budget(amount, currency, creator_id=creator_id, provider=provider)
+
+    def ai_runtime_set_per_task_budget(self, amount: float, currency: str, creator_id: str | None = None, provider: str | None = None):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.set_per_task_budget(amount, currency, creator_id=creator_id, provider=provider)
+
+    def ai_runtime_list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 50):
+        if self.ai_runtime_service is None:
+            return []
+        return self.ai_runtime_service.list_executions(creator_id=creator_id, provider=provider, limit=limit)
+
+    def ai_runtime_get_execution(self, execution_uuid: str):
+        if self.ai_runtime_service is None:
+            return None
+        return self.ai_runtime_service.get_execution(execution_uuid)
+
     def run_ai_runtime_diagnostic(self, *, provider: str | None = None, role: str | None = None, cache_policy: str = "use"):
         if self.ai_runtime_service is None:
             raise RuntimeError("El servicio de IA no esta disponible.")

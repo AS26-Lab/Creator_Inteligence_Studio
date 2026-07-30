@@ -85,13 +85,27 @@ class BudgetPolicy:
         reasons: list[str] = []
         blocked = False
         approval_required = False
-        if policy.hard_block_enabled and policy.monthly_limit is not None and estimated_cost is not None:
-            if current_month_cost is not None and current_month_cost + estimated_cost > policy.monthly_limit:
-                blocked = True
-                reasons.append("Monthly budget would be exceeded.")
-        if policy.per_task_limit is not None and estimated_cost is not None and estimated_cost > policy.per_task_limit:
-            blocked = True
-            reasons.append("Task budget would be exceeded.")
+        if estimated_cost is None:
+            approval_required = True
+            reasons.append("Pricing is unavailable.")
+        if policy.monthly_limit is not None and estimated_cost is not None:
+            projected_month = (current_month_cost or 0.0) + estimated_cost
+            if projected_month > policy.monthly_limit:
+                if policy.hard_block_enabled:
+                    blocked = True
+                    reasons.append("Monthly budget would be exceeded.")
+                else:
+                    approval_required = True
+                    reasons.append("Monthly budget would be exceeded and requires approval.")
+        if policy.per_task_limit is not None and estimated_cost is not None:
+            projected_task = (current_task_cost or 0.0) + estimated_cost
+            if projected_task > policy.per_task_limit:
+                if policy.hard_block_enabled:
+                    blocked = True
+                    reasons.append("Task budget would be exceeded.")
+                else:
+                    approval_required = True
+                    reasons.append("Task budget would be exceeded and requires approval.")
         if estimated_cost is not None and policy.warning_threshold_90 and policy.monthly_limit:
             if estimated_cost >= policy.monthly_limit * policy.warning_threshold_90:
                 approval_required = True

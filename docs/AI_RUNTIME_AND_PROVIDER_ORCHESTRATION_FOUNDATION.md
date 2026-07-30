@@ -431,3 +431,43 @@ The next approved block after this foundation is:
 `Component Manager and Local Transcription Foundation`
 
 That stage may improve installation and local transcription ergonomics, but it does not replace the AI runtime contract defined here.
+
+## Post-Implementation Verification
+
+This section records what was verified during the v31 closeout audit.
+
+### Verified by mocks
+
+- OpenAI HTTP contract, including method, URL, headers, timeout, body shape, structured output handling, usage extraction, error mapping, and sanitization.
+- Anthropic HTTP contract, including method, URL, headers, required API version header, timeout, body shape, content extraction, usage extraction, error mapping, and sanitization.
+- Orchestrator policy behavior for privacy, budget, retries, repair, cache reuse, duplicate detection, disabled providers, missing credentials, and model resolution.
+- CLI command wiring for AI runtime commands.
+
+### Verified by local integration
+
+- SQLite v31 migration on a fresh database and from a v30 schema seed.
+- Credential round-trip behavior with the in-memory backend used in tests.
+- Workspace view-model wiring for AI runtime status, credentials, tests, roles, budgets, diagnostics, and history.
+- Desktop CLI execution with `python -m creator_intelligence_studio --diagnostic-json`.
+- Offscreen GUI startup and auto-exit via `scripts/run_gui.bat`.
+
+### CredentialStore mechanism
+
+- Windows uses the real Windows Credential Manager backend through `CredWriteW`, `CredReadW`, `CredDeleteW`, and `CredFree`.
+- The stored target name is stable and creator-safe: `ai.<provider>.api_key`.
+- A pure in-memory backend exists for tests.
+- An explicit development environment backend exists only when `CIS_ENABLE_ENV_CREDENTIALS=1`.
+- No API key is stored in SQLite or JSON by this foundation.
+
+### Current limitations
+
+- Provider behavior is still verified with HTTP mocks; no production provider call was made in this audit.
+- Live tests remain opt-in and are skipped unless `CIS_RUN_LIVE_AI_TESTS=1`.
+- The foundation remains intentionally narrow: provider diagnostics and orchestration only.
+
+### Test coverage added or confirmed
+
+- Full repository suite: 219 tests passed, 2 skipped.
+- AI runtime-focused suite: credentials, providers, orchestrator, cache, repository, migration, CLI, GUI, and live opt-in placeholder.
+- Provider-specific coverage includes success paths, authentication, authorization, billing, quota, rate limits, malformed JSON, timeouts, and connection failures.
+- Orchestrator coverage includes privacy blocking, budget blocking, cache exact hits, cache bypass, cache refresh, duplicate active requests, retries, repair, and safe persistence.

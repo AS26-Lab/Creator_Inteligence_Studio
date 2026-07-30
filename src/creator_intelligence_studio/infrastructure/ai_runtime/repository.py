@@ -713,6 +713,19 @@ class SQLiteAIRuntimeRepository:
         row = self._query_one("SELECT * FROM ai_executions WHERE execution_uuid = ?", (execution_uuid,))
         return self._row_to_execution(row) if row else None
 
+    def get_execution_by_request_fingerprint(self, request_fingerprint: str) -> AIExecutionRecord | None:
+        row = self._query_one("SELECT * FROM ai_executions WHERE request_fingerprint = ?", (request_fingerprint,))
+        return self._row_to_execution(row) if row else None
+
+    def find_execution_by_request_id(self, request_id: str) -> AIExecutionRecord | None:
+        rows = self._query_all("SELECT * FROM ai_executions ORDER BY created_at DESC")
+        for row in rows:
+            execution = self._row_to_execution(row)
+            request_summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+            if request_summary.get("request_id") == request_id:
+                return execution
+        return None
+
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 100) -> list[AIExecutionRecord]:
         clauses = []
         params: list[Any] = []

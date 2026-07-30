@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import uuid4
+from typing import Any
 
 from .cache import AICache
 from .credentials import CredentialStore
@@ -30,7 +31,7 @@ from .models import (
     AIRoleAssignment,
     build_request_fingerprint,
 )
-from .policies import AIResultValidator, CostEstimator, CostTracker, PrivacyPolicyEngine
+from .policies import AIResultValidator, BudgetPolicy, CostEstimator, CostTracker, PrivacyPolicyEngine
 from .providers import AIProvider
 from .registry import ModelRegistry, PromptRegistry
 from .repository import SQLiteAIRuntimeRepository
@@ -38,6 +39,15 @@ from .repository import SQLiteAIRuntimeRepository
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+_ACTIVE_EXECUTION_STATUSES = {
+    "queued",
+    "preparing_context",
+    "awaiting_approval",
+    "running",
+    "validating",
+}
 
 
 class AIOrchestrator:
@@ -67,6 +77,97 @@ class AIOrchestrator:
         self.result_validator = result_validator or AIResultValidator()
         self.cache = cache or AICache(repository)
         self.max_retries = max(0, min(2, max_retries))
+
+    def _provider_enabled(self, provider_name: str) -> bool:
+        setting = self.repository.get_runtime_setting("application", "provider_enabled")
+        if setting is None:
+            return True
+        value = setting.setting_value_json
+        if isinstance(value, dict):
+            enabled = value.get(provider_name)
+            if enabled is None:
+                return True
+            return bool(enabled)
+        return True
+
+    def _request_summary(
+        self,
+        *,
+        request: AIExecutionRequest,
+        privacy: Any,
+        request_hash: str,
+        context_fingerprint: str | None,
+        provider: str | None,
+        assignment: AIRoleAssignment | None,
+        model_entry: AIModelCatalogEntry | None,
+        prompt_template: AIPromptTemplate | None,
+    ) -> dict[str, Any]:
+        return {
+            "request_id": request.request_id,
+            "task_type": request.task_type,
+            "operation": request.operation,
+            "creator_id": request.creator_id,
+            "project_id": request.project_id,
+            "model_role": request.model_role,
+            "provider": provider,
+            "model_catalog_id": getattr(model_entry, "id", None),
+            "model_id": getattr(model_entry, "model_id", None),
+            "model_version": getattr(model_entry, "snapshot_or_version", None),
+            "template_key": getattr(prompt_template, "template_key", None),
+            "template_version": getattr(prompt_template, "version", None),
+            "privacy_class": request.privacy_class,
+            "quality_level": request.quality_level,
+            "request_fingerprint": request_hash,
+            "context_fingerprint": context_fingerprint,
+            "cache_policy": request.cache_policy,
+            "fallback_policy": request.fallback_policy,
+            "approval_policy": request.approval_policy,
+            "privacy_decision": privacy.to_dict(),
+            "budget": request.budget,
+            "metadata_keys": sorted(request.metadata.keys()),
+            "metadata_present": bool(request.metadata),
+        }
+
+    def _current_cost_totals(
+        self,
+        *,
+        request: AIExecutionRequest,
+        provider_name: str,
+        now: datetime | None = None,
+    ) -> tuple[float, float]:
+        now = now or datetime.now(timezone.utc)
+        current_month = 0.0
+        current_task = 0.0
+        for execution in self.repository.list_executions(creator_id=request.creator_id, provider=provider_name, limit=1000):
+            if execution.created_at is None:
+                continue
+            try:
+                created_at = datetime.fromisoformat(execution.created_at.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if created_at.year != now.year or created_at.month != now.month:
+                continue
+            usage_records = self.repository.list_usage_records(execution.execution_uuid)
+            execution_cost = sum(record.calculated_cost for record in usage_records)
+            current_month += execution_cost
+            if execution.task_type == request.task_type and execution.operation == request.operation:
+                current_task += execution_cost
+        return current_month, current_task
+
+    def _duplicate_execution(
+        self,
+        *,
+        request: AIExecutionRequest,
+        request_hash: str,
+        provider_name: str,
+    ) -> AIExecutionRecord | None:
+        execution = self.repository.find_execution_by_request_id(request.request_id)
+        if execution is not None and execution.status in _ACTIVE_EXECUTION_STATUSES:
+            return execution
+        execution = self.repository.get_execution_by_request_fingerprint(request_hash)
+        if execution is not None and execution.status in _ACTIVE_EXECUTION_STATUSES:
+            return execution
+        return None
 
     def run_diagnostic(
         self,
@@ -104,6 +205,7 @@ class AIOrchestrator:
     def run(self, request: AIExecutionRequest, *, provider: str | None = None) -> AIExecutionResult:
         privacy = self.privacy_policy.evaluate(request)
         request_hash = build_request_fingerprint(request.to_dict())
+        context_fingerprint = build_request_fingerprint(request.context_package) if request.context_package else None
         prompt_template = self.prompt_registry.get_approved("provider_diagnostic")
         execution_uuid = str(uuid4())
         now = _utc_now()
@@ -123,6 +225,7 @@ class AIOrchestrator:
                 status="blocked_by_model",
                 provider=provider,
                 prompt_template=prompt_template,
+                context_fingerprint=context_fingerprint,
             )
 
         if privacy.decision == "blocked":
@@ -140,6 +243,7 @@ class AIOrchestrator:
                 status="blocked_by_privacy",
                 provider=provider,
                 prompt_template=prompt_template,
+                context_fingerprint=context_fingerprint,
             )
 
         resolved = self._resolve_target(request, provider)
@@ -158,10 +262,79 @@ class AIOrchestrator:
                 status="blocked_by_model",
                 provider=provider,
                 prompt_template=prompt_template,
+                context_fingerprint=context_fingerprint,
             )
 
         assignment, model_entry = resolved
         provider_name = assignment.provider
+        if not self._provider_enabled(provider_name):
+            error = AIExecutionError(
+                category="provider_error",
+                safe_message=f"Provider '{provider_name}' is disabled by runtime policy.",
+                suggested_action="Enable the provider in runtime settings.",
+            )
+            return self._blocked_result(
+                request=request,
+                execution_uuid=execution_uuid,
+                request_hash=request_hash,
+                privacy=privacy,
+                error=error,
+                status="blocked_by_provider",
+                provider=provider_name,
+                prompt_template=prompt_template,
+                assignment=assignment,
+                model_entry=model_entry,
+                context_fingerprint=context_fingerprint,
+            )
+
+        duplicate_execution = self._duplicate_execution(
+            request=request,
+            request_hash=request_hash,
+            provider_name=provider_name,
+        )
+        if duplicate_execution is not None:
+            error = AIExecutionError(
+                category="internal_error",
+                safe_message="A matching execution is already in progress.",
+                suggested_action="Wait for the current execution to finish.",
+            )
+            if duplicate_execution.request_fingerprint == request_hash:
+                now = _utc_now()
+                return AIExecutionResult(
+                    execution_id=execution_uuid,
+                    request_id=request.request_id,
+                    status="queued",
+                    provider=provider_name,
+                    model_id=model_entry.model_id,
+                    model_version=model_entry.snapshot_or_version,
+                    model_role=assignment.role,
+                    result=None,
+                    structured_output=None,
+                    validation=AIExecutionValidation(status="rejected", schema_name=request.task_type, issues=(error.safe_message,), warnings=()),
+                    usage=AIExecutionUsage(),
+                    cost=AICostSummary(None, None, currency="USD", notes="Duplicate active request fingerprint blocked before provider call."),
+                    latency=AIExecutionLatency(latency_ms=0, started_at=now, completed_at=now, attempts=1),
+                    cache=AIExecutionCacheInfo(cache_status="invalidated"),
+                    fallback={"used": False, "policy": request.fallback_policy, "duplicate_of": duplicate_execution.execution_uuid},
+                    warnings=(),
+                    error=error,
+                    provenance={"request_fingerprint": request_hash, "context_fingerprint": context_fingerprint, "duplicate_of": duplicate_execution.execution_uuid},
+                    timestamps={"created_at": now, "started_at": now, "completed_at": now},
+                )
+            return self._blocked_result(
+                request=request,
+                execution_uuid=execution_uuid,
+                request_hash=request_hash,
+                privacy=privacy,
+                error=error,
+                status="queued",
+                provider=provider_name,
+                prompt_template=prompt_template,
+                assignment=assignment,
+                model_entry=model_entry,
+                context_fingerprint=context_fingerprint,
+            )
+
         provider_client = self.providers.get(provider_name)
         if provider_client is None:
             error = AIExecutionError(
@@ -180,6 +353,7 @@ class AIOrchestrator:
                 prompt_template=prompt_template,
                 assignment=assignment,
                 model_entry=model_entry,
+                context_fingerprint=context_fingerprint,
             )
 
         api_key = self.credential_store.load(CredentialStore.reference_for_provider(provider_name))
@@ -201,10 +375,18 @@ class AIOrchestrator:
                 prompt_template=prompt_template,
                 assignment=assignment,
                 model_entry=model_entry,
+                context_fingerprint=context_fingerprint,
             )
 
         prompt_text = self._render_prompt(prompt_template, request)
-        cache_key = self._cache_key(provider_name, model_entry.model_id, prompt_template, request)
+        cache_key = self._cache_key(
+            provider_name=provider_name,
+            model_entry=model_entry,
+            template=prompt_template,
+            request=request,
+            request_fingerprint=request_hash,
+            context_fingerprint=context_fingerprint,
+        )
         if request.cache_policy == "use":
             lookup = self.cache.get(cache_key)
             if lookup.hit and lookup.entry is not None:
@@ -214,6 +396,7 @@ class AIOrchestrator:
                         request=request,
                         execution_uuid=execution_uuid,
                         request_hash=request_hash,
+                        context_fingerprint=context_fingerprint,
                         privacy=privacy,
                         assignment=assignment,
                         model_entry=model_entry,
@@ -221,6 +404,8 @@ class AIOrchestrator:
                         cache_entry=lookup.entry,
                         cached_execution=cached_execution,
                     )
+        if request.cache_policy == "refresh":
+            self.cache.invalidate(cache_key)
 
         estimate = self.cost_estimator.estimate(
             model_entry,
@@ -229,8 +414,21 @@ class AIOrchestrator:
             cached_input_tokens=0,
         )
         budget_policy = self.repository.get_budget_policy(request.creator_id, provider_name)
-        if budget_policy is not None and budget_policy.hard_block_enabled and budget_policy.per_task_limit is not None and estimate.maximum_cost is not None:
-            if estimate.maximum_cost > budget_policy.per_task_limit:
+        budget_decision = None
+        current_month_cost = 0.0
+        current_task_cost = 0.0
+        if budget_policy is not None:
+            current_month_cost, current_task_cost = self._current_cost_totals(
+                request=request,
+                provider_name=provider_name,
+            )
+            budget_decision = BudgetPolicy(policy=budget_policy).evaluate(
+                request,
+                estimated_cost=estimate.maximum_cost if estimate.maximum_cost is not None else estimate.minimum_cost,
+                current_month_cost=current_month_cost,
+                current_task_cost=current_task_cost,
+            )
+            if budget_decision.blocked:
                 error = AIExecutionError(
                     category="budget_block",
                     safe_message="Request blocked by budget policy.",
@@ -248,7 +446,31 @@ class AIOrchestrator:
                     prompt_template=prompt_template,
                     assignment=assignment,
                     model_entry=model_entry,
+                    context_fingerprint=context_fingerprint,
                 )
+            if budget_decision.approval_required:
+                error = AIExecutionError(
+                    category="budget_block",
+                    safe_message="Execution requires approval because the budget policy needs review.",
+                    suggested_action="Approve the execution or reduce the estimated cost.",
+                    technical_reference="budget_policy",
+                )
+                return self._blocked_result(
+                    request=request,
+                    execution_uuid=execution_uuid,
+                    request_hash=request_hash,
+                    privacy=privacy,
+                    error=error,
+                    status="awaiting_approval",
+                    provider=provider_name,
+                    prompt_template=prompt_template,
+                    assignment=assignment,
+                    model_entry=model_entry,
+                    context_fingerprint=context_fingerprint,
+                )
+
+        if request.cache_policy == "refresh":
+            self.cache.invalidate(cache_key)
 
         execution_record = self.repository.store_execution(
             AIExecutionRecord(
@@ -264,9 +486,18 @@ class AIOrchestrator:
                 template_id=prompt_template.id if prompt_template else None,
                 privacy_class=request.privacy_class,
                 quality_level=request.quality_level,
-                context_fingerprint=None,
+                context_fingerprint=context_fingerprint,
                 request_fingerprint=request_hash,
-                input_summary_json={"request": request.to_dict(), "prompt_key": prompt_template.template_key if prompt_template else None},
+                input_summary_json=self._request_summary(
+                    request=request,
+                    privacy=privacy,
+                    request_hash=request_hash,
+                    context_fingerprint=context_fingerprint,
+                    provider=provider_name,
+                    assignment=assignment,
+                    model_entry=model_entry,
+                    prompt_template=prompt_template,
+                ),
                 output_reference=None,
                 validation_status=None,
                 cache_status="active",
@@ -313,11 +544,11 @@ class AIOrchestrator:
                 usage=response.usage,
                 cost=self._cost_summary(estimate, response.usage),
                 latency=AIExecutionLatency(latency_ms=response.latency_ms, started_at=execution_record.started_at, completed_at=_utc_now(), attempts=attempts),
-                cache=AIExecutionCacheInfo(cache_status="active", cache_key=cache_key, hit_count=0, refresh_requested=False),
+                cache=AIExecutionCacheInfo(cache_status="active", cache_key=cache_key, hit_count=0, refresh_requested=request.cache_policy == "refresh"),
                 fallback={"used": False, "policy": request.fallback_policy, "attempts": attempts},
                 warnings=response.warnings,
                 error=error,
-                provenance={"request_fingerprint": request_hash, "provider": provider_name},
+                provenance={"request_fingerprint": request_hash, "context_fingerprint": context_fingerprint, "provider": provider_name},
                 timestamps={"created_at": execution_record.created_at, "started_at": execution_record.started_at, "completed_at": _utc_now()},
             )
 
@@ -362,11 +593,11 @@ class AIOrchestrator:
             usage=usage,
             cost=cost,
             latency=latency,
-            cache=AIExecutionCacheInfo(cache_status="active", cache_key=cache_key, hit_count=0, refresh_requested=False),
+            cache=AIExecutionCacheInfo(cache_status="active", cache_key=cache_key, hit_count=0, refresh_requested=request.cache_policy == "refresh"),
             fallback={"used": False, "policy": request.fallback_policy, "attempts": attempts},
             warnings=response.warnings + validation.warnings,
             error=None,
-            provenance={"provider": provider_name, "model_catalog_id": model_entry.id, "request_fingerprint": request_hash},
+            provenance={"provider": provider_name, "model_catalog_id": model_entry.id, "request_fingerprint": request_hash, "context_fingerprint": context_fingerprint},
             timestamps={"created_at": execution_record.created_at, "started_at": execution_record.started_at, "completed_at": latency.completed_at},
         )
 
@@ -388,6 +619,7 @@ class AIOrchestrator:
             cache_key=cache_key,
             result=result,
             privacy=privacy,
+            context_fingerprint=context_fingerprint,
         )
         return result
 
@@ -395,34 +627,54 @@ class AIOrchestrator:
         if request.model_role is not None:
             resolved = self.model_registry.resolve_role(request.model_role, creator_id=request.creator_id, provider=provider)
             if resolved is not None:
-                return resolved
+                assignment, model = resolved
+                if model.status in {"approved", "testing"}:
+                    return assignment, model
+            return None
         if provider is not None:
             assignments = [assignment for assignment in self.model_registry.list_roles(creator_id=request.creator_id, provider=provider) if assignment.is_enabled]
             if not assignments:
                 return None
             selected = next((assignment for assignment in assignments if assignment.is_default), assignments[0])
             model = self.model_registry.get_model(selected.model_catalog_id)
-            if model is not None:
+            if model is not None and model.status in {"approved", "testing"}:
                 return selected, model
         return None
 
     def _cache_key(
         self,
-        provider: str,
-        model_id: str,
+        *,
+        provider_name: str,
+        model_entry: AIModelCatalogEntry,
         template: AIPromptTemplate | None,
         request: AIExecutionRequest,
+        request_fingerprint: str,
+        context_fingerprint: str | None,
     ) -> str:
         template_key = template.template_key if template else "provider_diagnostic"
+        template_version = template.version if template else None
+        model_version = model_entry.snapshot_or_version
         fingerprint = build_request_fingerprint(
             {
-                "provider": provider,
-                "model_id": model_id,
+                "task_type": request.task_type,
+                "operation": request.operation,
+                "provider": provider_name,
+                "model_id": model_entry.model_id,
+                "model_version": model_version,
                 "template_key": template_key,
-                "request": request.to_dict(),
+                "template_version": template_version,
+                "request_fingerprint": request_fingerprint,
+                "context_fingerprint": context_fingerprint,
+                "quality_level": request.quality_level,
+                "privacy_class": request.privacy_class,
+                "cache_policy": request.cache_policy,
+                "fallback_policy": request.fallback_policy,
+                "approval_policy": request.approval_policy,
+                "budget": request.budget,
+                "metadata": request.metadata,
             }
         )
-        return f"ai:{provider}:{model_id}:{template_key}:{fingerprint}"
+        return f"ai:{provider_name}:{model_entry.model_id}:{template_key}:{template_version or 'none'}:{model_version or 'none'}:{fingerprint}"
 
     def _render_prompt(self, template: AIPromptTemplate | None, request: AIExecutionRequest) -> str:
         payload = {
@@ -481,6 +733,7 @@ class AIOrchestrator:
         prompt_template: AIPromptTemplate | None,
         assignment: AIRoleAssignment | None = None,
         model_entry: AIModelCatalogEntry | None = None,
+        context_fingerprint: str | None = None,
     ) -> AIExecutionResult:
         now = _utc_now()
         self.repository.store_execution(
@@ -497,9 +750,18 @@ class AIOrchestrator:
                 template_id=prompt_template.id if prompt_template else None,
                 privacy_class=request.privacy_class,
                 quality_level=request.quality_level,
-                context_fingerprint=None,
+                context_fingerprint=context_fingerprint,
                 request_fingerprint=request_hash,
-                input_summary_json={"request": request.to_dict()},
+                input_summary_json=self._request_summary(
+                    request=request,
+                    privacy=privacy,
+                    request_hash=request_hash,
+                    context_fingerprint=context_fingerprint,
+                    provider=provider,
+                    assignment=assignment,
+                    model_entry=model_entry,
+                    prompt_template=prompt_template,
+                ),
                 output_reference=None,
                 validation_status=None,
                 cache_status="invalidated",
@@ -528,13 +790,13 @@ class AIOrchestrator:
             structured_output=None,
             validation=AIExecutionValidation(status="rejected", schema_name=request.task_type, issues=(error.safe_message,), warnings=()),
             usage=AIExecutionUsage(),
-            cost=AICostSummary(None, None, currency="USD"),
+            cost=AICostSummary(None, None, currency="USD", notes="Execution was blocked before provider call."),
             latency=AIExecutionLatency(latency_ms=0, started_at=now, completed_at=now, attempts=1),
             cache=AIExecutionCacheInfo(cache_status="invalidated"),
             fallback={"used": False, "policy": request.fallback_policy},
             warnings=(),
             error=error,
-            provenance={"request_fingerprint": request_hash},
+            provenance={"request_fingerprint": request_hash, "context_fingerprint": context_fingerprint},
             timestamps={"created_at": now, "started_at": now, "completed_at": now},
         )
 
@@ -558,17 +820,29 @@ class AIOrchestrator:
         cache_key: str,
         result: AIExecutionResult,
         privacy,
+        context_fingerprint: str | None,
     ) -> None:
         now = _utc_now()
         output_json = provider_response.structured_output or self._safe_parse(provider_response.output_text)
+        request_summary = self._request_summary(
+            request=request,
+            privacy=privacy,
+            request_hash=request_fingerprint,
+            context_fingerprint=context_fingerprint,
+            provider=provider_name,
+            assignment=assignment,
+            model_entry=model_entry,
+            prompt_template=prompt_template,
+        )
+        redacted = privacy.decision != "allowed"
         self.repository.store_payload(
             AIExecutionPayload(
                 execution_id=execution_uuid,
                 payload_type="prepared_request",
-                content_json={"request": request.to_dict(), "prompt": prompt_text},
-                content_text=prompt_text,
+                content_json={"request_summary": request_summary, "prompt": prompt_text if not redacted else "[redacted]"},
+                content_text=prompt_text if not redacted else "[redacted]",
                 content_hash=request_fingerprint,
-                is_redacted=privacy.decision != "allowed",
+                is_redacted=redacted,
                 retention_class="diagnostic",
                 created_at=now,
             )
@@ -577,10 +851,10 @@ class AIOrchestrator:
             AIExecutionPayload(
                 execution_id=execution_uuid,
                 payload_type="provider_response",
-                content_json=output_json,
-                content_text=provider_response.output_text,
+                content_json=output_json if not redacted else {"status": "redacted"},
+                content_text=provider_response.output_text if not redacted else "[redacted]",
                 content_hash=request_fingerprint,
-                is_redacted=privacy.decision != "allowed",
+                is_redacted=redacted,
                 retention_class="diagnostic",
                 created_at=now,
             )
@@ -589,10 +863,10 @@ class AIOrchestrator:
             AIExecutionPayload(
                 execution_id=execution_uuid,
                 payload_type="validated_result",
-                content_json=result.structured_output,
-                content_text=result.result,
+                content_json=result.structured_output if not redacted else {"status": "redacted"},
+                content_text=result.result if not redacted else "[redacted]",
                 content_hash=request_fingerprint,
-                is_redacted=privacy.decision != "allowed",
+                is_redacted=redacted,
                 retention_class="diagnostic",
                 created_at=now,
             )
@@ -650,7 +924,7 @@ class AIOrchestrator:
                 model_catalog_id=model_entry.id,
                 template_id=prompt_template.id if prompt_template else None,
                 request_fingerprint=request_fingerprint,
-                context_fingerprint=None,
+                context_fingerprint=context_fingerprint,
                 result_reference=execution_uuid,
                 status="active",
                 created_at=now,
@@ -666,6 +940,7 @@ class AIOrchestrator:
         request: AIExecutionRequest,
         execution_uuid: str,
         request_hash: str,
+        context_fingerprint: str | None,
         privacy,
         assignment: AIRoleAssignment,
         model_entry: AIModelCatalogEntry,
@@ -697,12 +972,12 @@ class AIOrchestrator:
             structured_output=validated.content_json if validated else None,
             validation=validation,
             usage=AIExecutionUsage(),
-            cost=AICostSummary(None, None, currency="USD", notes="Returned from cache."),
+            cost=AICostSummary(0.0, 0.0, calculated_cost=0.0, provider_reported_cost=None, currency="USD", notes="Returned from cache."),
             latency=AIExecutionLatency(latency_ms=0, started_at=now, completed_at=now, attempts=1),
-            cache=AIExecutionCacheInfo(cache_status="exact_hit", cache_key=cache_entry.cache_key, hit_count=cache_entry.hit_count, refresh_requested=False),
+            cache=AIExecutionCacheInfo(cache_status="exact_hit", cache_key=cache_entry.cache_key, hit_count=cache_entry.hit_count + 1, refresh_requested=False),
             fallback={"used": False, "policy": request.fallback_policy, "cached_from": cached_execution.execution_uuid},
             warnings=(),
             error=None,
-            provenance={"request_fingerprint": request_hash, "cached_from": cached_execution.execution_uuid},
+            provenance={"request_fingerprint": request_hash, "context_fingerprint": context_fingerprint, "cached_from": cached_execution.execution_uuid},
             timestamps={"created_at": now, "started_at": now, "completed_at": now},
         )

@@ -28,12 +28,12 @@ class AICache:
         entry = self.repository.get_cache_entry(cache_key)
         if entry is None:
             return CacheLookupResult(entry=None, hit=False, stale=False)
-        if entry.status in {"invalidated", "expired"}:
+        if entry.status in {"stale", "invalidated", "expired"}:
             return CacheLookupResult(entry=entry, hit=False, stale=True)
         if entry.expires_at is not None and entry.expires_at <= _utc_now():
             return CacheLookupResult(entry=entry, hit=False, stale=True)
         self.repository.mark_cache_hit(cache_key)
-        return CacheLookupResult(entry=entry, hit=True, stale=entry.status == "stale")
+        return CacheLookupResult(entry=entry, hit=True, stale=False)
 
     def put(self, entry: AICacheEntry) -> AICacheEntry:
         return self.repository.upsert_cache_entry(entry)

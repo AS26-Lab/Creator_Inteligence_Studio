@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import time
+import socket
 from dataclasses import dataclass
+import re
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -42,6 +44,9 @@ def _safe_error_message(message: str | None) -> str:
     if not message:
         return "Provider request failed."
     cleaned = message.replace("\r", " ").replace("\n", " ")
+    cleaned = re.sub(r"Bearer\s+[A-Za-z0-9._\-]+", "Bearer [redacted]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"sk-[A-Za-z0-9._\-]{6,}", "[redacted]", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(api[_ -]?key\s*[:=]\s*)([A-Za-z0-9._\-]{6,})", r"\1[redacted]", cleaned, flags=re.IGNORECASE)
     return cleaned[:300]
 
 
@@ -63,7 +68,12 @@ def _http_json(
         with urlopen(request, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
             elapsed = int((time.perf_counter() - started) * 1000)
-            return response.status, json.loads(raw) if raw else {}, elapsed
+            if not raw:
+                return response.status, {}, elapsed
+            try:
+                return response.status, json.loads(raw), elapsed
+            except Exception:
+                return response.status, raw, elapsed
     except HTTPError as exc:
         elapsed = int((time.perf_counter() - started) * 1000)
         try:
@@ -72,6 +82,8 @@ def _http_json(
         except Exception:
             data = _safe_error_message(str(exc))
         return exc.code, data, elapsed
+    except (TimeoutError, socket.timeout) as exc:
+        raise TimeoutError(_safe_error_message(str(exc))) from exc
     except URLError as exc:
         elapsed = int((time.perf_counter() - started) * 1000)
         raise ConnectionError(_safe_error_message(str(exc))) from exc
@@ -80,8 +92,16 @@ def _http_json(
 def _map_error_category(status_code: int, payload: dict[str, Any] | str) -> AIErrorCategory:
     text = json.dumps(payload, ensure_ascii=False) if isinstance(payload, dict) else str(payload)
     lowered = text.lower()
+    if "insufficient" in lowered or "credit" in lowered or "billing" in lowered or "payment" in lowered:
+        return "billing_error"
+    if "quota" in lowered:
+        return "quota_error"
+    if "deprecated" in lowered or "retired" in lowered:
+        return "model_deprecated"
+    if "model" in lowered and ("does not exist" in lowered or "not found" in lowered or "unavailable" in lowered):
+        return "model_unavailable"
     if status_code in (401, 403):
-        if "billing" in lowered:
+        if "billing" in lowered or "credit" in lowered or "quota" in lowered:
             return "billing_error"
         return "authentication_error" if status_code == 401 else "authorization_error"
     if status_code == 404:
@@ -89,7 +109,11 @@ def _map_error_category(status_code: int, payload: dict[str, Any] | str) -> AIEr
     if status_code == 408:
         return "timeout"
     if status_code == 429:
+        if "billing" in lowered or "credit" in lowered:
+            return "billing_error"
         return "rate_limit_error" if "rate" in lowered else "quota_error"
+    if status_code == 400:
+        return "model_unavailable" if "model" in lowered and ("not found" in lowered or "does not exist" in lowered) else "invalid_request"
     if 500 <= status_code < 600:
         return "provider_error"
     return "invalid_request"
@@ -169,6 +193,23 @@ class OpenAIProvider:
                     latency_ms=latency_ms,
                     error=error.to_dict(),
                 )
+            if not isinstance(payload, dict):
+                error = AIExecutionError(
+                    category="invalid_response",
+                    safe_message="Provider returned a malformed credential response.",
+                    retryable=False,
+                    suggested_action="Check provider availability.",
+                    technical_reference="response",
+                )
+                return AIProviderDiagnostic(
+                    provider=self.provider_name,
+                    configured=True,
+                    model_id=None,
+                    status="failed",
+                    message=error.safe_message,
+                    latency_ms=latency_ms,
+                    error=error.to_dict(),
+                )
             return AIProviderDiagnostic(
                 provider=self.provider_name,
                 configured=True,
@@ -178,14 +219,14 @@ class OpenAIProvider:
                 latency_ms=latency_ms,
                 usage={"models": len(payload.get("data", [])) if isinstance(payload, dict) else None},
             )
-        except ConnectionError as exc:
+        except (ConnectionError, TimeoutError) as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)
             error = AIExecutionError(
-                category="network_error",
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
                 safe_message=_safe_error_message(str(exc)),
                 retryable=True,
-                suggested_action="Check network connectivity.",
-                technical_reference="network",
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
             )
             return AIProviderDiagnostic(
                 provider=self.provider_name,
@@ -206,24 +247,62 @@ class OpenAIProvider:
         prompt_text: str,
     ) -> AIProviderResponse:
         started = time.perf_counter()
-        status_code, payload, latency_ms = _http_json(
-            "POST",
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            payload={
-                "model": model_id,
-                "messages": [
-                    {"role": "system", "content": "Return only the requested JSON object."},
-                    {"role": "user", "content": prompt_text},
-                ],
-                "temperature": 0,
-                "max_tokens": 128,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=30.0,
-        )
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                payload={
+                    "model": model_id,
+                    "messages": [
+                        {"role": "system", "content": "Return only the requested JSON object."},
+                        {"role": "user", "content": prompt_text},
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 128,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=30.0,
+            )
+        except (ConnectionError, TimeoutError) as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
+            )
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
         if status_code >= 400:
             error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
+        if not isinstance(payload, dict):
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message="Provider returned malformed JSON.",
+                retryable=False,
+                suggested_action="Retry the request or fix the model response.",
+                technical_reference="response",
+            )
             return AIProviderResponse(
                 provider=self.provider_name,
                 model_id=model_id,
@@ -239,29 +318,47 @@ class OpenAIProvider:
         usage = AIExecutionUsage()
         model_version = None
         raw_finish_reason = None
-        if isinstance(payload, dict):
-            choices = payload.get("choices") or []
-            if choices:
-                choice = choices[0] or {}
-                message = choice.get("message") or {}
-                output_text = str(message.get("content") or "")
-                raw_finish_reason = choice.get("finish_reason")
-            model_version = payload.get("model")
-            usage_payload = payload.get("usage") or {}
-            usage = AIExecutionUsage(
-                input_tokens=int(usage_payload.get("prompt_tokens") or 0),
-                output_tokens=int(usage_payload.get("completion_tokens") or 0),
-                cached_input_tokens=int(usage_payload.get("cached_tokens") or 0),
-                provider_reported_cost=None,
-                calculated_cost=0.0,
-                currency="USD",
-                pricing_version=None,
-                calculation_notes="Provider reported usage normalized locally.",
-            )
+        choices = payload.get("choices") or []
+        if choices:
+            choice = choices[0] or {}
+            message = choice.get("message") or {}
+            output_text = str(message.get("content") or "")
+            raw_finish_reason = choice.get("finish_reason")
+        model_version = payload.get("model")
+        usage_payload = payload.get("usage") or {}
+        usage = AIExecutionUsage(
+            input_tokens=int(usage_payload.get("prompt_tokens") or 0),
+            output_tokens=int(usage_payload.get("completion_tokens") or 0),
+            cached_input_tokens=int(usage_payload.get("cached_tokens") or 0),
+            provider_reported_cost=None,
+            calculated_cost=0.0,
+            currency="USD",
+            pricing_version=None,
+            calculation_notes="Provider reported usage normalized locally.",
+        )
         try:
             structured_output = json.loads(output_text)
         except Exception:
             structured_output = None
+        if not output_text:
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message="Provider response did not include JSON content.",
+                retryable=False,
+                suggested_action="Retry or adjust the prompt template.",
+                technical_reference="response",
+            )
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=model_version,
+                output_text="",
+                structured_output=None,
+                usage=usage,
+                latency_ms=latency_ms,
+                raw_finish_reason=raw_finish_reason,
+                error=error,
+            )
         return AIProviderResponse(
             provider=self.provider_name,
             model_id=model_id,
@@ -311,6 +408,23 @@ class AnthropicProvider:
                     latency_ms=latency_ms,
                     error=error.to_dict(),
                 )
+            if not isinstance(payload, dict):
+                error = AIExecutionError(
+                    category="invalid_response",
+                    safe_message="Provider returned a malformed credential response.",
+                    retryable=False,
+                    suggested_action="Check provider availability.",
+                    technical_reference="response",
+                )
+                return AIProviderDiagnostic(
+                    provider=self.provider_name,
+                    configured=True,
+                    model_id=None,
+                    status="failed",
+                    message=error.safe_message,
+                    latency_ms=latency_ms,
+                    error=error.to_dict(),
+                )
             return AIProviderDiagnostic(
                 provider=self.provider_name,
                 configured=True,
@@ -320,14 +434,14 @@ class AnthropicProvider:
                 latency_ms=latency_ms,
                 usage={"models": len(payload.get("data", [])) if isinstance(payload, dict) else None},
             )
-        except ConnectionError as exc:
+        except (ConnectionError, TimeoutError) as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)
             error = AIExecutionError(
-                category="network_error",
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
                 safe_message=_safe_error_message(str(exc)),
                 retryable=True,
-                suggested_action="Check network connectivity.",
-                technical_reference="network",
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
             )
             return AIProviderDiagnostic(
                 provider=self.provider_name,
@@ -347,22 +461,61 @@ class AnthropicProvider:
         model_id: str,
         prompt_text: str,
     ) -> AIProviderResponse:
-        status_code, payload, latency_ms = _http_json(
-            "POST",
-            f"{self.base_url}/messages",
-            headers={"x-api-key": api_key, "anthropic-version": self.api_version},
-            payload={
-                "model": model_id,
-                "max_tokens": 128,
-                "temperature": 0,
-                "messages": [
-                    {"role": "user", "content": prompt_text},
-                ],
-            },
-            timeout=30.0,
-        )
+        started = time.perf_counter()
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "POST",
+                f"{self.base_url}/messages",
+                headers={"x-api-key": api_key, "anthropic-version": self.api_version},
+                payload={
+                    "model": model_id,
+                    "max_tokens": 128,
+                    "temperature": 0,
+                    "messages": [
+                        {"role": "user", "content": prompt_text},
+                    ],
+                },
+                timeout=30.0,
+            )
+        except (ConnectionError, TimeoutError) as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
+            )
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
         if status_code >= 400:
             error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=None,
+                output_text="",
+                structured_output=None,
+                usage=AIExecutionUsage(),
+                latency_ms=latency_ms,
+                error=error,
+            )
+        if not isinstance(payload, dict):
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message="Provider returned malformed JSON.",
+                retryable=False,
+                suggested_action="Retry the request or fix the model response.",
+                technical_reference="response",
+            )
             return AIProviderResponse(
                 provider=self.provider_name,
                 model_id=model_id,
@@ -378,28 +531,46 @@ class AnthropicProvider:
         usage = AIExecutionUsage()
         model_version = None
         raw_finish_reason = None
-        if isinstance(payload, dict):
-            content = payload.get("content") or []
-            if content:
-                first = content[0] or {}
-                output_text = str(first.get("text") or first.get("content") or "")
-            model_version = payload.get("model")
-            raw_finish_reason = payload.get("stop_reason")
-            usage_payload = payload.get("usage") or {}
-            usage = AIExecutionUsage(
-                input_tokens=int(usage_payload.get("input_tokens") or 0),
-                output_tokens=int(usage_payload.get("output_tokens") or 0),
-                cached_input_tokens=int(usage_payload.get("cache_read_input_tokens") or 0),
-                provider_reported_cost=None,
-                calculated_cost=0.0,
-                currency="USD",
-                pricing_version=None,
-                calculation_notes="Provider reported usage normalized locally.",
-            )
+        content = payload.get("content") or []
+        if content:
+            first = content[0] or {}
+            output_text = str(first.get("text") or first.get("content") or "")
+        model_version = payload.get("model")
+        raw_finish_reason = payload.get("stop_reason")
+        usage_payload = payload.get("usage") or {}
+        usage = AIExecutionUsage(
+            input_tokens=int(usage_payload.get("input_tokens") or 0),
+            output_tokens=int(usage_payload.get("output_tokens") or 0),
+            cached_input_tokens=int(usage_payload.get("cache_read_input_tokens") or 0),
+            provider_reported_cost=None,
+            calculated_cost=0.0,
+            currency="USD",
+            pricing_version=None,
+            calculation_notes="Provider reported usage normalized locally.",
+        )
         try:
             structured_output = json.loads(output_text)
         except Exception:
             structured_output = None
+        if not output_text:
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message="Provider response did not include JSON content.",
+                retryable=False,
+                suggested_action="Retry or adjust the prompt template.",
+                technical_reference="response",
+            )
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model_id=model_id,
+                model_version=model_version,
+                output_text="",
+                structured_output=None,
+                usage=usage,
+                latency_ms=latency_ms,
+                raw_finish_reason=raw_finish_reason,
+                error=error,
+            )
         return AIProviderResponse(
             provider=self.provider_name,
             model_id=model_id,
