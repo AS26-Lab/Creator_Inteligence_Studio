@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -12,8 +12,10 @@ from creator_intelligence_studio.infrastructure.ai_runtime import (
     AICache,
     AIExecutionRequest,
     AIExecutionResult,
+    AIExecutionError,
     AIModelCatalogEntry,
     AIProviderDiagnostic,
+    AIProviderModelSyncReport,
     AIPromptTemplate,
     AIRoleAssignment,
     AIRuntimeSetting,
@@ -46,6 +48,15 @@ class AIRuntimeStatus:
 
 
 class AIRuntimeService:
+    ROLE_REQUIREMENTS: dict[str, dict[str, bool]] = {
+        "cheap_structured_model": {"structured_output": True},
+        "general_reasoning_model": {"structured_output": True},
+        "creative_writing_model": {"structured_output": True},
+        "multimodal_model": {"structured_output": True, "image_input": True},
+        "transcription_fallback_model": {"audio_input": True},
+        "evaluation_model": {"structured_output": True},
+    }
+
     def __init__(
         self,
         *,
@@ -275,11 +286,13 @@ class AIRuntimeService:
         for provider in self.list_providers():
             credential = self.credential_store.load(CredentialStore.reference_for_provider(provider))
             last_check = self._runtime_setting_value("last_check", provider) or {}
+            last_sync = self._runtime_setting_value("last_model_sync", provider) or {}
             result[provider] = {
                 "configured": bool(credential),
                 "masked_key": self.credential_store.mask(credential),
                 "enabled": bool(provider_enabled.get(provider, True)) if isinstance(provider_enabled, dict) else True,
                 "last_check": last_check,
+                "last_model_sync": last_sync,
                 "models": [entry.to_dict() for entry in self.model_registry.list_models(provider)],
                 "roles": [assignment.to_dict() for assignment in self.model_registry.list_roles(provider=provider)],
             }
@@ -318,23 +331,140 @@ class AIRuntimeService:
         self._record_provider_check(provider, diagnostic)
         return diagnostic
 
-    def list_models(self, provider: str | None = None) -> list[dict[str, object]]:
-        return [entry.to_dict() for entry in self.model_registry.list_models(provider)]
+    def _record_model_sync(self, provider: str, report: AIProviderModelSyncReport) -> None:
+        self.repository.upsert_runtime_setting(
+            AIRuntimeSetting(
+                scope_type="provider",
+                scope_id=provider,
+                setting_key="last_model_sync",
+                setting_value_json=report.to_dict(),
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+        )
 
-    def verify_models(self, provider: str) -> list[dict[str, object]]:
-        diagnostic = self.test_provider(provider)
-        if diagnostic.status != "ok":
-            return [diagnostic.to_dict()]
-        rows: list[dict[str, object]] = []
-        for entry in self.model_registry.list_models(provider):
-            updated = self.repository.upsert_model_catalog_entry(
+    def _model_meets_role_requirements(self, role: str, model: AIModelCatalogEntry) -> tuple[bool, tuple[str, ...]]:
+        requirements = self.ROLE_REQUIREMENTS.get(role, {})
+        notes: list[str] = []
+        capabilities = model.capabilities_json if isinstance(model.capabilities_json, dict) else {}
+        for capability, required in requirements.items():
+            if not required:
+                continue
+            value = capabilities.get(capability)
+            if value is None:
+                value = getattr(model, f"supports_{capability}", False)
+            if not bool(value):
+                notes.append(f"Missing capability: {capability}")
+        return not notes, tuple(notes)
+
+    def list_assignable_models(self, provider: str, role: str) -> list[dict[str, object]]:
+        models = []
+        for model in self.model_registry.list_models(provider):
+            if model.status not in {"approved", "testing"}:
+                continue
+            allowed, notes = self._model_meets_role_requirements(role, model)
+            if not allowed:
+                continue
+            payload = model.to_dict()
+            payload["compatibility_notes"] = notes
+            models.append(payload)
+        return models
+
+    def refresh_provider_models(self, provider: str) -> dict[str, object]:
+        credential = self.credential_store.load(CredentialStore.reference_for_provider(provider))
+        if not credential:
+            error = AIExecutionError(
+                category="authentication_error",
+                safe_message=f"No hay una credencial configurada para {provider}.",
+                retryable=False,
+                suggested_action="Store the provider API key.",
+                technical_reference=CredentialStore.reference_for_provider(provider),
+            )
+            report = AIProviderModelSyncReport(
+                provider=provider,
+                status="blocked",
+                message=error.safe_message,
+                error=error,
+            )
+            self._record_model_sync(provider, report)
+            return report.to_dict()
+        client = self.providers.get(provider)
+        if client is None:
+            error = AIExecutionError(
+                category="provider_error",
+                safe_message="Provider adapter is unavailable.",
+                retryable=False,
+                suggested_action="Register the provider adapter.",
+                technical_reference="adapter",
+            )
+            report = AIProviderModelSyncReport(
+                provider=provider,
+                status="blocked",
+                message=error.safe_message,
+                error=error,
+            )
+            self._record_model_sync(provider, report)
+            return report.to_dict()
+
+        report = client.discover_models(credential)
+        if report.status != "ok":
+            self._record_model_sync(provider, report)
+            return report.to_dict()
+        existing_models = self.repository.list_model_catalog_entries(provider)
+        now = self._now()
+        new_count = 0
+        updated_count = 0
+        unavailable_count = 0
+        discovered_keys = {(model.model_id, model.snapshot_or_version) for model in report.models}
+        for discovered in report.models:
+            current = next(
+                (
+                    entry
+                    for entry in existing_models
+                    if entry.model_id == discovered.model_id and entry.snapshot_or_version == discovered.snapshot_or_version
+                ),
+                None,
+            )
+            entry = AIModelCatalogEntry(
+                id=current.id if current else None,
+                provider=discovered.provider,
+                model_id=discovered.model_id,
+                display_name=discovered.display_name,
+                snapshot_or_version=discovered.snapshot_or_version,
+                status=discovered.status,
+                capabilities_json=discovered.capabilities_json,
+                context_limit=discovered.context_limit,
+                supports_structured_output=discovered.supports_structured_output,
+                supports_image_input=discovered.supports_image_input,
+                supports_audio_input=discovered.supports_audio_input,
+                input_price_per_million=discovered.input_price_per_million,
+                output_price_per_million=discovered.output_price_per_million,
+                cached_input_price_per_million=discovered.cached_input_price_per_million,
+                pricing_currency=discovered.pricing_currency,
+                pricing_effective_at=discovered.pricing_effective_at,
+                last_verified_at=now,
+                replacement_model_id=discovered.replacement_model_id,
+                created_at=current.created_at if current else now,
+                updated_at=now,
+            )
+            self.repository.upsert_model_catalog_entry(entry)
+            if current is None:
+                new_count += 1
+            else:
+                updated_count += 1
+        for entry in existing_models:
+            if (entry.model_id, entry.snapshot_or_version) in discovered_keys:
+                continue
+            if entry.status in {"deprecated", "unavailable", "blocked"}:
+                continue
+            self.repository.upsert_model_catalog_entry(
                 AIModelCatalogEntry(
                     id=entry.id,
                     provider=entry.provider,
                     model_id=entry.model_id,
                     display_name=entry.display_name,
                     snapshot_or_version=entry.snapshot_or_version,
-                    status="approved",
+                    status="unavailable",
                     capabilities_json=entry.capabilities_json,
                     context_limit=entry.context_limit,
                     supports_structured_output=entry.supports_structured_output,
@@ -345,14 +475,32 @@ class AIRuntimeService:
                     cached_input_price_per_million=entry.cached_input_price_per_million,
                     pricing_currency=entry.pricing_currency,
                     pricing_effective_at=entry.pricing_effective_at,
-                    last_verified_at=self._now(),
+                    last_verified_at=now,
                     replacement_model_id=entry.replacement_model_id,
                     created_at=entry.created_at,
-                    updated_at=self._now(),
+                    updated_at=now,
                 )
             )
-            rows.append(updated.to_dict())
-        return rows
+            unavailable_count += 1
+        final = replace(
+            report,
+            status="ok",
+            message="Provider model catalog synchronized.",
+            found_count=len(report.models),
+            compatible_count=sum(1 for model in report.models if model.status in {"approved", "testing"}),
+            new_count=new_count,
+            updated_count=updated_count,
+            unavailable_count=unavailable_count,
+            checked_at=now,
+        )
+        self._record_model_sync(provider, final)
+        return final.to_dict()
+
+    def list_models(self, provider: str | None = None) -> list[dict[str, object]]:
+        return [entry.to_dict() for entry in self.model_registry.list_models(provider)]
+
+    def verify_models(self, provider: str) -> dict[str, object]:
+        return self.refresh_provider_models(provider)
 
     def list_roles(self, creator_id: str | None = None) -> list[dict[str, object]]:
         return [assignment.to_dict() for assignment in self.model_registry.list_roles(creator_id=creator_id)]
@@ -373,6 +521,19 @@ class AIRuntimeService:
         capabilities_json: dict[str, object] | None = None,
         snapshot_or_version: str | None = None,
     ) -> dict[str, object]:
+        candidates = [
+            entry
+            for entry in self.model_registry.list_models(provider)
+            if entry.model_id == model_id and (snapshot_or_version is None or entry.snapshot_or_version == snapshot_or_version)
+        ]
+        if not candidates:
+            raise ValueError("No synchronized model is available for the requested provider and model id.")
+        model = candidates[0]
+        if model.status not in {"approved", "testing"}:
+            raise ValueError("The selected model is not currently usable.")
+        allowed, notes = self._model_meets_role_requirements(role, model)
+        if not allowed:
+            raise ValueError("; ".join(notes) or "The selected model does not satisfy the role requirements.")
         assignment = self.model_registry.assign_role(
             role=role,
             provider=provider,
@@ -384,7 +545,7 @@ class AIRuntimeService:
             fallback_policy=fallback_policy,
             quality_level=quality_level,
             status=status,
-            capabilities_json=capabilities_json,
+            capabilities_json=capabilities_json if capabilities_json is not None else model.capabilities_json,
             snapshot_or_version=snapshot_or_version,
         )
         return assignment.to_dict()

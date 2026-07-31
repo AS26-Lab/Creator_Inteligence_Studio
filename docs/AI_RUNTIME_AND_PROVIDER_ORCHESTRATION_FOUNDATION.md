@@ -17,6 +17,7 @@ Included:
 
 - provider credential storage;
 - provider diagnostics;
+- provider model catalog discovery and synchronization;
 - role-based model resolution;
 - prompt template registry;
 - budget policy checks;
@@ -255,6 +256,13 @@ Diagnostics must work with:
 - only one provider configured;
 - no provider configured, where the app still opens and reports the missing state.
 
+Credential validation and model catalog synchronization are separate steps:
+
+- validation confirms the stored credential can reach the provider;
+- synchronization queries the provider model endpoint, normalizes the response, and updates `ai_model_catalog`;
+- a valid credential does not imply the local catalog is populated;
+- role assignment and diagnostic resolution only use synchronized catalog entries.
+
 ## Credentials
 
 Rules:
@@ -386,6 +394,8 @@ Visible categories:
 - diagnostics;
 - execution history.
 
+Model selectors in the runtime page are populated from the synchronized catalog. If no compatible models are available yet, the page explains that the user must validate the credential and refresh the provider catalog first.
+
 ## Task Center
 
 Diagnostic work can appear as `ai_runtime_diagnostic`.
@@ -453,6 +463,8 @@ This section records what was verified during the v31 closeout audit.
 - Dedicated desktop navigation into the `AI Runtime` page from the sidebar.
 - Real GUI tab presence for providers, roles, budget, diagnostics, and history.
 - A navigation smoke test that clicks the sidebar entry and verifies the mounted page.
+- Provider credential validation followed by catalog synchronization into `ai_model_catalog`.
+- GUI model selection populated from synchronized provider models and role assignment persistence.
 
 ### CredentialStore mechanism
 
@@ -468,6 +480,8 @@ This section records what was verified during the v31 closeout audit.
 - Live tests remain opt-in and are skipped unless `CIS_RUN_LIVE_AI_TESTS=1`.
 - The foundation remains intentionally narrow: provider diagnostics and orchestration only.
 - The new desktop page is configuration and diagnostics only; it does not add creative generation flows.
+- Model capabilities remain conservative when the provider response does not report enough evidence.
+- Pricing may remain marked as pending verification until the provider data is synchronized.
 
 ### Test coverage added or confirmed
 

@@ -15,6 +15,7 @@ from creator_intelligence_studio.infrastructure.ai_runtime.models import (
     AIPromptTemplate,
     AIRoleAssignment,
     AIProviderDiagnostic,
+    AIProviderModelSyncReport,
     AIProviderResponse,
 )
 from creator_intelligence_studio.infrastructure.ai_runtime.orchestrator import AIOrchestrator
@@ -36,6 +37,9 @@ class FakeProvider:
         usage: AIExecutionUsage | None = None,
         model_version: str = "v1",
         latency_ms: int = 5,
+        discovered_models: list[dict[str, object]] | None = None,
+        discovery_status: str = "ok",
+        discovery_message: str = "Model catalog synchronized.",
     ) -> None:
         self.provider_name = provider_name
         self.response_text = response_text
@@ -55,6 +59,20 @@ class FakeProvider:
         )
         self.model_version = model_version
         self.latency_ms = latency_ms
+        self.discovered_models = discovered_models or [
+            {
+                "model_id": f"{provider_name}-structured-mini",
+                "display_name": f"{provider_name.title()} Structured Mini",
+                "snapshot_or_version": model_version,
+                "status": "testing",
+                "capabilities_json": {"structured_output": True},
+                "supports_structured_output": True,
+                "supports_image_input": provider_name == "openai",
+                "supports_audio_input": False,
+            }
+        ]
+        self.discovery_status = discovery_status
+        self.discovery_message = discovery_message
         self.calls = 0
         self.last_calls: list[dict[str, object]] = []
 
@@ -71,6 +89,45 @@ class FakeProvider:
             status=self.diagnostic_status,
             message=self.diagnostic_message,
             latency_ms=1,
+        )
+
+    def discover_models(self, api_key: str):
+        from creator_intelligence_studio.infrastructure.ai_runtime.models import AIProviderDiscoveredModel
+
+        discovered = tuple(
+            AIProviderDiscoveredModel(
+                provider=self.provider_name,
+                model_id=str(model["model_id"]),
+                display_name=str(model["display_name"]),
+                snapshot_or_version=str(model.get("snapshot_or_version")) if model.get("snapshot_or_version") is not None else None,
+                status=str(model.get("status") or "testing"),
+                capabilities_json=dict(model.get("capabilities_json") or {}),
+                supports_structured_output=bool(model.get("supports_structured_output", False)),
+                supports_image_input=bool(model.get("supports_image_input", False)),
+                supports_audio_input=bool(model.get("supports_audio_input", False)),
+                input_price_per_million=model.get("input_price_per_million"),
+                output_price_per_million=model.get("output_price_per_million"),
+                cached_input_price_per_million=model.get("cached_input_price_per_million"),
+                pricing_currency=str(model.get("pricing_currency") or "USD"),
+                pricing_effective_at=model.get("pricing_effective_at"),
+                replacement_model_id=model.get("replacement_model_id"),
+                compatibility_notes=tuple(model.get("compatibility_notes") or ()),
+            )
+            for model in self.discovered_models
+        )
+        compatible = sum(1 for model in discovered if model.status in {"approved", "testing"})
+        return AIProviderModelSyncReport(
+            provider=self.provider_name,
+            status=self.discovery_status,
+            message=self.discovery_message,
+            found_count=len(discovered),
+            compatible_count=compatible,
+            new_count=0,
+            updated_count=0,
+            unavailable_count=0,
+            latency_ms=1,
+            checked_at="2026-07-29T00:00:00Z",
+            models=discovered,
         )
 
     def execute(self, request: AIExecutionRequest, *, api_key: str, model_id: str, prompt_text: str):

@@ -181,7 +181,7 @@ class CredentialStore:
         if not secret:
             return "no configurado"
         tail = secret[-4:] if len(secret) >= 4 else secret
-        return f"{'*' * max(len(secret) - 4, 4)}{tail}"
+        return f"{'•' * 8}{tail}"
 
     def save(self, reference: str, secret: str) -> None:
         self.backend.save(reference, secret)

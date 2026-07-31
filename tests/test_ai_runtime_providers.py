@@ -152,6 +152,43 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertEqual(response.usage.input_tokens, 0)
         self.assertEqual(response.usage.output_tokens, 0)
 
+    def test_discover_models_normalizes_catalog_and_reports_errors(self) -> None:
+        payload = {
+            "data": [
+                {"id": "gpt-4.1-mini", "display_name": "GPT-4.1 mini", "context_length": 128000},
+                {"id": "gpt-4.1-mini", "display_name": "GPT-4.1 mini duplicate"},
+                {"id": "text-embedding-3-small", "display_name": "Embedding Small"},
+                {"id": "gpt-4o-audio-preview", "display_name": "GPT-4o audio preview", "snapshot": "2026-07-01", "context_length": 128000},
+            ]
+        }
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", return_value=FakeHTTPResponse(200, json.dumps(payload).encode("utf-8"))):
+            report = self.provider.discover_models("sk-openai-test")
+        self.assertEqual(report.status, "ok")
+        self.assertEqual(report.found_count, 3)
+        self.assertEqual(report.compatible_count, 2)
+        models = {model.model_id: model for model in report.models}
+        self.assertEqual(models["text-embedding-3-small"].status, "unavailable")
+        self.assertTrue(models["gpt-4o-audio-preview"].supports_audio_input)
+
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", return_value=FakeHTTPResponse(200, b"not json")):
+            report = self.provider.discover_models("sk-openai-test")
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.error.category, "invalid_response")
+
+        error_payload = {"error": {"message": "invalid api key sk-openai-secret", "type": "invalid_api_key"}}
+        error = HTTPError(
+            "https://api.openai.com/v1/models",
+            401,
+            "error",
+            hdrs=None,
+            fp=BytesIO(json.dumps(error_payload).encode("utf-8")),
+        )
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=error):
+            report = self.provider.discover_models("sk-openai-test")
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.error.category, "authentication_error")
+        self.assertNotIn("sk-openai-secret", report.error.safe_message)
+
 
 class AnthropicProviderTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -255,6 +292,28 @@ class AnthropicProviderTests(unittest.TestCase):
         self.assertIsNone(response.error)
         self.assertEqual(response.usage.input_tokens, 0)
         self.assertEqual(response.usage.output_tokens, 0)
+
+    def test_discover_models_normalizes_catalog_and_reports_errors(self) -> None:
+        payload = {
+            "data": [
+                {"id": "claude-3-5-sonnet-latest", "display_name": "Claude 3.5 Sonnet"},
+                {"id": "claude-3-5-sonnet-latest", "display_name": "Claude 3.5 Sonnet duplicate"},
+                {"id": "haiku-search", "display_name": "Haiku Search"},
+            ]
+        }
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", return_value=FakeHTTPResponse(200, json.dumps(payload).encode("utf-8"))):
+            report = self.provider.discover_models("sk-anthropic-test")
+        self.assertEqual(report.status, "ok")
+        self.assertEqual(report.found_count, 2)
+        self.assertEqual(report.compatible_count, 1)
+        models = {model.model_id: model for model in report.models}
+        self.assertEqual(models["haiku-search"].status, "unavailable")
+
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=TimeoutError("socket timeout sk-anthropic-secret")):
+            report = self.provider.discover_models("sk-anthropic-test")
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.error.category, "timeout")
+        self.assertNotIn("sk-anthropic-secret", report.error.safe_message)
 
 
 if __name__ == "__main__":

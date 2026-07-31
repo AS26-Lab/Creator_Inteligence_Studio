@@ -136,6 +136,12 @@ class DesktopWorkspaceFacade:
     def ai_runtime_list_models(self, provider: str | None = None):
         return self.ai_runtime_service.list_models(provider)
 
+    def ai_runtime_list_assignable_models(self, provider: str, role: str):
+        return self.ai_runtime_service.list_assignable_models(provider, role)
+
+    def ai_runtime_refresh_provider_models(self, provider: str):
+        return self.ai_runtime_service.refresh_provider_models(provider)
+
     def ai_runtime_assign_role(self, **kwargs):
         return self.ai_runtime_service.assign_role(**kwargs)
 
@@ -272,6 +278,8 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.qt_app.processEvents()
         status = self.workspace.ai_runtime_provider_status()["openai"]
         self.assertEqual(status["last_check"]["status"], "ok")
+        self.assertEqual(status["last_model_sync"]["status"], "ok")
+        self.assertGreaterEqual(status["last_model_sync"]["found_count"], 1)
 
         with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
             QTest.mouseClick(provider_card.delete_button, Qt.MouseButton.LeftButton)
@@ -287,38 +295,35 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
             url = open_url.call_args.args[0].toString()
             self.assertIn("anthropic", url)
 
-    def test_roles_view_uses_registry_and_blocks_deprecated_default(self) -> None:
-        self.fixture.repository.upsert_model_catalog_entry(
-            AIModelCatalogEntry(
-                provider="openai",
-                model_id="legacy-model",
-                display_name="Legacy Model",
-                snapshot_or_version="v0",
-                status="deprecated",
-                capabilities_json={"structured_output": True},
-                context_limit=2048,
-                supports_structured_output=True,
-                input_price_per_million=1.0,
-                output_price_per_million=2.0,
-                pricing_currency="USD",
-                created_at="2026-07-29T00:00:00Z",
-                updated_at="2026-07-29T00:00:00Z",
-            )
-        )
+    def test_roles_view_refresh_catalog_populates_selector_and_persists_assignment(self) -> None:
+        self.fixture = build_runtime_fixture(model_status="deprecated")
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.service.providers["openai"] = FakeProvider("openai")
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
         view = AIRuntimeOverviewView(self.workspace)
         view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
+        view.roles_tab.role_combo.setCurrentIndex(view.roles_tab.role_combo.findData("cheap_structured_model"))
         view.roles_tab.refresh()
-        combo_texts = [view.roles_tab.model_combo.itemText(i) for i in range(view.roles_tab.model_combo.count())]
-        self.assertTrue(combo_texts)
-        self.assertFalse(any("Legacy Model" in text for text in combo_texts))
+        self.assertEqual(view.roles_tab.model_combo.count(), 0)
+        self.assertIn("No hay modelos sincronizados", view.roles_tab.model_hint_label.text())
 
-        view.roles_tab.role_combo.setCurrentIndex(view.roles_tab.role_combo.findData("evaluation_model"))
-        view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
+        with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
+            QTest.mouseClick(view.providers_tab.cards["openai"].sync_button, Qt.MouseButton.LeftButton)
+        self.qt_app.processEvents()
+
         view.roles_tab.refresh()
+        self.assertGreater(view.roles_tab.model_combo.count(), 0)
+        combo_texts = [view.roles_tab.model_combo.itemText(i) for i in range(view.roles_tab.model_combo.count())]
+        self.assertTrue(any("openai-structured-mini" in text for text in combo_texts))
+        view.roles_tab.enabled_checkbox.setChecked(True)
+        self.assertTrue(view.roles_tab.save_button.isEnabled())
+
         with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
             QTest.mouseClick(view.roles_tab.save_button, Qt.MouseButton.LeftButton)
-        assignment = self.fixture.service.model_registry.resolve_role("evaluation_model", creator_id=None, provider="openai")
+        assignment = self.fixture.service.model_registry.resolve_role("cheap_structured_model", creator_id=None, provider="openai")
         self.assertIsNotNone(assignment)
+        view.diagnostics_tab.refresh()
+        self.assertIn("openai-structured-mini", view.diagnostics_tab.model_line.text())
 
     def test_budget_view_loads_edits_and_reflects_limits(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")

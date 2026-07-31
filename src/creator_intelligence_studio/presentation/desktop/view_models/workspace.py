@@ -1430,6 +1430,16 @@ class WorkspaceViewModel:
             return []
         return self.ai_runtime_service.list_models(provider)
 
+    def ai_runtime_list_assignable_models(self, provider: str, role: str):
+        if self.ai_runtime_service is None:
+            return []
+        return self.ai_runtime_service.list_assignable_models(provider, role)
+
+    def ai_runtime_refresh_provider_models(self, provider: str):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.refresh_provider_models(provider)
+
     def ai_runtime_assign_role(
         self,
         *,

@@ -189,7 +189,7 @@ class AIRuntimeFoundationTests(unittest.TestCase):
         reference = CredentialStore.reference_for_provider("openai")
         store.save(reference, "sk-test")
         self.assertEqual(store.load(reference), "sk-test")
-        self.assertEqual(store.mask("sk-test"), "****test")
+        self.assertEqual(store.mask("sk-test"), "••••••••test")
         store.delete(reference)
         self.assertIsNone(store.load(reference))
 

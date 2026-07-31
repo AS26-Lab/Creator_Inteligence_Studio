@@ -15,7 +15,31 @@ class AIRuntimeCLITests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = build_runtime_fixture()
         self.addCleanup(self.fixture.cleanup)
-        self.fixture.service.providers["openai"] = FakeProvider("openai")
+        self.fixture.service.providers["openai"] = FakeProvider(
+            "openai",
+            discovered_models=[
+                {
+                    "model_id": self.fixture.model.model_id,
+                    "display_name": self.fixture.model.display_name,
+                    "snapshot_or_version": self.fixture.model.snapshot_or_version,
+                    "status": "testing",
+                    "capabilities_json": {"structured_output": True},
+                    "supports_structured_output": True,
+                    "supports_image_input": False,
+                    "supports_audio_input": False,
+                },
+                {
+                    "model_id": "openai-structured-mini",
+                    "display_name": "OpenAI Structured Mini",
+                    "snapshot_or_version": "v1",
+                    "status": "testing",
+                    "capabilities_json": {"structured_output": True, "image_input": True},
+                    "supports_structured_output": True,
+                    "supports_image_input": True,
+                    "supports_audio_input": False,
+                },
+            ],
+        )
         self.fixture.service.providers["anthropic"] = FakeProvider("anthropic")
 
     def _invoke(self, argv: list[str]):
@@ -48,11 +72,36 @@ class AIRuntimeCLITests(unittest.TestCase):
         models = json.loads(stdout)
         self.assertTrue(models)
 
+        code, stdout, _ = self._invoke(["ai", "models", "list", "--provider", "openai", "--json"])
+        filtered_models = json.loads(stdout)
+        self.assertTrue(filtered_models)
+        self.assertTrue(all(model["provider"] == "openai" for model in filtered_models))
+
+        code, stdout, _ = self._invoke(["ai", "models", "verify", "--provider", "openai", "--json"])
+        verify_report = json.loads(stdout)
+        self.assertEqual(code, 0)
+        self.assertEqual(verify_report["status"], "ok")
+        self.assertGreaterEqual(verify_report["compatible_count"], 1)
+
         code, stdout, _ = self._invoke(["ai", "roles", "list", "--json"])
         roles = json.loads(stdout)
         self.assertTrue(roles)
 
-        code, stdout, _ = self._invoke(["ai", "roles", "assign", "--role", "evaluation_model", "--provider", "openai", "--model", self.fixture.model.model_id, "--json"])
+        code, stdout, _ = self._invoke([
+            "ai",
+            "roles",
+            "assign",
+            "--role",
+            "evaluation_model",
+            "--provider",
+            "openai",
+            "--model",
+            self.fixture.model.model_id,
+            "--enabled",
+            "--fallback",
+            "none",
+            "--json",
+        ])
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(stdout)["role"], "evaluation_model")
 

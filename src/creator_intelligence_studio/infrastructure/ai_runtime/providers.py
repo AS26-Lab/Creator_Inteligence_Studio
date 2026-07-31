@@ -6,6 +6,7 @@ import json
 import time
 import socket
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import re
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,8 @@ from .models import (
     AIExecutionUsage,
     AIProviderCapabilities,
     AIProviderDiagnostic,
+    AIProviderDiscoveredModel,
+    AIProviderModelSyncReport,
     AIProviderName,
     AIProviderResponse,
 )
@@ -29,6 +32,8 @@ class AIProvider(Protocol):
     def capabilities(self) -> AIProviderCapabilities: ...
 
     def test_credentials(self, api_key: str) -> AIProviderDiagnostic: ...
+
+    def discover_models(self, api_key: str) -> AIProviderModelSyncReport: ...
 
     def execute(
         self,
@@ -157,6 +162,126 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
     )
 
 
+def _model_display_name(model_id: str, raw: dict[str, Any]) -> str:
+    display_name = raw.get("display_name") or raw.get("name")
+    if isinstance(display_name, str) and display_name.strip():
+        return display_name.strip()
+    words = [part for part in re.split(r"[-_/\.]+", model_id) if part]
+    return " ".join(word.upper() if word.isdigit() else word.replace("gpt", "GPT").replace("claude", "Claude").replace("mini", "mini") for word in words).strip() or model_id
+
+
+def _supported_model_status(is_compatible: bool) -> str:
+    return "testing" if is_compatible else "unavailable"
+
+
+def _openai_compatibility(model_id: str, raw: dict[str, Any]) -> tuple[bool, dict[str, Any], tuple[str, ...]]:
+    lowered = model_id.lower()
+    blocked_prefixes = ("text-", "tts-", "whisper", "dall-e", "image-", "moderation", "embedding")
+    if lowered.startswith(blocked_prefixes) or "embedding" in lowered or "moderation" in lowered:
+        return False, {"endpoint": "chat_completions", "reason": "incompatible_endpoint"}, ("Modelo incompatible con chat/completions.",)
+    supports_image = any(token in lowered for token in ("4o", "vision"))
+    supports_audio = "audio" in lowered
+    capabilities = {
+        "endpoint": "chat_completions",
+        "structured_output": True,
+        "image_input": supports_image,
+        "audio_input": supports_audio,
+        "source": "provider_discovery",
+    }
+    return True, capabilities, ()
+
+
+def _anthropic_compatibility(model_id: str, raw: dict[str, Any]) -> tuple[bool, dict[str, Any], tuple[str, ...]]:
+    lowered = model_id.lower()
+    if not lowered.startswith("claude-"):
+        return False, {"endpoint": "messages", "reason": "incompatible_endpoint"}, ("Modelo incompatible con messages.",)
+    supports_image = any(token in lowered for token in ("claude-3", "claude-4", "sonnet", "opus"))
+    capabilities = {
+        "endpoint": "messages",
+        "structured_output": True,
+        "image_input": supports_image,
+        "audio_input": False,
+        "source": "provider_discovery",
+    }
+    return True, capabilities, ()
+
+
+def _normalise_model_rows(provider: AIProviderName, payload: dict[str, Any] | list[Any]) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        rows = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            rows = payload.get("models")
+        if not isinstance(rows, list):
+            rows = [payload] if "id" in payload else []
+        rows = [item for item in rows if isinstance(item, dict)]
+    else:
+        rows = []
+    seen: set[tuple[str, str | None]] = set()
+    deduped: list[dict[str, Any]] = []
+    for row in rows:
+        model_id = str(row.get("id") or row.get("model") or "").strip()
+        if not model_id:
+            continue
+        snapshot = row.get("snapshot") or row.get("version")
+        key = (model_id, str(snapshot) if snapshot is not None else None)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
+
+
+def _discover_models_from_payload(provider: AIProviderName, payload: dict[str, Any] | list[Any]) -> list[AIProviderDiscoveredModel]:
+    raw_rows = _normalise_model_rows(provider, payload)
+    models: list[AIProviderDiscoveredModel] = []
+    for row in raw_rows:
+        model_id = str(row.get("id") or row.get("model") or "").strip()
+        if not model_id:
+            continue
+        if provider == "openai":
+            is_compatible, capability_json, notes = _openai_compatibility(model_id, row)
+        else:
+            is_compatible, capability_json, notes = _anthropic_compatibility(model_id, row)
+        display_name = _model_display_name(model_id, row)
+        snapshot = row.get("snapshot") or row.get("version") or row.get("revision")
+        context_limit = row.get("context_length") or row.get("max_context_length") or row.get("context_window")
+        try:
+            context_limit = int(context_limit) if context_limit is not None else None
+        except (TypeError, ValueError):
+            context_limit = None
+        models.append(
+            AIProviderDiscoveredModel(
+                provider=provider,
+                model_id=model_id,
+                display_name=display_name,
+                snapshot_or_version=str(snapshot) if snapshot is not None else None,
+                status=_supported_model_status(is_compatible),
+                capabilities_json=capability_json,
+                context_limit=context_limit,
+                supports_structured_output=bool(capability_json.get("structured_output")),
+                supports_image_input=bool(capability_json.get("image_input")),
+                supports_audio_input=bool(capability_json.get("audio_input")),
+                replacement_model_id=row.get("replacement_model_id") or row.get("replacement"),
+                compatibility_notes=notes,
+            )
+        )
+    return models
+
+
+def _sync_report_from_error(provider: AIProviderName, error: AIExecutionError, *, checked_at: str | None = None, latency_ms: int | None = None) -> AIProviderModelSyncReport:
+    return AIProviderModelSyncReport(
+        provider=provider,
+        status="failed",
+        message=error.safe_message,
+        latency_ms=latency_ms,
+        checked_at=checked_at,
+        error=error,
+        models=(),
+    )
+
+
 @dataclass
 class OpenAIProvider:
     provider_name: AIProviderName = "openai"
@@ -237,6 +362,66 @@ class OpenAIProvider:
                 latency_ms=latency_ms,
                 error=error.to_dict(),
             )
+
+    def discover_models(self, api_key: str) -> AIProviderModelSyncReport:
+        started = time.perf_counter()
+        checked_at = None
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "GET",
+                f"{self.base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                payload=None,
+                timeout=20.0,
+            )
+            checked_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if status_code >= 400:
+                error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+                return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+            if not isinstance(payload, (dict, list)):
+                error = AIExecutionError(
+                    category="invalid_response",
+                    safe_message="Provider returned a malformed model catalog response.",
+                    retryable=False,
+                    suggested_action="Check provider availability.",
+                    technical_reference="response",
+                )
+                return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+            models = _discover_models_from_payload(self.provider_name, payload)
+            compatible = sum(1 for model in models if model.status in {"approved", "testing"})
+            return AIProviderModelSyncReport(
+                provider=self.provider_name,
+                status="ok",
+                message="OpenAI model catalog synchronized.",
+                found_count=len(models),
+                compatible_count=compatible,
+                new_count=0,
+                updated_count=0,
+                unavailable_count=0,
+                latency_ms=latency_ms,
+                checked_at=checked_at,
+                models=tuple(models),
+            )
+        except (ConnectionError, TimeoutError) as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
+            )
+            return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+        except Exception as exc:  # pragma: no cover - defensive normalization
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=False,
+                suggested_action="Check provider availability.",
+                technical_reference="discovery",
+            )
+            return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
 
     def execute(
         self,
@@ -452,6 +637,66 @@ class AnthropicProvider:
                 latency_ms=latency_ms,
                 error=error.to_dict(),
             )
+
+    def discover_models(self, api_key: str) -> AIProviderModelSyncReport:
+        started = time.perf_counter()
+        checked_at = None
+        try:
+            status_code, payload, latency_ms = _http_json(
+                "GET",
+                f"{self.base_url}/models",
+                headers={"x-api-key": api_key, "anthropic-version": self.api_version},
+                payload=None,
+                timeout=20.0,
+            )
+            checked_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if status_code >= 400:
+                error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
+                return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+            if not isinstance(payload, (dict, list)):
+                error = AIExecutionError(
+                    category="invalid_response",
+                    safe_message="Provider returned a malformed model catalog response.",
+                    retryable=False,
+                    suggested_action="Check provider availability.",
+                    technical_reference="response",
+                )
+                return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+            models = _discover_models_from_payload(self.provider_name, payload)
+            compatible = sum(1 for model in models if model.status in {"approved", "testing"})
+            return AIProviderModelSyncReport(
+                provider=self.provider_name,
+                status="ok",
+                message="Anthropic model catalog synchronized.",
+                found_count=len(models),
+                compatible_count=compatible,
+                new_count=0,
+                updated_count=0,
+                unavailable_count=0,
+                latency_ms=latency_ms,
+                checked_at=checked_at,
+                models=tuple(models),
+            )
+        except (ConnectionError, TimeoutError) as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="timeout" if isinstance(exc, TimeoutError) else "network_error",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=True,
+                suggested_action="Retry the request or check network connectivity.",
+                technical_reference="timeout" if isinstance(exc, TimeoutError) else "network",
+            )
+            return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
+        except Exception as exc:  # pragma: no cover - defensive normalization
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            error = AIExecutionError(
+                category="invalid_response",
+                safe_message=_safe_error_message(str(exc)),
+                retryable=False,
+                suggested_action="Check provider availability.",
+                technical_reference="discovery",
+            )
+            return _sync_report_from_error(self.provider_name, error, checked_at=checked_at, latency_ms=latency_ms)
 
     def execute(
         self,

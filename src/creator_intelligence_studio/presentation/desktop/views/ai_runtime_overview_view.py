@@ -59,6 +59,28 @@ def _safe_datetime(value: str | None) -> str:
     return value.replace("T", " ").replace("Z", "")
 
 
+def _capabilities_text(model: dict[str, object]) -> str:
+    capabilities = model.get("capabilities_json")
+    if isinstance(capabilities, dict) and capabilities:
+        pieces: list[str] = []
+        for key, value in sorted(capabilities.items()):
+            if isinstance(value, bool):
+                if value:
+                    pieces.append(key)
+            else:
+                pieces.append(f"{key}={value}")
+        if pieces:
+            return ", ".join(pieces)
+    flags: list[str] = []
+    if model.get("supports_structured_output"):
+        flags.append("structured_output")
+    if model.get("supports_image_input"):
+        flags.append("image_input")
+    if model.get("supports_audio_input"):
+        flags.append("audio_input")
+    return ", ".join(flags) if flags else "-"
+
+
 ROLE_LABELS = {
     "cheap_structured_model": "Modelo estructurado economico",
     "general_reasoning_model": "Modelo de razonamiento general",
@@ -116,6 +138,18 @@ def _model_price_text(model: dict[str, object]) -> str:
     if input_price is None or output_price is None:
         return "Precio pendiente de verificar"
     return f"{input_price}/{output_price} {currency}"
+
+
+def _refresh_enclosing_overview(widget: QWidget) -> None:
+    parent = widget.parentWidget()
+    while parent is not None:
+        if hasattr(parent, "refresh") and callable(getattr(parent, "refresh")) and hasattr(parent, "tabs"):
+            try:
+                parent.refresh()
+            except Exception:
+                pass
+            return
+        parent = parent.parentWidget()
 
 
 class ProviderCredentialDialog(QDialog):
@@ -198,11 +232,15 @@ class ProviderCardWidget(QFrame):
         self.check_label.setObjectName("MutedLabel")
         self.enabled_label = QLabel()
         self.enabled_label.setObjectName("MutedLabel")
+        self.sync_label = QLabel()
+        self.sync_label.setWordWrap(True)
+        self.sync_label.setObjectName("MutedLabel")
 
         self.configure_button = QPushButton("Configurar clave")
         self.replace_button = QPushButton("Reemplazar clave")
         self.delete_button = QPushButton("Eliminar clave")
         self.test_button = QPushButton("Probar conexion")
+        self.sync_button = QPushButton("Actualizar modelos")
         self.keys_button = QPushButton("Abrir sitio oficial de claves")
         self.billing_button = QPushButton("Abrir facturacion")
         self.help_button = QPushButton("Ver ayuda")
@@ -210,6 +248,7 @@ class ProviderCardWidget(QFrame):
         self.replace_button.setObjectName(f"{provider_name}_replace_button")
         self.delete_button.setObjectName(f"{provider_name}_delete_button")
         self.test_button.setObjectName(f"{provider_name}_test_button")
+        self.sync_button.setObjectName(f"{provider_name}_sync_button")
         self.keys_button.setObjectName(f"{provider_name}_keys_button")
         self.billing_button.setObjectName(f"{provider_name}_billing_button")
         self.help_button.setObjectName(f"{provider_name}_help_button")
@@ -219,9 +258,10 @@ class ProviderCardWidget(QFrame):
         buttons.addWidget(self.replace_button, 0, 1)
         buttons.addWidget(self.delete_button, 0, 2)
         buttons.addWidget(self.test_button, 1, 0)
-        buttons.addWidget(self.keys_button, 1, 1)
-        buttons.addWidget(self.billing_button, 1, 2)
-        buttons.addWidget(self.help_button, 2, 0, 1, 3)
+        buttons.addWidget(self.sync_button, 1, 1)
+        buttons.addWidget(self.keys_button, 1, 2)
+        buttons.addWidget(self.billing_button, 2, 0)
+        buttons.addWidget(self.help_button, 2, 1, 1, 2)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.title_label)
@@ -229,6 +269,7 @@ class ProviderCardWidget(QFrame):
         layout.addWidget(self.mask_label)
         layout.addWidget(self.check_label)
         layout.addWidget(self.enabled_label)
+        layout.addWidget(self.sync_label)
         layout.addLayout(buttons)
 
     def refresh(self, state: dict[str, object]) -> None:
@@ -246,11 +287,26 @@ class ProviderCardWidget(QFrame):
         else:
             self.check_label.setText("Ultima comprobacion: sin comprobacion")
         self.enabled_label.setText(f"Habilitado: {'Si' if state.get('enabled', True) else 'No'}")
+        last_sync = state.get("last_model_sync") or {}
+        if isinstance(last_sync, dict) and last_sync:
+            self.sync_label.setText(
+                "Ultima sincronizacion: "
+                f"{_safe_datetime(str(last_sync.get('checked_at')))} · "
+                f"{_fmt(last_sync.get('status'))} · "
+                f"encontrados {_fmt(last_sync.get('found_count'))} / "
+                f"compatibles {_fmt(last_sync.get('compatible_count'))} / "
+                f"nuevos {_fmt(last_sync.get('new_count'))} / "
+                f"actualizados {_fmt(last_sync.get('updated_count'))} / "
+                f"no visibles {_fmt(last_sync.get('unavailable_count'))}"
+            )
+        else:
+            self.sync_label.setText("Ultima sincronizacion: sin sincronizar")
         self.configure_button.setEnabled(True)
         self.configure_button.setText("Configurar clave" if not configured else "Reemplazar clave")
         self.replace_button.setEnabled(configured)
         self.delete_button.setEnabled(configured)
         self.test_button.setEnabled(configured)
+        self.sync_button.setEnabled(configured)
 
 
 class ProvidersTab(QWidget):
@@ -273,6 +329,7 @@ class ProvidersTab(QWidget):
             card.replace_button.clicked.connect(lambda _=False, p=provider_name: self._configure_provider(p, replace=True))
             card.delete_button.clicked.connect(lambda _=False, p=provider_name: self._delete_provider(p))
             card.test_button.clicked.connect(lambda _=False, p=provider_name: self._test_provider(p))
+            card.sync_button.clicked.connect(lambda _=False, p=provider_name: self._refresh_models(p))
             card.keys_button.clicked.connect(lambda _=False, p=provider_name: self._open_url(p, "keys"))
             card.billing_button.clicked.connect(lambda _=False, p=provider_name: self._open_url(p, "billing"))
             card.help_button.clicked.connect(lambda _=False, p=provider_name: self._open_url(p, "help"))
@@ -309,6 +366,7 @@ class ProvidersTab(QWidget):
                 return
             self.workspace.ai_runtime_store_provider_credential(provider_name, secret)
             self.refresh()
+            _refresh_enclosing_overview(self)
 
         dialog.accepted.connect(_save)
         dialog.rejected.connect(lambda: None)
@@ -327,12 +385,37 @@ class ProvidersTab(QWidget):
             return
         self.workspace.ai_runtime_delete_provider_credential(provider_name)
         self.refresh()
+        _refresh_enclosing_overview(self)
+
+    def _refresh_models(self, provider_name: str) -> None:
+        report = self.workspace.ai_runtime_refresh_provider_models(provider_name)
+        self.refresh()
+        _refresh_enclosing_overview(self)
+        if report.get("status") == "ok":
+            QMessageBox.information(
+                self,
+                "AI Runtime",
+                f"{PROVIDER_LINKS[provider_name]['label']}: modelos encontrados {report.get('found_count', 0)}, compatibles {report.get('compatible_count', 0)}, nuevos {report.get('new_count', 0)}, actualizados {report.get('updated_count', 0)}.",
+            )
+            return
+        QMessageBox.warning(self, "AI Runtime", f"{PROVIDER_LINKS[provider_name]['label']}: {report.get('message')}")
 
     def _test_provider(self, provider_name: str) -> None:
         diagnostic = self.workspace.ai_runtime_test_provider(provider_name)
-        self.refresh()
+        sync_report = None
         if diagnostic.status == "ok":
-            QMessageBox.information(self, "AI Runtime", f"{PROVIDER_LINKS[provider_name]['label']}: {diagnostic.message}")
+            sync_report = self.workspace.ai_runtime_refresh_provider_models(provider_name)
+        self.refresh()
+        _refresh_enclosing_overview(self)
+        if diagnostic.status == "ok":
+            if isinstance(sync_report, dict) and sync_report.get("status") == "ok":
+                QMessageBox.information(
+                    self,
+                    "AI Runtime",
+                    f"{PROVIDER_LINKS[provider_name]['label']}: {diagnostic.message} | modelos encontrados {sync_report.get('found_count', 0)}, compatibles {sync_report.get('compatible_count', 0)}.",
+                )
+            else:
+                QMessageBox.information(self, "AI Runtime", f"{PROVIDER_LINKS[provider_name]['label']}: {diagnostic.message}")
             return
         QMessageBox.warning(self, "AI Runtime", f"{PROVIDER_LINKS[provider_name]['label']}: {diagnostic.message}")
 
@@ -378,10 +461,15 @@ class RolesTab(QWidget):
         self.enabled_checkbox = QCheckBox("Habilitado")
         self.default_checkbox = QCheckBox("Predeterminado")
         self.save_button = QPushButton("Guardar asignacion")
+        self.refresh_catalog_button = QPushButton("Actualizar catalogo")
         self.save_button.clicked.connect(self._save_assignment)
+        self.refresh_catalog_button.clicked.connect(self._refresh_catalog)
         self.current_assignment_label = QLabel("Asignacion actual: sin seleccionar")
         self.current_assignment_label.setWordWrap(True)
         self.current_assignment_label.setObjectName("MutedLabel")
+        self.model_hint_label = QLabel()
+        self.model_hint_label.setWordWrap(True)
+        self.model_hint_label.setObjectName("MutedLabel")
 
         self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
@@ -396,6 +484,8 @@ class RolesTab(QWidget):
         form.addRow("Rol", self.role_combo)
         form.addRow("Proveedor", self.provider_combo)
         form.addRow("Modelo", self.model_combo)
+        form.addRow("", self.refresh_catalog_button)
+        form.addRow("", self.model_hint_label)
         form.addRow("Fallback", self.fallback_combo)
         form.addRow("", self.enabled_checkbox)
         form.addRow("", self.default_checkbox)
@@ -438,10 +528,11 @@ class RolesTab(QWidget):
 
     def _refresh_model_combo(self) -> None:
         provider = self._selected_provider()
-        models = self._selectable_models(provider)
+        role = self._selected_role()
+        models = self._selectable_models(provider, role)
         current_model_id = None
         current_assignment = self.workspace.ai_runtime_service.model_registry.resolve_role(
-            self._selected_role(),
+            role,
             creator_id=self._selected_creator_scope(),
             provider=provider,
         )
@@ -452,7 +543,10 @@ class RolesTab(QWidget):
         self.model_combo.clear()
         selected_index = -1
         for model in models:
-            label = f"{model['display_name']} ({model['model_id']}) · {model.get('status', '-')}"
+            label = (
+                f"{model['display_name']} ({model['model_id']}) · "
+                f"{model.get('status', '-')} · {model.get('snapshot_or_version') or 'sin snapshot'}"
+            )
             index = self.model_combo.count()
             self.model_combo.addItem(label, model)
             if current_model_id is not None and str(model.get("model_id")) == current_model_id:
@@ -462,11 +556,21 @@ class RolesTab(QWidget):
         elif self.model_combo.count():
             self.model_combo.setCurrentIndex(0)
         self.model_combo.blockSignals(False)
+        if not models:
+            self.model_hint_label.setText(
+                f"No hay modelos sincronizados para {PROVIDER_LINKS[provider]['label']}. Configura y valida la credencial, luego pulsa Actualizar catalogo."
+            )
+        else:
+            self.model_hint_label.setText(
+                f"{len(models)} modelos disponibles para {PROVIDER_LINKS[provider]['label']} y el rol {ROLE_LABELS.get(role, role)}."
+            )
+        self.save_button.setEnabled(bool(models))
+        self.model_combo.setEnabled(bool(models))
         self._update_assignment_preview()
 
-    def _selectable_models(self, provider: str) -> list[dict[str, object]]:
-        models = list(self.workspace.ai_runtime_list_models(provider))
-        return [model for model in models if str(model.get("status") or "").lower() in {"approved", "testing"}]
+    def _selectable_models(self, provider: str, role: str) -> list[dict[str, object]]:
+        models = list(self.workspace.ai_runtime_list_assignable_models(provider, role))
+        return sorted(models, key=lambda model: (str(model.get("display_name") or ""), str(model.get("model_id") or "")))
 
     def _resolve_current_assignment(self, role: str) -> tuple[dict[str, object] | None, dict[str, object] | None]:
         service = self.workspace.ai_runtime_service
@@ -520,26 +624,44 @@ class RolesTab(QWidget):
             return
         role = self._selected_role()
         provider = self._selected_provider()
-        assignment = self.workspace.ai_runtime_assign_role(
-            role=role,
-            provider=provider,
-            model_id=str(model["model_id"]),
-            creator_id=self._selected_creator_scope(),
-            display_name=str(model.get("display_name") or model["model_id"]),
-            is_default=self.default_checkbox.isChecked(),
-            is_enabled=self.enabled_checkbox.isChecked(),
-            fallback_policy=str(self.fallback_combo.currentData() or "none"),
-            quality_level="standard",
-            status=str(model.get("status") or "testing"),
-            capabilities_json=dict(model.get("capabilities_json") or {}),
-            snapshot_or_version=model.get("snapshot_or_version"),
-        )
+        try:
+            assignment = self.workspace.ai_runtime_assign_role(
+                role=role,
+                provider=provider,
+                model_id=str(model["model_id"]),
+                creator_id=self._selected_creator_scope(),
+                display_name=str(model.get("display_name") or model["model_id"]),
+                is_default=self.default_checkbox.isChecked(),
+                is_enabled=self.enabled_checkbox.isChecked(),
+                fallback_policy=str(self.fallback_combo.currentData() or "none"),
+                quality_level="standard",
+                status=str(model.get("status") or "testing"),
+                capabilities_json=dict(model.get("capabilities_json") or {}),
+                snapshot_or_version=model.get("snapshot_or_version"),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "AI Runtime", str(exc))
+            return
         self.refresh()
+        _refresh_enclosing_overview(self)
         QMessageBox.information(
             self,
             "AI Runtime",
             f"Asignacion guardada: {assignment['role']} -> {assignment['provider']} / {assignment['model_catalog_id']}",
         )
+
+    def _refresh_catalog(self) -> None:
+        provider = self._selected_provider()
+        report = self.workspace.ai_runtime_refresh_provider_models(provider)
+        self.refresh()
+        if report.get("status") == "ok":
+            QMessageBox.information(
+                self,
+                "AI Runtime",
+                f"Catalogo sincronizado: encontrados {report.get('found_count', 0)}, compatibles {report.get('compatible_count', 0)}, nuevos {report.get('new_count', 0)}, actualizados {report.get('updated_count', 0)}.",
+            )
+        else:
+            QMessageBox.warning(self, "AI Runtime", str(report.get("message") or "No se pudo sincronizar el catalogo."))
 
     def refresh(self) -> None:
         creator_id = self._selected_creator_scope()
@@ -681,6 +803,7 @@ class BudgetTab(QWidget):
             {"value": approval_threshold},
         )
         self.refresh()
+        _refresh_enclosing_overview(self)
         QMessageBox.information(self, "AI Runtime", "Presupuesto guardado.")
 
     def refresh(self) -> None:
@@ -871,6 +994,7 @@ class DiagnosticsTab(QWidget):
             else "Diagnostico ejecutado."
         )
         self.refresh()
+        _refresh_enclosing_overview(self)
 
     def _show_result(self, result: dict[str, object]) -> None:
         self.execution_label.setText(str(result.get("execution_id") or "-"))

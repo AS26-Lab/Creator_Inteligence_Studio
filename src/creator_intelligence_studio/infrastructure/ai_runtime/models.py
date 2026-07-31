@@ -121,6 +121,49 @@ class AIProviderDiagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class AIProviderDiscoveredModel:
+    provider: AIProviderName
+    model_id: str
+    display_name: str
+    snapshot_or_version: str | None = None
+    status: AIModelStatus = "testing"
+    capabilities_json: dict[str, Any] = field(default_factory=dict)
+    context_limit: int | None = None
+    supports_structured_output: bool = False
+    supports_image_input: bool = False
+    supports_audio_input: bool = False
+    input_price_per_million: float | None = None
+    output_price_per_million: float | None = None
+    cached_input_price_per_million: float | None = None
+    pricing_currency: str | None = "USD"
+    pricing_effective_at: str | None = None
+    replacement_model_id: str | None = None
+    compatibility_notes: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class AIProviderModelSyncReport:
+    provider: AIProviderName
+    status: str
+    message: str
+    found_count: int = 0
+    compatible_count: int = 0
+    new_count: int = 0
+    updated_count: int = 0
+    unavailable_count: int = 0
+    latency_ms: int | None = None
+    checked_at: str | None = None
+    error: AIExecutionError | None = None
+    models: tuple[AIProviderDiscoveredModel, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class AIModelCatalogEntry:
     provider: AIProviderName
     model_id: str

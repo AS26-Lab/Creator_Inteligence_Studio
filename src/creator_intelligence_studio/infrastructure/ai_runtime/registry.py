@@ -56,23 +56,13 @@ class ModelRegistry:
         existing_models = [
             entry
             for entry in self.repository.list_model_catalog_entries(provider)
-            if entry.model_id == model_id and entry.snapshot_or_version == snapshot_or_version
+            if entry.model_id == model_id and (snapshot_or_version is None or entry.snapshot_or_version == snapshot_or_version)
         ]
-        if existing_models:
-            model = existing_models[0]
-        else:
-            model = self.repository.upsert_model_catalog_entry(
-                AIModelCatalogEntry(
-                    provider=provider,
-                    model_id=model_id,
-                    display_name=display_name or model_id,
-                    snapshot_or_version=snapshot_or_version,
-                    status=status,
-                    capabilities_json=capabilities_json or {},
-                    created_at=_utc_now(),
-                    updated_at=_utc_now(),
-                )
-            )
+        if not existing_models:
+            raise ValueError("No synchronized model is available for the requested provider and model id.")
+        model = existing_models[0]
+        if model.status not in {"approved", "testing"}:
+            raise ValueError("The selected model is not currently usable.")
         assignment = AIRoleAssignment(
             creator_id=creator_id,
             role=role,
@@ -97,8 +87,12 @@ class ModelRegistry:
         assignment = self.repository.resolve_role_assignment(role, creator_id=creator_id, provider=provider)
         if assignment is None:
             return None
+        if not assignment.is_enabled:
+            return None
         model = self.repository.get_model_catalog_entry(assignment.model_catalog_id)
         if model is None:
+            return None
+        if model.status not in {"approved", "testing"}:
             return None
         return assignment, model
 

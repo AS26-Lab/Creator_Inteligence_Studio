@@ -25,7 +25,7 @@ class CredentialStoreTests(unittest.TestCase):
         store.save(reference, "sk-anthropic-test")
         self.assertIsInstance(store.backend, InMemoryCredentialBackend)
         self.assertEqual(store.load(reference), "sk-anthropic-test")
-        self.assertTrue(store.mask("sk-anthropic-test").endswith("test"))
+        self.assertEqual(store.mask("sk-anthropic-test"), "••••••••test")
         self.assertNotEqual(store.mask("sk-anthropic-test"), "sk-anthropic-test")
         store.delete(reference)
         self.assertIsNone(store.load(reference))
@@ -33,7 +33,7 @@ class CredentialStoreTests(unittest.TestCase):
     def test_mask_never_returns_full_secret(self) -> None:
         store = CredentialStore.build_memory()
         self.assertEqual(store.mask(""), "no configurado")
-        self.assertEqual(store.mask("abc"), "****abc")
+        self.assertEqual(store.mask("abc"), "••••••••abc")
         self.assertNotEqual(store.mask("sk-test"), "sk-test")
 
     def test_environment_backend_is_explicit_only(self) -> None:
