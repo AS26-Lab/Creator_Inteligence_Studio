@@ -1430,7 +1430,22 @@ class WorkspaceViewModel:
             return []
         return self.ai_runtime_service.list_models(provider)
 
-    def ai_runtime_assign_role(self, *, role: str, provider: str, model_id: str, creator_id: str | None = None, display_name: str | None = None, is_default: bool = False):
+    def ai_runtime_assign_role(
+        self,
+        *,
+        role: str,
+        provider: str,
+        model_id: str,
+        creator_id: str | None = None,
+        display_name: str | None = None,
+        is_default: bool = False,
+        is_enabled: bool = True,
+        fallback_policy: str = "none",
+        quality_level: str = "standard",
+        status: str = "testing",
+        capabilities_json: dict[str, object] | None = None,
+        snapshot_or_version: str | None = None,
+    ):
         if self.ai_runtime_service is None:
             raise RuntimeError("El servicio de IA no esta disponible.")
         return self.ai_runtime_service.assign_role(
@@ -1440,12 +1455,51 @@ class WorkspaceViewModel:
             creator_id=creator_id,
             display_name=display_name,
             is_default=is_default,
+            is_enabled=is_enabled,
+            fallback_policy=fallback_policy,
+            quality_level=quality_level,
+            status=status,
+            capabilities_json=capabilities_json,
+            snapshot_or_version=snapshot_or_version,
         )
 
     def ai_runtime_get_budget_policy(self, creator_id: str | None = None, provider: str | None = None):
         if self.ai_runtime_service is None:
             return None
         return self.ai_runtime_service.get_budget_policy(creator_id=creator_id, provider=provider)
+
+    def ai_runtime_get_runtime_setting(self, setting_key: str, scope_id: str | None = None):
+        if self.ai_runtime_service is None:
+            return None
+        return self.ai_runtime_service.get_runtime_setting(setting_key, scope_id)
+
+    def ai_runtime_set_runtime_setting(self, setting_key: str, value: dict[str, object], scope_id: str | None = None):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.set_runtime_setting(setting_key, value, scope_id)
+
+    def ai_runtime_update_budget_policy(
+        self,
+        *,
+        creator_id: str | None = None,
+        provider: str | None = None,
+        monthly_limit: float | None = None,
+        per_task_limit: float | None = None,
+        hard_block_enabled: bool = True,
+        currency: str = "USD",
+        approval_threshold: float | None = None,
+    ):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.update_budget_policy(
+            creator_id=creator_id,
+            provider=provider,
+            monthly_limit=monthly_limit,
+            per_task_limit=per_task_limit,
+            hard_block_enabled=hard_block_enabled,
+            currency=currency,
+            approval_threshold=approval_threshold,
+        )
 
     def ai_runtime_set_monthly_budget(self, amount: float, currency: str, creator_id: str | None = None, provider: str | None = None):
         if self.ai_runtime_service is None:
@@ -1466,6 +1520,21 @@ class WorkspaceViewModel:
         if self.ai_runtime_service is None:
             return None
         return self.ai_runtime_service.get_execution(execution_uuid)
+
+    def ai_runtime_list_usage_records(self, execution_id: str | None = None):
+        if self.ai_runtime_service is None:
+            return []
+        return self.ai_runtime_service.list_usage_records(execution_id)
+
+    def ai_runtime_list_payloads(self, execution_id: str):
+        if self.ai_runtime_service is None:
+            return []
+        return self.ai_runtime_service.list_payloads(execution_id)
+
+    def ai_runtime_budget_snapshot(self, creator_id: str | None = None, provider: str | None = None):
+        if self.ai_runtime_service is None:
+            return {}
+        return self.ai_runtime_service.budget_snapshot(creator_id=creator_id, provider=provider)
 
     def run_ai_runtime_diagnostic(self, *, provider: str | None = None, role: str | None = None, cache_policy: str = "use"):
         if self.ai_runtime_service is None:

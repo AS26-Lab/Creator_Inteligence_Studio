@@ -174,6 +174,7 @@ class AIOrchestrator:
         *,
         provider: str | None = None,
         role: str | None = None,
+        request_id: str | None = None,
         creator_id: str | None = None,
         project_id: str | None = None,
         cache_policy: str = "use",
@@ -183,7 +184,7 @@ class AIOrchestrator:
         metadata: dict[str, object] | None = None,
     ) -> AIExecutionResult:
         request = AIExecutionRequest(
-            request_id=str(uuid4()),
+            request_id=request_id or str(uuid4()),
             task_type="provider_diagnostic",
             operation="extract",
             creator_id=creator_id,

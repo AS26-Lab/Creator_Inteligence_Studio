@@ -104,6 +104,7 @@ from .recommendation_privacy_view import RecommendationPrivacyView
 from .creator_memory_view import CreatorMemoryView
 from .creator_profile_view import CreatorProfileView
 from .creator_language_view import CreatorLanguageView
+from .ai_runtime_overview_view import AIRuntimeOverviewView
 from .narrative_profile_view import NarrativeProfileView
 from .multimodal_analysis_view import MultimodalAnalysisView
 from .operational_evaluation_view import OperationalEvaluationView
@@ -267,6 +268,7 @@ __all__ = [
     "CreatorMemoryView",
     "CreatorProfileView",
     "CreatorLanguageView",
+    "AIRuntimeOverviewView",
     "NarrativeProfileView",
     "TaskCenterView",
     "WorkflowView",

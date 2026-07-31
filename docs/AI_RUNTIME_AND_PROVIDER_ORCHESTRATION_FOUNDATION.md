@@ -376,7 +376,7 @@ API keys are not passed as CLI arguments.
 
 ## GUI
 
-The desktop shell now surfaces AI runtime state in the system view and can expose the runtime through configuration screens.
+The desktop shell now exposes a dedicated `AI Runtime` page in the sidebar. The old system summary remains a technical overview, but it is not the primary entry point for provider setup or diagnostics.
 
 Visible categories:
 
@@ -450,6 +450,9 @@ This section records what was verified during the v31 closeout audit.
 - Workspace view-model wiring for AI runtime status, credentials, tests, roles, budgets, diagnostics, and history.
 - Desktop CLI execution with `python -m creator_intelligence_studio --diagnostic-json`.
 - Offscreen GUI startup and auto-exit via `scripts/run_gui.bat`.
+- Dedicated desktop navigation into the `AI Runtime` page from the sidebar.
+- Real GUI tab presence for providers, roles, budget, diagnostics, and history.
+- A navigation smoke test that clicks the sidebar entry and verifies the mounted page.
 
 ### CredentialStore mechanism
 
@@ -464,6 +467,7 @@ This section records what was verified during the v31 closeout audit.
 - Provider behavior is still verified with HTTP mocks; no production provider call was made in this audit.
 - Live tests remain opt-in and are skipped unless `CIS_RUN_LIVE_AI_TESTS=1`.
 - The foundation remains intentionally narrow: provider diagnostics and orchestration only.
+- The new desktop page is configuration and diagnostics only; it does not add creative generation flows.
 
 ### Test coverage added or confirmed
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from creator_intelligence_studio.infrastructure.ai_runtime import (
     AIBudgetPolicy,
@@ -156,6 +157,99 @@ class AIRuntimeService:
                 updated_at=self._now(),
             )
         )
+        self.repository.upsert_runtime_setting(
+            AIRuntimeSetting(
+                scope_type="application",
+                setting_key="cross_provider_fallback_enabled",
+                setting_value_json={"enabled": True},
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+        )
+        self.repository.upsert_runtime_setting(
+            AIRuntimeSetting(
+                scope_type="application",
+                setting_key="cost_approval_threshold",
+                setting_value_json={"value": 0.90},
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+        )
+
+    def _runtime_setting_value(self, setting_key: str, scope_id: str | None = None) -> dict[str, Any] | None:
+        setting = self.repository.get_runtime_setting("application" if scope_id is None else "provider", setting_key, scope_id)
+        if setting is None:
+            return None
+        return setting.setting_value_json
+
+    def get_runtime_setting(self, setting_key: str, scope_id: str | None = None) -> dict[str, Any] | None:
+        return self._runtime_setting_value(setting_key, scope_id)
+
+    def set_runtime_setting(self, setting_key: str, value: dict[str, Any], scope_id: str | None = None) -> dict[str, Any]:
+        self.repository.upsert_runtime_setting(
+            AIRuntimeSetting(
+                scope_type="application" if scope_id is None else "provider",
+                scope_id=scope_id,
+                setting_key=setting_key,
+                setting_value_json=value,
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+        )
+        return value
+
+    def _runtime_flag(self, setting_key: str, *, scope_id: str | None = None, default: bool = False) -> bool:
+        value = self._runtime_setting_value(setting_key, scope_id)
+        if isinstance(value, dict):
+            if scope_id is None:
+                enabled = value.get("enabled")
+                if enabled is None:
+                    return default
+                return bool(enabled)
+            enabled = value.get("value")
+            if enabled is None:
+                enabled = value.get("enabled")
+            if enabled is None:
+                return default
+            return bool(enabled)
+        return default
+
+    def _runtime_number(self, setting_key: str, *, scope_id: str | None = None, default: float | None = None) -> float | None:
+        value = self._runtime_setting_value(setting_key, scope_id)
+        if isinstance(value, dict):
+            raw = value.get("value")
+            if raw is None:
+                raw = value.get("threshold")
+            if raw is None:
+                return default
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return default
+        return default
+
+    def _record_provider_check(self, provider: str, diagnostic: AIProviderDiagnostic) -> None:
+        self.repository.upsert_runtime_setting(
+            AIRuntimeSetting(
+                scope_type="provider",
+                scope_id=provider,
+                setting_key="last_check",
+                setting_value_json={
+                    "provider": provider,
+                    "status": diagnostic.status,
+                    "message": diagnostic.message,
+                    "configured": diagnostic.configured,
+                    "model_id": diagnostic.model_id,
+                    "latency_ms": diagnostic.latency_ms,
+                    "usage": diagnostic.usage,
+                    "cost": diagnostic.cost,
+                    "error": diagnostic.error,
+                    "checked_at": self._now(),
+                },
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+        )
 
     def _now(self) -> str:
         from datetime import datetime, timezone
@@ -177,11 +271,15 @@ class AIRuntimeService:
 
     def provider_status(self) -> dict[str, dict[str, object]]:
         result: dict[str, dict[str, object]] = {}
+        provider_enabled = self._runtime_setting_value("provider_enabled") or {}
         for provider in self.list_providers():
             credential = self.credential_store.load(CredentialStore.reference_for_provider(provider))
+            last_check = self._runtime_setting_value("last_check", provider) or {}
             result[provider] = {
                 "configured": bool(credential),
                 "masked_key": self.credential_store.mask(credential),
+                "enabled": bool(provider_enabled.get(provider, True)) if isinstance(provider_enabled, dict) else True,
+                "last_check": last_check,
                 "models": [entry.to_dict() for entry in self.model_registry.list_models(provider)],
                 "roles": [assignment.to_dict() for assignment in self.model_registry.list_roles(provider=provider)],
             }
@@ -196,23 +294,29 @@ class AIRuntimeService:
     def test_provider(self, provider: str) -> AIProviderDiagnostic:
         key = self.credential_store.load(CredentialStore.reference_for_provider(provider))
         if not key:
-            return AIProviderDiagnostic(
+            diagnostic = AIProviderDiagnostic(
                 provider=provider,
                 configured=False,
                 model_id=None,
                 status="blocked",
                 message="Provider credential is missing.",
             )
+            self._record_provider_check(provider, diagnostic)
+            return diagnostic
         client = self.providers.get(provider)
         if client is None:
-            return AIProviderDiagnostic(
+            diagnostic = AIProviderDiagnostic(
                 provider=provider,
                 configured=True,
                 model_id=None,
                 status="blocked",
                 message="Provider adapter is unavailable.",
             )
-        return client.test_credentials(key)
+            self._record_provider_check(provider, diagnostic)
+            return diagnostic
+        diagnostic = client.test_credentials(key)
+        self._record_provider_check(provider, diagnostic)
+        return diagnostic
 
     def list_models(self, provider: str | None = None) -> list[dict[str, object]]:
         return [entry.to_dict() for entry in self.model_registry.list_models(provider)]
@@ -262,6 +366,12 @@ class AIRuntimeService:
         creator_id: str | None = None,
         display_name: str | None = None,
         is_default: bool = False,
+        is_enabled: bool = True,
+        fallback_policy: str = "none",
+        quality_level: str = "standard",
+        status: str = "testing",
+        capabilities_json: dict[str, object] | None = None,
+        snapshot_or_version: str | None = None,
     ) -> dict[str, object]:
         assignment = self.model_registry.assign_role(
             role=role,
@@ -270,6 +380,12 @@ class AIRuntimeService:
             creator_id=creator_id,
             display_name=display_name,
             is_default=is_default,
+            is_enabled=is_enabled,
+            fallback_policy=fallback_policy,
+            quality_level=quality_level,
+            status=status,
+            capabilities_json=capabilities_json,
+            snapshot_or_version=snapshot_or_version,
         )
         return assignment.to_dict()
 
@@ -323,6 +439,87 @@ class AIRuntimeService:
         )
         return updated.to_dict()
 
+    def update_budget_policy(
+        self,
+        *,
+        creator_id: str | None = None,
+        provider: str | None = None,
+        monthly_limit: float | None = None,
+        per_task_limit: float | None = None,
+        hard_block_enabled: bool = True,
+        currency: str = "USD",
+        approval_threshold: float | None = None,
+    ) -> dict[str, object]:
+        current = self.repository.get_budget_policy(creator_id, provider) or AIBudgetPolicy(creator_id=creator_id, provider=provider, created_at=self._now(), updated_at=self._now())
+        updated = self.repository.upsert_budget_policy(
+            AIBudgetPolicy(
+                id=current.id,
+                creator_id=creator_id,
+                provider=provider,
+                daily_limit=current.daily_limit,
+                monthly_limit=monthly_limit,
+                per_task_limit=per_task_limit,
+                warning_threshold_50=current.warning_threshold_50,
+                warning_threshold_75=current.warning_threshold_75,
+                warning_threshold_90=approval_threshold if approval_threshold is not None else current.warning_threshold_90,
+                hard_block_enabled=hard_block_enabled,
+                currency=currency,
+                effective_from=current.effective_from or self._now(),
+                effective_until=current.effective_until,
+                created_at=current.created_at or self._now(),
+                updated_at=self._now(),
+            )
+        )
+        return updated.to_dict()
+
+    def budget_snapshot(self, creator_id: str | None = None, provider: str | None = None) -> dict[str, object]:
+        policy = self.get_budget_policy(creator_id, provider)
+        provider_enabled = self._runtime_setting_value("provider_enabled") or {}
+        cross_provider = self._runtime_setting_value("cross_provider_fallback_enabled") or {}
+        approval_threshold = self._runtime_setting_value("cost_approval_threshold") or {}
+        executions = self.repository.list_executions(creator_id=creator_id, provider=provider, limit=1000)
+        usage_records = self.repository.list_usage_records()
+        monthly_cost = 0.0
+        provider_costs: dict[str, float] = {}
+        calls = 0
+        billing_errors = 0
+        warnings: list[str] = []
+        for execution in executions:
+            calls += 1
+            if execution.error_category == "billing_error":
+                billing_errors += 1
+            try:
+                created_at = execution.created_at
+                if created_at is None:
+                    continue
+                from datetime import datetime, timezone
+
+                now = datetime.now(timezone.utc)
+                created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                if created.year == now.year and created.month == now.month:
+                    for record in usage_records:
+                        if record.execution_id == execution.execution_uuid:
+                            monthly_cost += record.calculated_cost
+                            provider_costs[record.provider] = provider_costs.get(record.provider, 0.0) + record.calculated_cost
+            except Exception:
+                continue
+        if policy is not None and policy.get("monthly_limit") is not None and monthly_cost > float(policy["monthly_limit"]):
+            warnings.append("Monthly consumption exceeds the configured limit.")
+        if any(entry.get("input_price_per_million") is None or entry.get("output_price_per_million") is None for entry in self.list_models()):
+            warnings.append("Precio pendiente de verificar para uno o mas modelos.")
+        return {
+            "policy": policy,
+            "monthly_cost": round(monthly_cost, 8),
+            "provider_costs": {provider_name: round(value, 8) for provider_name, value in provider_costs.items()},
+            "calls": calls,
+            "billing_errors": billing_errors,
+            "provider_enabled": provider_enabled,
+            "cross_provider_fallback_enabled": bool(cross_provider.get("enabled", True)) if isinstance(cross_provider, dict) else True,
+            "approval_threshold": float(approval_threshold.get("value")) if isinstance(approval_threshold, dict) and approval_threshold.get("value") is not None else (policy.get("warning_threshold_90") if policy else None),
+            "warnings": tuple(warnings),
+            "usage_records": [record.to_dict() for record in usage_records],
+        }
+
     def diagnostic_run(
         self,
         *,
@@ -330,7 +527,8 @@ class AIRuntimeService:
         role: str | None = None,
         cache_policy: str = "use",
     ) -> AIExecutionResult:
-        return self.orchestrator.run_diagnostic(provider=provider, role=role, cache_policy=cache_policy)
+        request_id = f"provider_diagnostic:{provider or 'any'}:{role or 'cheap_structured_model'}:{cache_policy}"
+        return self.orchestrator.run_diagnostic(provider=provider, role=role, request_id=request_id, cache_policy=cache_policy)
 
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 50) -> list[dict[str, object]]:
         return [execution.to_dict() for execution in self.repository.list_executions(creator_id=creator_id, provider=provider, limit=limit)]
@@ -338,6 +536,12 @@ class AIRuntimeService:
     def get_execution(self, execution_uuid: str) -> dict[str, object] | None:
         execution = self.repository.get_execution_by_uuid(execution_uuid)
         return execution.to_dict() if execution else None
+
+    def list_usage_records(self, execution_id: str | None = None) -> list[dict[str, object]]:
+        return [record.to_dict() for record in self.repository.list_usage_records(execution_id)]
+
+    def list_payloads(self, execution_id: str) -> list[dict[str, object]]:
+        return [payload.to_dict() for payload in self.repository.list_payloads(execution_id)]
 
     def diagnostics_snapshot(self) -> dict[str, object]:
         status = self.status()

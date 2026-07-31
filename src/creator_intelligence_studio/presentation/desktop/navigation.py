@@ -110,6 +110,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("brief_privacy", "Privacy"),
         NavigationItem("creator_memory", "Creator Memory"),
         NavigationItem("creator_language", "Creator Language"),
+        NavigationItem("ai_runtime", "AI Runtime"),
         NavigationItem("workflow", "Workflow"),
         NavigationItem("tasks", "Task Center"),
         NavigationItem("onboarding", "Onboarding"),

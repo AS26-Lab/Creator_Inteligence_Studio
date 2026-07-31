@@ -116,6 +116,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     BriefPrivacyView,
     CreatorMemoryView,
     CreatorLanguageView,
+    AIRuntimeOverviewView,
     OnboardingView,
     MultimodalAnalysisView,
     OperationalEvaluationView,
@@ -239,6 +240,7 @@ class MainWindow(QMainWindow):
             "brief_privacy",
             "creator_memory",
             "creator_language",
+            "ai_runtime",
             "thumbnails",
             "workflow",
             "tasks",
@@ -412,6 +414,7 @@ class MainWindow(QMainWindow):
         self.brief_privacy_view = BriefPrivacyView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
         self.creator_language_view = CreatorLanguageView(workspace)
+        self.ai_runtime_view = AIRuntimeOverviewView(workspace)
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
         self.youtube_view = YouTubeIntegrationView(workspace)
         self.instagram_view = InstagramIntegrationView(workspace)
@@ -521,6 +524,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.brief_privacy_view)
         self.stack.addWidget(self.creator_memory_view)
         self.stack.addWidget(self.creator_language_view)
+        self.stack.addWidget(self.ai_runtime_view)
         self.stack.addWidget(self.thumbnail_lab_view)
         self.stack.addWidget(self.workflow_view)
         self.stack.addWidget(self.task_center_view)
@@ -675,6 +679,7 @@ class MainWindow(QMainWindow):
         self.brief_privacy_view.refresh()
         self.creator_memory_view.refresh()
         self.creator_language_view.refresh()
+        self.ai_runtime_view.refresh()
         self.thumbnail_lab_view.refresh()
         self.youtube_view.refresh()
         self.instagram_view.refresh()
@@ -962,6 +967,8 @@ class MainWindow(QMainWindow):
             self.creator_memory_view.refresh()
         elif current_key == "creator_language":
             self.creator_language_view.refresh()
+        elif current_key == "ai_runtime":
+            self.ai_runtime_view.refresh()
         elif current_key == "thumbnails":
             self.thumbnail_lab_view.refresh()
         elif current_key == "youtube":
