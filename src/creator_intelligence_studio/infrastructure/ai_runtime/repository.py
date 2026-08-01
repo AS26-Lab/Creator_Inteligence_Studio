@@ -27,6 +27,15 @@ from .models import (
 )
 
 
+_ACTIVE_EXECUTION_STATUSES = {
+    "queued",
+    "preparing_context",
+    "awaiting_approval",
+    "running",
+    "validating",
+}
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -714,15 +723,22 @@ class SQLiteAIRuntimeRepository:
         return self._row_to_execution(row) if row else None
 
     def get_execution_by_request_fingerprint(self, request_fingerprint: str) -> AIExecutionRecord | None:
-        row = self._query_one("SELECT * FROM ai_executions WHERE request_fingerprint = ?", (request_fingerprint,))
-        return self._row_to_execution(row) if row else None
+        rows = self._query_all(
+            "SELECT * FROM ai_executions WHERE request_fingerprint = ? ORDER BY created_at DESC",
+            (request_fingerprint,),
+        )
+        for row in rows:
+            execution = self._row_to_execution(row)
+            if execution.status in _ACTIVE_EXECUTION_STATUSES:
+                return execution
+        return None
 
     def find_execution_by_request_id(self, request_id: str) -> AIExecutionRecord | None:
         rows = self._query_all("SELECT * FROM ai_executions ORDER BY created_at DESC")
         for row in rows:
             execution = self._row_to_execution(row)
             request_summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
-            if request_summary.get("request_id") == request_id:
+            if request_summary.get("request_id") == request_id and execution.status in _ACTIVE_EXECUTION_STATUSES:
                 return execution
         return None
 

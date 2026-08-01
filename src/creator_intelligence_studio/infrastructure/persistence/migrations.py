@@ -8370,7 +8370,7 @@ def migration_31(connection: sqlite3.Connection) -> None:
         )
         """
     )
-    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_executions_request_fingerprint ON ai_executions(request_fingerprint)")
+    create("CREATE INDEX IF NOT EXISTS idx_ai_executions_request_fingerprint ON ai_executions(request_fingerprint)")
     create("CREATE INDEX IF NOT EXISTS idx_ai_executions_creator_id ON ai_executions(creator_id)")
     create("CREATE INDEX IF NOT EXISTS idx_ai_executions_provider_model ON ai_executions(provider, model_catalog_id)")
     create("CREATE INDEX IF NOT EXISTS idx_ai_executions_status ON ai_executions(status)")
@@ -8523,6 +8523,18 @@ MIGRATIONS: tuple[Migration, ...] = (
 )
 
 
+def _repair_ai_runtime_execution_fingerprint_index(connection: sqlite3.Connection) -> None:
+    rows = connection.execute("PRAGMA index_list(ai_executions)").fetchall()
+    unique_index_names = {
+        str(row[1])
+        for row in rows
+        if len(row) > 2 and bool(row[2]) and str(row[1]).lower().endswith("request_fingerprint")
+    }
+    if "uq_ai_executions_request_fingerprint" in unique_index_names:
+        connection.execute("DROP INDEX IF EXISTS uq_ai_executions_request_fingerprint")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_ai_executions_request_fingerprint ON ai_executions(request_fingerprint)")
+
+
 def _applied_migrations(connection: sqlite3.Connection) -> list[sqlite3.Row]:
     rows = connection.execute(
         "SELECT version, name, applied_at FROM schema_migrations ORDER BY version ASC"
@@ -8632,4 +8644,5 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             raise MigrationError(
                 f"No se pudo aplicar la migracion {migration.version}: {migration.name}"
             ) from exc
+    _repair_ai_runtime_execution_fingerprint_index(connection)
     _ensure_analytics_v15_compatibility(connection)

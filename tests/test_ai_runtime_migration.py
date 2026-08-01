@@ -28,7 +28,7 @@ class AIRuntimeMigrationTests(unittest.TestCase):
                 self.assertIn("uq_ai_model_catalog_provider_model_snapshot", indexes)
                 self.assertIn("uq_ai_model_role_assignments_scope_role_provider", indexes)
                 self.assertIn("uq_ai_prompt_templates_key_version", indexes)
-                self.assertIn("uq_ai_executions_request_fingerprint", indexes)
+                self.assertIn("idx_ai_executions_request_fingerprint", indexes)
                 self.assertIn("idx_ai_cache_entries_status", indexes)
 
                 execution_columns = _table_columns(connection, "ai_executions")
@@ -46,6 +46,176 @@ class AIRuntimeMigrationTests(unittest.TestCase):
                 self.assertIn(("creators", "creator_id", "id"), fk_targets)
 
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM schema_migrations WHERE version = 31").fetchone()[0], 1)
+
+    def test_v31_repair_replaces_unique_request_fingerprint_index_without_losing_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db = SQLiteDatabase(Path(temp_dir) / "repair.db", timeout_seconds=5.0)
+            with db.connect() as connection:
+                run_migrations(connection)
+                connection.execute("DROP INDEX IF EXISTS idx_ai_executions_request_fingerprint")
+                connection.execute("DROP INDEX IF EXISTS uq_ai_executions_request_fingerprint")
+                connection.execute("CREATE UNIQUE INDEX uq_ai_executions_request_fingerprint ON ai_executions(request_fingerprint)")
+                model_id = "repair-model"
+                template_id = "provider-diagnostic-template"
+                connection.execute(
+                    """
+                    INSERT INTO ai_model_catalog (
+                        id, provider, model_id, display_name, snapshot_or_version, status,
+                        capabilities_json, context_limit, supports_structured_output,
+                        supports_image_input, supports_audio_input,
+                        input_price_per_million, output_price_per_million, cached_input_price_per_million,
+                        pricing_currency, pricing_effective_at, last_verified_at, replacement_model_id,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        model_id,
+                        "openai",
+                        "repair-model",
+                        "Repair Model",
+                        "v1",
+                        "approved",
+                        "{}",
+                        4096,
+                        1,
+                        0,
+                        0,
+                        1.0,
+                        1.0,
+                        0.1,
+                        "USD",
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                        None,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO ai_prompt_templates (
+                        id, template_key, task_type, operation, version, status,
+                        required_capabilities_json, instruction_layers_json, input_schema_json,
+                        output_schema_json, validation_profile_json, benchmark_id, change_notes,
+                        approved_at, deprecated_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        template_id,
+                        "provider_diagnostic",
+                        "provider_diagnostic",
+                        "extract",
+                        1,
+                        "approved",
+                        "{}",
+                        "{}",
+                        "{}",
+                        "{}",
+                        "{}",
+                        None,
+                        "repair test",
+                        "2026-07-29T00:00:00Z",
+                        None,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO ai_executions (
+                        id, execution_uuid, creator_id, project_id, task_type, operation, status,
+                        requested_model_role, provider, model_catalog_id, template_id, privacy_class,
+                        quality_level, context_fingerprint, request_fingerprint, input_summary_json,
+                        output_reference, validation_status, cache_status, fallback_policy,
+                        approval_required, approved_at, started_at, completed_at, latency_ms,
+                        error_category, error_code, error_message_safe, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "execution-a",
+                        "execution-a",
+                        None,
+                        None,
+                        "provider_diagnostic",
+                        "extract",
+                        "completed",
+                        "cheap_structured_model",
+                        "openai",
+                        model_id,
+                        template_id,
+                        "selected_text_allowed",
+                        "standard",
+                        None,
+                        "fingerprint-x",
+                        "{\"request_id\": \"request-a\", \"task_type\": \"provider_diagnostic\"}",
+                        None,
+                        "valid",
+                        "active",
+                        "none",
+                        0,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                        1,
+                        None,
+                        None,
+                        None,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                    ),
+                )
+                before_rows = connection.execute("SELECT COUNT(*) FROM ai_executions").fetchone()[0]
+                run_migrations(connection)
+                indexes = {row[1]: bool(row[2]) for row in connection.execute("PRAGMA index_list(ai_executions)").fetchall()}
+                self.assertIn("idx_ai_executions_request_fingerprint", indexes)
+                self.assertFalse(indexes["idx_ai_executions_request_fingerprint"])
+                self.assertNotIn("uq_ai_executions_request_fingerprint", indexes)
+                connection.execute(
+                    """
+                    INSERT INTO ai_executions (
+                        id, execution_uuid, creator_id, project_id, task_type, operation, status,
+                        requested_model_role, provider, model_catalog_id, template_id, privacy_class,
+                        quality_level, context_fingerprint, request_fingerprint, input_summary_json,
+                        output_reference, validation_status, cache_status, fallback_policy,
+                        approval_required, approved_at, started_at, completed_at, latency_ms,
+                        error_category, error_code, error_message_safe, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "execution-b",
+                        "execution-b",
+                        None,
+                        None,
+                        "provider_diagnostic",
+                        "extract",
+                        "completed",
+                        "cheap_structured_model",
+                        "openai",
+                        model_id,
+                        template_id,
+                        "selected_text_allowed",
+                        "standard",
+                        None,
+                        "fingerprint-x",
+                        "{\"request_id\": \"request-b\", \"task_type\": \"provider_diagnostic\"}",
+                        None,
+                        "valid",
+                        "active",
+                        "none",
+                        0,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                        1,
+                        None,
+                        None,
+                        None,
+                        "2026-07-29T00:00:00Z",
+                        "2026-07-29T00:00:00Z",
+                    ),
+                )
+                after_rows = connection.execute("SELECT COUNT(*) FROM ai_executions").fetchone()[0]
+                self.assertEqual(before_rows + 1, after_rows)
 
     def test_v30_database_upgrades_idempotently_to_v31(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

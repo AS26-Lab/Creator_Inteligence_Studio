@@ -992,8 +992,7 @@ class AIRuntimeService:
         role: str | None = None,
         cache_policy: str = "use",
     ) -> AIExecutionResult:
-        request_id = f"provider_diagnostic:{provider or 'any'}:{role or 'cheap_structured_model'}:{cache_policy}"
-        return self.orchestrator.run_diagnostic(provider=provider, role=role, request_id=request_id, cache_policy=cache_policy)
+        return self.orchestrator.run_diagnostic(provider=provider, role=role, cache_policy=cache_policy)
 
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 50) -> list[dict[str, object]]:
         return [execution.to_dict() for execution in self.repository.list_executions(creator_id=creator_id, provider=provider, limit=limit)]

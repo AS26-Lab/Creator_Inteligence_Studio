@@ -706,6 +706,36 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertIn(view.diagnostics_tab.status_label.text(), {"completed", "completed_with_warnings"})
         self.assertEqual(self.fixture.service.providers["openai"].calls, 1)
 
+    def test_diagnostics_view_allows_repeated_bypass_executions_with_shared_fingerprint(self) -> None:
+        self.fixture.service.providers["openai"] = FakeProvider("openai", execution_delay_ms=100)
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+        view.diagnostics_tab.cache_combo.setCurrentIndex(view.diagnostics_tab.cache_combo.findData("bypass"))
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        first_execution_id = view.diagnostics_tab.execution_label.text()
+        self.assertNotEqual(first_execution_id, "-")
+        self.assertEqual(self.fixture.service.providers["openai"].calls, 1)
+        self.assertEqual(view.history_tab.table.rowCount(), 1)
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        second_execution_id = view.diagnostics_tab.execution_label.text()
+        self.assertNotEqual(second_execution_id, "-")
+        self.assertNotEqual(first_execution_id, second_execution_id)
+        self.assertEqual(self.fixture.service.providers["openai"].calls, 2)
+        self.assertEqual(view.history_tab.table.rowCount(), 2)
+        self.assertNotIn("UNIQUE", view.diagnostics_tab.message_label.text().upper())
+
     def test_history_view_loads_detail_without_secrets(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")
         view = AIRuntimeOverviewView(self.workspace)

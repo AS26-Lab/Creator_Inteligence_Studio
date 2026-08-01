@@ -173,6 +173,14 @@ class AIOrchestrator:
             return execution
         return None
 
+    def _request_fingerprint(self, request: AIExecutionRequest) -> str:
+        payload = request.to_dict()
+        payload.pop("request_id", None)
+        payload.pop("cache_policy", None)
+        payload.pop("fallback_policy", None)
+        payload.pop("approval_policy", None)
+        return build_request_fingerprint(payload)
+
     def run_diagnostic(
         self,
         *,
@@ -188,7 +196,7 @@ class AIOrchestrator:
         metadata: dict[str, object] | None = None,
     ) -> AIExecutionResult:
         request = AIExecutionRequest(
-            request_id=request_id or str(uuid4()),
+            request_id=request_id or f"provider_diagnostic:{provider or 'any'}:{role or 'cheap_structured_model'}:{uuid4()}",
             task_type="provider_diagnostic",
             operation="extract",
             creator_id=creator_id,
@@ -216,7 +224,7 @@ class AIOrchestrator:
 
     def run(self, request: AIExecutionRequest, *, provider: str | None = None) -> AIExecutionResult:
         privacy = self.privacy_policy.evaluate(request)
-        request_hash = build_request_fingerprint(request.to_dict())
+        request_hash = self._request_fingerprint(request)
         context_fingerprint = build_request_fingerprint(request.context_package) if request.context_package else None
         prompt_template = self.prompt_registry.get_approved("provider_diagnostic")
         execution_uuid = str(uuid4())

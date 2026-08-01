@@ -14,6 +14,15 @@ from creator_intelligence_studio.infrastructure.ai_runtime.registry import Model
 from tests.ai_runtime_test_support import FakeProvider, build_runtime_fixture
 
 
+def _semantic_fingerprint(request: AIExecutionRequest) -> str:
+    payload = request.to_dict()
+    payload.pop("request_id", None)
+    payload.pop("cache_policy", None)
+    payload.pop("fallback_policy", None)
+    payload.pop("approval_policy", None)
+    return build_request_fingerprint(payload)
+
+
 def _request(
     *,
     request_id: str = "req-001",
@@ -158,7 +167,7 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
 
     def test_duplicate_request_fingerprint_while_active_blocks_without_provider_call(self) -> None:
         request = self._request(request_id="dup-fingerprint")
-        request_hash = build_request_fingerprint(request.to_dict())
+        request_hash = _semantic_fingerprint(request)
         fingerprint = self.fixture.repository.store_execution(
             AIExecutionRecord(
                 execution_uuid=str(uuid4()),
@@ -202,6 +211,45 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
         self.assertEqual(provider.calls, 0)
         self.assertIsNotNone(fingerprint)
         self.assertEqual(len(self.fixture.repository.list_executions()), 1)
+
+    def test_completed_executions_can_share_fingerprint_historically(self) -> None:
+        provider = FakeProvider("openai")
+        orchestrator = self._orchestrator({"openai": provider})
+
+        first = orchestrator.run(self._request(request_id="history-a", cache_policy="bypass"), provider="openai")
+        second = orchestrator.run(self._request(request_id="history-b", cache_policy="bypass"), provider="openai")
+
+        self.assertEqual(first.status, "completed")
+        self.assertEqual(second.status, "completed")
+        self.assertEqual(provider.calls, 2)
+        executions = self.fixture.repository.list_executions()
+        self.assertEqual(len(executions), 2)
+        self.assertEqual(executions[0].request_fingerprint, executions[1].request_fingerprint)
+
+    def test_failed_execution_can_be_retried_with_shared_fingerprint(self) -> None:
+        provider = FakeProvider(
+            "openai",
+            error=AIExecutionError(
+                category="provider_error",
+                safe_message="Provider request failed.",
+                retryable=False,
+                suggested_action="Retry later.",
+                technical_reference="HTTP 500",
+            ),
+        )
+        orchestrator = self._orchestrator({"openai": provider})
+
+        failed = orchestrator.run(self._request(request_id="failed-a", cache_policy="bypass"), provider="openai")
+        self.assertEqual(failed.status, "failed")
+        self.assertGreaterEqual(provider.calls, 1)
+
+        provider.error = None
+        retry = orchestrator.run(self._request(request_id="failed-b", cache_policy="bypass"), provider="openai")
+        self.assertEqual(retry.status, "completed")
+        self.assertGreaterEqual(provider.calls, 2)
+        executions = self.fixture.repository.list_executions()
+        self.assertEqual(len(executions), 2)
+        self.assertEqual(executions[0].request_fingerprint, executions[1].request_fingerprint)
 
     def test_cache_hit_bypass_and_refresh(self) -> None:
         provider = FakeProvider("openai")
@@ -376,21 +424,21 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
         billing_error = AIExecutionError(category="billing_error", safe_message="billing", retryable=False)
         billing_provider = SequenceProvider("openai", [billing_error])
         orchestrator = self._orchestrator({"openai": billing_provider})
-        result = orchestrator.run(self._request(request_id="billing"), provider="openai")
+        result = orchestrator.run(self._request(request_id="billing", cache_policy="bypass"), provider="openai")
         self.assertEqual(billing_provider.calls, 1)
         self.assertEqual(result.status, "failed")
 
         auth_error = AIExecutionError(category="authentication_error", safe_message="auth", retryable=False)
         auth_provider = SequenceProvider("openai", [auth_error])
         orchestrator = self._orchestrator({"openai": auth_provider})
-        result = orchestrator.run(self._request(request_id="auth"), provider="openai")
+        result = orchestrator.run(self._request(request_id="auth", cache_policy="bypass"), provider="openai")
         self.assertEqual(auth_provider.calls, 1)
         self.assertEqual(result.status, "failed")
 
         invalid_error = AIExecutionError(category="invalid_request", safe_message="invalid", retryable=False)
         invalid_provider = SequenceProvider("openai", [invalid_error])
         orchestrator = self._orchestrator({"openai": invalid_provider})
-        result = orchestrator.run(self._request(request_id="invalid"), provider="openai")
+        result = orchestrator.run(self._request(request_id="invalid", cache_policy="bypass"), provider="openai")
         self.assertEqual(invalid_provider.calls, 1)
         self.assertEqual(result.status, "failed")
 

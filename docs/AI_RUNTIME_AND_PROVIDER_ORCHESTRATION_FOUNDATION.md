@@ -256,6 +256,19 @@ Diagnostics must work with:
 - only one provider configured;
 - no provider configured, where the app still opens and reports the missing state.
 
+Execution identity is split into three distinct values:
+
+- `request_id` identifies one concrete attempt and is unique per run;
+- `execution_uuid` identifies the persisted execution row and is unique per row;
+- `request_fingerprint` identifies the semantic request shape and may repeat across historical executions.
+
+Fingerprint rules:
+
+- the fingerprint excludes per-run control values such as `request_id`, `cache_policy`, `fallback_policy`, and `approval_policy`;
+- `use` may reuse a valid cached execution when the semantic fingerprint matches;
+- `bypass` and `refresh` always start a new execution, but they may share the same historical fingerprint as prior attempts;
+- only active executions block a duplicate diagnostic while a run is still in progress.
+
 Credential validation and model catalog synchronization are separate steps:
 
 - validation confirms the stored credential can reach the provider;
@@ -510,6 +523,7 @@ This section records what was verified during the v31 closeout audit.
 - Provider credential validation followed by catalog synchronization into `ai_model_catalog`.
 - GUI model selection populated from synchronized provider models and role assignment persistence.
 - The OpenAI discovery path was corrected to avoid treating every normalized model as audio-capable or otherwise incompatible just because the provider metadata includes false boolean keys.
+- The v31 repair path now normalizes `ai_executions` so `request_fingerprint` is indexed but not globally unique, preserving historical rows while allowing repeated diagnostics.
 - The diagnostics button now launches a background `QThread`, disables the button immediately, shows `Preparando diagnóstico…`, and re-enables the UI when the run finishes.
 - Successful and failed diagnostics both refresh the visible execution fields and the history table without exposing secrets or raw provider payloads.
 - Duplicate clicks are blocked while the diagnostic thread is active, and the Task Center background task entry is created by the workspace view-model before the provider call begins.
