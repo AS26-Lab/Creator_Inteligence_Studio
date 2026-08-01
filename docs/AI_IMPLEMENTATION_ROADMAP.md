@@ -55,6 +55,7 @@ The following stay paused until approved by a later contract:
 - Do not allow silent behavior changes on important tasks.
 - Do not mix creators.
 - Do not create permanent MP4 retention by default.
+- Do not postpone basic discoverability or usability until the final UI/UX overhaul; fix navigation traps and incomprehensible flows while the feature is being built.
 
 ## Roadmap Linkage
 
@@ -64,4 +65,3 @@ The following stay paused until approved by a later contract:
 - `docs/LOCAL_COMPONENTS_AND_TRANSCRIPTION.md` defines local component onboarding.
 - `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` defines data sharing and privacy.
 - `docs/CURRENT_IMPLEMENTATION_REALITY.md` records the actual state before AI work starts.
-

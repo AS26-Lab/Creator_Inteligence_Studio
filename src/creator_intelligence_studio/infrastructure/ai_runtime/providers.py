@@ -179,11 +179,20 @@ def _openai_compatibility(model_id: str, raw: dict[str, Any]) -> tuple[bool, dic
     blocked_prefixes = ("text-", "tts-", "whisper", "dall-e", "image-", "moderation", "embedding")
     if lowered.startswith(blocked_prefixes) or "embedding" in lowered or "moderation" in lowered:
         return False, {"endpoint": "chat_completions", "reason": "incompatible_endpoint"}, ("Modelo incompatible con chat/completions.",)
-    supports_image = any(token in lowered for token in ("4o", "vision"))
-    supports_audio = "audio" in lowered
+    recognized_current_families = (
+        lowered.startswith("gpt-5.6-"),
+        lowered.startswith("gpt-5.1"),
+        lowered.startswith("gpt-5-mini"),
+        lowered.startswith("gpt-5-"),
+        lowered.startswith("gpt-4.1"),
+        lowered.startswith("gpt-4o"),
+    )
+    supports_structured_output = any(recognized_current_families)
+    supports_image = any(recognized_current_families)
+    supports_audio = any(token in lowered for token in ("audio", "realtime", "transcrib", "tts"))
     capabilities = {
         "endpoint": "chat_completions",
-        "structured_output": True,
+        "structured_output": supports_structured_output,
         "image_input": supports_image,
         "audio_input": supports_audio,
         "source": "provider_discovery",

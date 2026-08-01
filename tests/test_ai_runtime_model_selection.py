@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from creator_intelligence_studio.infrastructure.ai_runtime.models import AIModelCatalogEntry
 from tests.ai_runtime_test_support import FakeProvider, build_runtime_fixture
 
 
@@ -192,6 +193,29 @@ class AIRuntimeModelSelectionTests(unittest.TestCase):
         visible = [row for row in summary["items"] if row["is_visible"]]
         self.assertGreater(len(visible), 0)
         self.assertNotEqual(visible[0]["model_id"], "gpt-3.5-turbo")
+
+    def test_realistic_discovered_model_with_false_audio_flag_stays_visible(self) -> None:
+        self.fixture.repository.upsert_model_catalog_entry(
+            AIModelCatalogEntry(
+                provider="openai",
+                model_id="gpt-4o-mini",
+                display_name="GPT-4o mini",
+                snapshot_or_version="2024-07-18",
+                status="testing",
+                capabilities_json={"endpoint": "chat_completions", "structured_output": True, "image_input": True, "audio_input": False, "source": "provider_discovery"},
+                context_limit=128000,
+                supports_structured_output=True,
+                supports_image_input=True,
+                supports_audio_input=False,
+                pricing_currency="USD",
+                pricing_effective_at="2026-08-01T00:00:00Z",
+                last_verified_at="2026-08-01T00:00:00Z",
+            )
+        )
+        summary = self.fixture.service.list_model_selection("openai", "cheap_structured_model")
+        visible_ids = [row["model_id"] for row in summary["items"] if row["is_visible"]]
+        self.assertIn("gpt-4o-mini", visible_ids)
+        self.assertGreaterEqual(summary["recommended_count"], 1)
 
 
 if __name__ == "__main__":

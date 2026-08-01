@@ -195,6 +195,7 @@ CURATED_COMPATIBILITY_MATRIX: dict[str, tuple[CompatibilityRule, ...]] = {
             stability="approved",
             priority=100,
             confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-4o-mini",
             notes=("Small text-first OpenAI models are preferred for structured work.",),
         ),
         CompatibilityRule(
@@ -206,6 +207,7 @@ CURATED_COMPATIBILITY_MATRIX: dict[str, tuple[CompatibilityRule, ...]] = {
             stability="approved",
             priority=80,
             confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-4.1",
             notes=("Larger OpenAI chat models are preferred when quality matters more than cost.",),
         ),
         CompatibilityRule(
@@ -217,7 +219,44 @@ CURATED_COMPATIBILITY_MATRIX: dict[str, tuple[CompatibilityRule, ...]] = {
             stability="approved",
             priority=95,
             confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-4o-mini",
             notes=("Known multimodal family for OpenAI.",),
+        ),
+        CompatibilityRule(
+            provider="openai",
+            model_id_patterns=(r"^gpt-5\.6-(sol|terra|luna)$", r"^gpt-5\.6-(sol|terra|luna)-\d{4}-\d{2}-\d{2}$"),
+            roles=("cheap_structured_model", "general_reasoning_model", "creative_writing_model", "evaluation_model"),
+            allowed_modalities=("text", "image"),
+            required_capabilities=("structured_output",),
+            stability="approved",
+            priority=110,
+            confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+            notes=("GPT-5.6 family model for cost-sensitive or balanced workloads.",),
+        ),
+        CompatibilityRule(
+            provider="openai",
+            model_id_patterns=(r"^gpt-5-mini$", r"^gpt-5-mini-\d{4}-\d{2}-\d{2}$", r"^gpt-5$", r"^gpt-5-\d{4}-\d{2}-\d{2}$"),
+            roles=("cheap_structured_model", "general_reasoning_model", "creative_writing_model", "evaluation_model"),
+            allowed_modalities=("text", "image"),
+            required_capabilities=("structured_output",),
+            stability="approved",
+            priority=105,
+            confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-5-mini",
+            notes=("Near-frontier model for cost-sensitive, low-latency, high-volume workloads.",),
+        ),
+        CompatibilityRule(
+            provider="openai",
+            model_id_patterns=(r"^gpt-5\.1$", r"^gpt-5\.1-\d{4}-\d{2}-\d{2}$"),
+            roles=("general_reasoning_model", "creative_writing_model", "evaluation_model"),
+            allowed_modalities=("text", "image"),
+            required_capabilities=("structured_output",),
+            stability="approved",
+            priority=100,
+            confidence="approved",
+            source="https://developers.openai.com/api/docs/models/gpt-5.1",
+            notes=("Flagship model for coding and agentic tasks with configurable reasoning effort.",),
         ),
         CompatibilityRule(
             provider="openai",
@@ -228,6 +267,7 @@ CURATED_COMPATIBILITY_MATRIX: dict[str, tuple[CompatibilityRule, ...]] = {
             stability="deprecated",
             priority=5,
             confidence="rejected",
+            source="https://platform.openai.com/docs/api-reference/models/object?lang=curl",
             notes=("Legacy assignment should remain visible but not recommended.",),
         ),
     ),
@@ -264,6 +304,17 @@ def get_profile_definition(profile_key: str) -> ProfileDefinition:
 
 def _text_haystack(model: AIModelCatalogEntry) -> str:
     capabilities = model.capabilities_json if isinstance(model.capabilities_json, dict) else {}
+    capability_values: list[str] = []
+    for key, value in capabilities.items():
+        if isinstance(value, bool):
+            if value:
+                capability_values.append(str(key))
+        elif isinstance(value, (str, int, float)):
+            capability_values.append(str(value))
+        elif isinstance(value, dict):
+            capability_values.extend(str(inner) for inner in value.values() if inner is not None)
+        elif isinstance(value, (list, tuple, set)):
+            capability_values.extend(str(inner) for inner in value if inner is not None)
     return " ".join(
         part
         for part in (
@@ -272,7 +323,7 @@ def _text_haystack(model: AIModelCatalogEntry) -> str:
             model.display_name,
             model.snapshot_or_version or "",
             model.replacement_model_id or "",
-            " ".join(str(key) for key in capabilities.keys()),
+            " ".join(capability_values),
         )
     ).lower()
 
@@ -400,6 +451,8 @@ def classify_model_for_role(model: AIModelCatalogEntry, role: str) -> dict[str, 
             "reason": reason,
             "warnings": warnings,
             "is_visible_by_default": not _preview_like(model, tokens) and confidence != "incompatible_confirmed",
+            "priority": rule.priority,
+            "source": rule.source,
         }
 
     if role == "multimodal_model" and explicit_image is True:
@@ -464,6 +517,8 @@ def classify_model_for_role(model: AIModelCatalogEntry, role: str) -> dict[str, 
             "reason": "Modelo disponible en la cuenta, pero todavia no evaluado por Creator Intelligence Studio.",
             "warnings": ("Modelo disponible en la cuenta, pero todavia no evaluado por Creator Intelligence Studio.",),
             "is_visible_by_default": True,
+            "priority": 0,
+            "source": "provider_catalog",
         }
 
     return {
@@ -474,6 +529,8 @@ def classify_model_for_role(model: AIModelCatalogEntry, role: str) -> dict[str, 
         "reason": "Modelo disponible en la cuenta, pero todavia no evaluado por Creator Intelligence Studio.",
         "warnings": ("Modelo disponible en la cuenta, pero todavia no evaluado por Creator Intelligence Studio.",),
         "is_visible_by_default": True,
+        "priority": 0,
+        "source": "provider_catalog",
     }
 
 
@@ -511,13 +568,14 @@ class RecommendedModelResolver:
     def _availability_rank(self, model: AIModelCatalogEntry) -> int:
         return {"approved": 3, "testing": 2, "deprecated": 1, "unavailable": 0, "blocked": 0}.get(model.status, 0)
 
-    def _model_sort_key(self, model: AIModelCatalogEntry, classification: dict[str, Any], profile_key: str) -> tuple[int, float, int, str, str]:
+    def _model_sort_key(self, model: AIModelCatalogEntry, classification: dict[str, Any], profile_key: str) -> tuple[int, int, float, int, str, str]:
         compatibility_order = {
             "compatible_verified_catalog": 0,
             "compatible_by_verified_catalog": 1,
             "compatibility_unknown": 2,
             "incompatible_confirmed": 3,
         }.get(str(classification.get("compatibility_state")), 4)
+        rule_priority = int(classification.get("priority") or 0)
         recommendation_order = {
             "Compatible verificado": 0,
             "Compatible pendiente de benchmark": 1,
@@ -526,6 +584,7 @@ class RecommendedModelResolver:
         }.get(str(classification.get("recommendation_tag")), 4)
         return (
             compatibility_order,
+            -rule_priority,
             self._price_value(model) - self._profile_bonus(model, profile_key),
             -self._availability_rank(model),
             str(recommendation_order),
@@ -569,17 +628,19 @@ class RecommendedModelResolver:
         current_assignment_dict = current_assignment.to_dict() if current_assignment else None
         candidates = self._available_models(catalog, role)
         classified: list[tuple[AIModelCatalogEntry, dict[str, Any]]] = []
+        verified_classified: list[tuple[AIModelCatalogEntry, dict[str, Any]]] = []
         unknown_count = 0
         confirmed_count = 0
         for model in candidates:
             classification = classify_model_for_role(model, role)
             if classification["compatibility_state"] in {"compatible_confirmed", "compatible_verified_catalog", "compatible_by_verified_catalog"}:
                 confirmed_count += 1
+                verified_classified.append((model, classification))
             if classification["compatibility_state"] == "compatibility_unknown":
                 unknown_count += 1
             if classification["compatibility_state"] != "incompatible_confirmed":
                 classified.append((model, classification))
-        if not classified:
+        if not verified_classified:
             reason = "No hay un modelo verificado para este rol."
             if current_assignment_dict is not None:
                 reason = "La asignacion actual no esta recomendada para la matriz curada."
@@ -603,9 +664,9 @@ class RecommendedModelResolver:
                 current_assignment=current_assignment_dict,
             )
 
-        classified.sort(key=lambda pair: self._model_sort_key(pair[0], pair[1], profile.key))
-        best_model, best_classification = classified[0]
-        alternatives = tuple(model.to_dict() for model, _classification in classified[1:4])
+        verified_classified.sort(key=lambda pair: self._model_sort_key(pair[0], pair[1], profile.key))
+        best_model, best_classification = verified_classified[0]
+        alternatives = tuple(model.to_dict() for model, _classification in verified_classified[1:4])
         confidence = "high" if best_classification["compatibility_state"] == "compatible_verified_catalog" else "medium"
         if best_classification["compatibility_state"] == "compatibility_unknown":
             confidence = "low"
@@ -626,7 +687,7 @@ class RecommendedModelResolver:
             compatibility_state=str(best_classification.get("compatibility_state") or "compatibility_unknown"),
             evaluation_state=str(best_classification.get("evaluation_state") or "unreviewed"),
             availability_state=str(best_classification.get("availability_state") or "available"),
-            source="curated_matrix" if any(rule.matches(best_model) for rule in CURATED_COMPATIBILITY_MATRIX.get(provider, ())) else "provider_catalog",
+            source=str(best_classification.get("source") or ("curated_matrix" if any(rule.matches(best_model) for rule in CURATED_COMPATIBILITY_MATRIX.get(provider, ())) else "provider_catalog")),
             profile_key=profile.key,
             profile_label=profile.label,
             relative_cost_label=profile.relative_cost_label,

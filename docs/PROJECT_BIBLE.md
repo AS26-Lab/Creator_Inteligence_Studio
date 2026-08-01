@@ -63,6 +63,12 @@ The creator always keeps the final decision.
 
 Privacy, traceability, cost, and human control are structural requirements.
 
+## UX Principle
+
+Creator Intelligence Studio is primarily for creators and other non-technical users.
+
+Default flows must be guided, safe, and understandable in plain language. Technical controls belong behind an explicit advanced mode. A capability is not complete until it is discoverable, understandable, and usable in the real product.
+
 ## Canonical Pillars
 
 1. Strategic and creative copilot for creators.

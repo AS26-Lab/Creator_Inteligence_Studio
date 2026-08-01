@@ -410,6 +410,7 @@ Recomendations are advisory only:
 - the service computes them from catalog metadata, role constraints, status, pricing, and verification recency;
 - the UI never silently replaces a stored assignment with a newer recommendation;
 - missing pricing or verification data is shown as `Compatible, pendiente de evaluacion` instead of being guessed.
+- provider discovery is treated conservatively; capability keys with false values do not turn a model into an unsupported special case, and only the verified current-family rules feed the guided recommendation path.
 
 Guided configuration is now the default entry point for `Modelos y roles`:
 
@@ -421,6 +422,7 @@ Guided configuration is now the default entry point for `Modelos y roles`:
 - the `Económico`, `Equilibrado`, `Máxima calidad`, and `Personalizado` profiles are resolved by a dedicated recommendation component;
 - only `cheap_structured_model` is required in v31 for the diagnostic path;
 - the remaining roles are shown as not required in the current phase instead of being treated as mandatory.
+- when the synchronized catalog includes a verified current OpenAI family entry, the balanced profile proposes a concrete `cheap_structured_model` instead of falling back to the legacy GPT-3.5 assignment.
 
 The recommended resolver uses a curated local compatibility matrix that is versioned independently from provider discovery:
 
@@ -507,6 +509,7 @@ This section records what was verified during the v31 closeout audit.
 - A navigation smoke test that clicks the sidebar entry and verifies the mounted page.
 - Provider credential validation followed by catalog synchronization into `ai_model_catalog`.
 - GUI model selection populated from synchronized provider models and role assignment persistence.
+- The OpenAI discovery path was corrected to avoid treating every normalized model as audio-capable or otherwise incompatible just because the provider metadata includes false boolean keys.
 
 ### CredentialStore mechanism
 

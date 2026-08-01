@@ -23,6 +23,7 @@ Before proposing or implementing any new phase, read:
 - Do not mix data between creators.
 - Do not send collective data without explicit consent and revocation support.
 - Do not depend on remote provider memory as a product source of truth.
+- Default AI runtime and product flows must be guided and plain-language for non-technical users; put technical controls behind explicit advanced modes instead of expecting users to decode internals.
 
 ## Decision Handling
 

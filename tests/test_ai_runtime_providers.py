@@ -189,6 +189,23 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertEqual(report.error.category, "authentication_error")
         self.assertNotIn("sk-openai-secret", report.error.safe_message)
 
+    def test_discover_models_is_conservative_for_legacy_models_and_recognizes_current_families(self) -> None:
+        payload = {
+            "data": [
+                {"id": "gpt-3.5-turbo", "display_name": "GPT-3.5 Turbo"},
+                {"id": "gpt-4o-mini", "display_name": "GPT-4o mini"},
+            ]
+        }
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", return_value=FakeHTTPResponse(200, json.dumps(payload).encode("utf-8"))):
+            report = self.provider.discover_models("sk-openai-test")
+        models = {model.model_id: model for model in report.models}
+        self.assertFalse(models["gpt-3.5-turbo"].supports_structured_output)
+        self.assertFalse(models["gpt-3.5-turbo"].supports_image_input)
+        self.assertFalse(models["gpt-3.5-turbo"].supports_audio_input)
+        self.assertTrue(models["gpt-4o-mini"].supports_structured_output)
+        self.assertTrue(models["gpt-4o-mini"].supports_image_input)
+        self.assertFalse(models["gpt-4o-mini"].supports_audio_input)
+
 
 class AnthropicProviderTests(unittest.TestCase):
     def setUp(self) -> None:

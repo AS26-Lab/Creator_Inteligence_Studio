@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from creator_intelligence_studio.infrastructure.ai_runtime.models import AIRoleAssignment
+from creator_intelligence_studio.infrastructure.ai_runtime.models import AIModelCatalogEntry, AIRoleAssignment
 from tests.ai_runtime_test_support import FakeProvider, build_runtime_fixture
 from tests.test_ai_runtime_model_selection import build_role_catalog
 
@@ -69,6 +69,34 @@ class AIRuntimeGuidedConfigurationTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.model_role, "cheap_structured_model")
         self.assertNotEqual(result.model_id, "gpt-3.5-turbo")
+
+    def test_realistic_openai_catalog_with_false_audio_flag_still_recommends_current_family(self) -> None:
+        self.fixture.repository.upsert_model_catalog_entry(
+            AIModelCatalogEntry(
+                id=None,
+                provider="openai",
+                model_id="gpt-4o-mini",
+                display_name="GPT-4o mini",
+                snapshot_or_version="2024-07-18",
+                status="testing",
+                capabilities_json={"endpoint": "chat_completions", "structured_output": True, "image_input": True, "audio_input": False, "source": "provider_discovery"},
+                context_limit=128000,
+                supports_structured_output=True,
+                supports_image_input=True,
+                supports_audio_input=False,
+                input_price_per_million=None,
+                output_price_per_million=None,
+                cached_input_price_per_million=None,
+                pricing_currency="USD",
+                pricing_effective_at="2026-08-01T00:00:00Z",
+                last_verified_at="2026-08-01T00:00:00Z",
+            )
+        )
+        summary = self.fixture.service.guided_configuration_summary("openai", profile_key="equilibrado")
+        cheap = next(role for role in summary["roles"] if role["role"] == "cheap_structured_model")
+        self.assertIsNotNone(cheap["proposed_model"])
+        self.assertEqual(cheap["proposed_model"]["model_id"], "gpt-4o-mini")
+        self.assertNotIn("No hay un modelo recomendado disponible.", cheap["warnings"])
 
 
 if __name__ == "__main__":
