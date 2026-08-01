@@ -492,6 +492,7 @@ class WorkspaceViewModel:
         self.ui_state_store = WorkspaceUiStateStore(paths.data_directory / "workspace_ui_state.json")
         self.ui_state = self.ui_state_store.load()
         self._active_render_tokens: dict[str, _RenderCancellationToken] = {}
+        self._ai_runtime_roles_mode: str = "recommended"
         self.selected_creator_id: str | None = self.ui_state.active_creator_id
         self.selected_project_id: str | None = self.ui_state.active_project_id
         self.selected_video_id: str | None = None
@@ -1495,6 +1496,15 @@ class WorkspaceViewModel:
             creator_id=self.selected_creator_id,
             replace_existing=replace_existing,
         )
+
+    def ai_runtime_roles_mode(self) -> str:
+        return self._ai_runtime_roles_mode
+
+    def set_ai_runtime_roles_mode(self, mode: str) -> None:
+        normalized = str(mode or "recommended").strip().lower()
+        if normalized not in {"recommended", "advanced"}:
+            normalized = "recommended"
+        self._ai_runtime_roles_mode = normalized
 
     def ai_runtime_refresh_provider_models(self, provider: str):
         if self.ai_runtime_service is None:

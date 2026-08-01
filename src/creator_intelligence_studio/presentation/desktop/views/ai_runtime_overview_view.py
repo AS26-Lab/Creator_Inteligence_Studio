@@ -439,6 +439,11 @@ class RolesTab(QWidget):
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("Configuracion recomendada", "recommended")
         self.mode_combo.addItem("Configuracion avanzada", "advanced")
+        self.mode_help_label = QLabel()
+        self.mode_help_label.setWordWrap(True)
+        self.mode_help_label.setObjectName("MutedLabel")
+        self.back_to_recommended_button = QPushButton("Volver a configuracion recomendada")
+        self.back_to_recommended_button.clicked.connect(lambda *_: self._set_mode("recommended"))
         self.profile_combo = QComboBox()
         self.profile_combo.addItem("Económico", "economico")
         self.profile_combo.addItem("Equilibrado", "equilibrado")
@@ -471,7 +476,7 @@ class RolesTab(QWidget):
         self.apply_recommended_button.clicked.connect(self._apply_guided_configuration)
         self.open_advanced_button.clicked.connect(lambda *_: self._set_mode("advanced"))
         self.profile_combo.currentIndexChanged.connect(lambda *_: self._refresh_guided_summary())
-        self.mode_combo.currentIndexChanged.connect(lambda *_: self._apply_mode_visibility())
+        self.mode_combo.currentIndexChanged.connect(lambda *_: self._on_mode_changed())
 
         self.table = QTableWidget(0, 10)
         self.table.setObjectName("ai_runtime_roles_table")
@@ -523,9 +528,17 @@ class RolesTab(QWidget):
         self.model_hint_label.setWordWrap(True)
         self.model_hint_label.setObjectName("MutedLabel")
 
+        self.mode_panel = QFrame()
+        self.mode_panel.setObjectName("MutedPanel")
+        mode_layout = QVBoxLayout(self.mode_panel)
+        mode_header = QHBoxLayout()
+        mode_header.addWidget(QLabel("Modo"))
+        mode_header.addWidget(self.mode_combo)
+        mode_header.addStretch(1)
+        mode_layout.addLayout(mode_header)
+        mode_layout.addWidget(self.mode_help_label)
+
         guided_header = QHBoxLayout()
-        guided_header.addWidget(QLabel("Modo"))
-        guided_header.addWidget(self.mode_combo)
         guided_header.addWidget(QLabel("Perfil"))
         guided_header.addWidget(self.profile_combo)
         guided_header.addStretch(1)
@@ -580,17 +593,20 @@ class RolesTab(QWidget):
         self.editor_frame = QFrame()
         self.editor_frame.setObjectName("MutedPanel")
         editor_layout = QVBoxLayout(self.editor_frame)
+        editor_layout.addWidget(self.back_to_recommended_button)
         editor_layout.addWidget(self.current_assignment_label)
         editor_layout.addLayout(form)
 
         outer = QVBoxLayout(self)
         outer.addWidget(title)
         outer.addWidget(subtitle)
+        outer.addWidget(self.mode_panel)
         outer.addWidget(self.guided_panel)
         outer.addWidget(self.table)
         outer.addWidget(self.editor_frame)
 
         self._seed_role_combo()
+        self._sync_mode_controls(self._selected_mode())
         self._apply_mode_visibility()
         self.refresh()
 
@@ -625,16 +641,42 @@ class RolesTab(QWidget):
         return str(self.profile_combo.currentData() or "equilibrado")
 
     def _selected_mode(self) -> str:
+        if hasattr(self.workspace, "ai_runtime_roles_mode") and callable(getattr(self.workspace, "ai_runtime_roles_mode")):
+            try:
+                return str(self.workspace.ai_runtime_roles_mode() or "recommended")
+            except Exception:
+                pass
         return str(self.mode_combo.currentData() or "recommended")
 
     def _set_mode(self, mode: str) -> None:
-        index = self.mode_combo.findData(mode)
+        normalized = "advanced" if str(mode).strip().lower() == "advanced" else "recommended"
+        if hasattr(self.workspace, "set_ai_runtime_roles_mode") and callable(getattr(self.workspace, "set_ai_runtime_roles_mode")):
+            try:
+                self.workspace.set_ai_runtime_roles_mode(normalized)
+            except Exception:
+                pass
+        self._sync_mode_controls(normalized)
+        self._apply_mode_visibility()
+
+    def _sync_mode_controls(self, mode: str | None = None) -> None:
+        normalized = "advanced" if str(mode or self._selected_mode()).strip().lower() == "advanced" else "recommended"
+        index = self.mode_combo.findData(normalized)
+        self.mode_combo.blockSignals(True)
         if index >= 0:
             self.mode_combo.setCurrentIndex(index)
-        self._apply_mode_visibility()
+        self.mode_combo.blockSignals(False)
+        self.back_to_recommended_button.setVisible(normalized == "advanced")
+        if normalized == "advanced":
+            self.mode_help_label.setText("Permite seleccionar modelos manualmente. Puede aumentar el costo o causar incompatibilidades.")
+        else:
+            self.mode_help_label.setText("Creator Intelligence Studio elige una configuracion segura y equilibrada.")
+
+    def _on_mode_changed(self) -> None:
+        self._set_mode(str(self.mode_combo.currentData() or "recommended"))
 
     def _apply_mode_visibility(self) -> None:
         recommended_mode = self._selected_mode() != "advanced"
+        self._sync_mode_controls("advanced" if not recommended_mode else "recommended")
         self.guided_panel.setVisible(recommended_mode)
         self.table.setVisible(not recommended_mode)
         self.editor_frame.setVisible(not recommended_mode)

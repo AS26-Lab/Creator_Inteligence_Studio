@@ -414,6 +414,9 @@ Recomendations are advisory only:
 Guided configuration is now the default entry point for `Modelos y roles`:
 
 - the default view is `Configuracion recomendada`;
+- the mode selector stays visible in both recommended and advanced views;
+- the user can return to `Configuracion recomendada` at any time without leaving the page;
+- switching modes does not save assignments or change models automatically;
 - the guided panel shows the provider, last sync time, catalog size, compatibility state, profile, and warnings;
 - the `Económico`, `Equilibrado`, `Máxima calidad`, and `Personalizado` profiles are resolved by a dedicated recommendation component;
 - only `cheap_structured_model` is required in v31 for the diagnostic path;
@@ -430,6 +433,7 @@ The recommended resolver uses a curated local compatibility matrix that is versi
 Advanced manual selection remains available:
 
 - it is hidden behind `Configuracion avanzada`;
+- a dedicated `Volver a configuracion recomendada` control is available at the top of the advanced panel;
 - search, snapshots, previews, and full catalog browsing remain available there;
 - the advanced selector is no longer the default path for a normal user.
 
@@ -498,6 +502,7 @@ This section records what was verified during the v31 closeout audit.
 - Desktop CLI execution with `python -m creator_intelligence_studio --diagnostic-json`.
 - Offscreen GUI startup and auto-exit via `scripts/run_gui.bat`.
 - Dedicated desktop navigation into the `AI Runtime` page from the sidebar.
+- Reversible navigation between recommended and advanced model configuration panels without mutating assignments.
 - Real GUI tab presence for providers, roles, budget, diagnostics, and history.
 - A navigation smoke test that clicks the sidebar entry and verifies the mounted page.
 - Provider credential validation followed by catalog synchronization into `ai_model_catalog`.

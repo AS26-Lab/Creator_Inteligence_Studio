@@ -44,6 +44,7 @@ class DesktopWorkspaceFacade:
         self.ui_state = SimpleNamespace(last_page="home")
         self.activity_log: list[str] = []
         self._tasks: list[SimpleNamespace] = []
+        self._ai_runtime_roles_mode = "recommended"
         self.diagnostic = SimpleNamespace(
             application_name="Creator Intelligence Studio",
             application_version="0.1.0",
@@ -173,6 +174,12 @@ class DesktopWorkspaceFacade:
             creator_id=self.selected_creator_id,
             replace_existing=replace_existing,
         )
+
+    def ai_runtime_roles_mode(self) -> str:
+        return self._ai_runtime_roles_mode
+
+    def set_ai_runtime_roles_mode(self, mode: str) -> None:
+        self._ai_runtime_roles_mode = "advanced" if str(mode).strip().lower() == "advanced" else "recommended"
 
     def ai_runtime_refresh_provider_models(self, provider: str):
         return self.ai_runtime_service.refresh_provider_models(provider)
@@ -361,6 +368,76 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
         view.diagnostics_tab.refresh()
         self.assertNotIn("Falta configurar", view.diagnostics_tab.model_line.text())
+
+    def test_roles_view_mode_switch_is_persistent_and_reversible(self) -> None:
+        self.fixture = build_runtime_fixture(provider="anthropic")
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.service.providers["openai"] = FakeProvider("openai", discovered_models=build_role_catalog())
+        self.fixture.service.refresh_provider_models("openai")
+        assignable = self.fixture.service.list_assignable_models("openai", "cheap_structured_model")
+        self.assertGreater(len(assignable), 0)
+        base_model = assignable[0]
+        self.fixture.service.assign_role(
+            role="cheap_structured_model",
+            provider="openai",
+            model_id=str(base_model["model_id"]),
+            display_name=str(base_model.get("display_name") or base_model["model_id"]),
+            creator_id=None,
+            is_default=True,
+            is_enabled=True,
+            fallback_policy="none",
+            quality_level="standard",
+            status=str(base_model.get("status") or "approved"),
+            capabilities_json=dict(base_model.get("capabilities_json") or {}),
+            snapshot_or_version=base_model.get("snapshot_or_version"),
+        )
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.show()
+        self.qt_app.processEvents()
+
+        self.assertEqual(view.roles_tab.mode_combo.currentData(), "recommended")
+        self.assertFalse(view.roles_tab.mode_combo.isHidden())
+        self.assertTrue(view.roles_tab.guided_panel.isVisible() or not view.roles_tab.guided_panel.isHidden())
+
+        QTest.mouseClick(view.roles_tab.open_advanced_button, Qt.MouseButton.LeftButton)
+        self.qt_app.processEvents()
+        self.assertEqual(view.roles_tab.mode_combo.currentData(), "advanced")
+        self.assertFalse(view.roles_tab.mode_combo.isHidden())
+        self.assertFalse(view.roles_tab.back_to_recommended_button.isHidden())
+        self.assertTrue(view.roles_tab.editor_frame.isVisible() or not view.roles_tab.editor_frame.isHidden())
+
+        current_assignment = self.fixture.service.repository.resolve_role_assignment("cheap_structured_model", creator_id=None, provider="openai")
+        self.assertIsNotNone(current_assignment)
+        before_model_catalog_id = current_assignment.model_catalog_id if current_assignment is not None else None
+        self.assertIsNotNone(before_model_catalog_id)
+
+        self.assertGreaterEqual(view.roles_tab.model_combo.count(), 1)
+        alternate_index = -1
+        for index in range(view.roles_tab.model_combo.count()):
+            data = view.roles_tab.model_combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("model_id")) != str(before_model_catalog_id):
+                alternate_index = index
+                break
+        self.assertGreaterEqual(alternate_index, 0)
+        view.roles_tab.model_combo.setCurrentIndex(alternate_index)
+        self.qt_app.processEvents()
+
+        view.tabs.setCurrentWidget(view.budget_tab)
+        view.tabs.setCurrentWidget(view.roles_tab)
+        self.qt_app.processEvents()
+        self.assertEqual(view.roles_tab.mode_combo.currentData(), "advanced")
+        self.assertEqual(view.roles_tab.findChildren(type(view.roles_tab.back_to_recommended_button)).count(view.roles_tab.back_to_recommended_button), 1)
+
+        QTest.mouseClick(view.roles_tab.back_to_recommended_button, Qt.MouseButton.LeftButton)
+        self.qt_app.processEvents()
+        self.assertEqual(view.roles_tab.mode_combo.currentData(), "recommended")
+        self.assertTrue(view.roles_tab.guided_panel.isVisible() or not view.roles_tab.guided_panel.isHidden())
+        self.assertFalse(view.roles_tab.editor_frame.isVisible() and not view.roles_tab.editor_frame.isHidden())
+
+        after_assignment = self.fixture.service.repository.resolve_role_assignment("cheap_structured_model", creator_id=None, provider="openai")
+        self.assertIsNotNone(after_assignment)
+        self.assertEqual(after_assignment.model_catalog_id, before_model_catalog_id)
 
     def test_roles_view_refresh_catalog_populates_selector_and_persists_assignment(self) -> None:
         self.fixture = build_runtime_fixture(model_status="deprecated")
