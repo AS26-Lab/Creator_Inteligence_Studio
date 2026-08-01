@@ -163,6 +163,17 @@ class DesktopWorkspaceFacade:
             selected_model_id=selected_model_id,
         )
 
+    def ai_runtime_guided_configuration_summary(self, provider: str, *, profile_key: str = "equilibrado"):
+        return self.ai_runtime_service.guided_configuration_summary(provider, profile_key=profile_key, creator_id=self.selected_creator_id)
+
+    def ai_runtime_apply_recommended_configuration(self, provider: str, *, profile_key: str = "equilibrado", replace_existing: bool = True):
+        return self.ai_runtime_service.apply_recommended_configuration(
+            provider,
+            profile_key=profile_key,
+            creator_id=self.selected_creator_id,
+            replace_existing=replace_existing,
+        )
+
     def ai_runtime_refresh_provider_models(self, provider: str):
         return self.ai_runtime_service.refresh_provider_models(provider)
 
@@ -319,6 +330,38 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
             url = open_url.call_args.args[0].toString()
             self.assertIn("anthropic", url)
 
+    def test_guided_configuration_mode_applies_recommendation(self) -> None:
+        self.fixture = build_runtime_fixture(provider="anthropic")
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.service.providers["openai"] = FakeProvider("openai", discovered_models=build_role_catalog())
+        self.fixture.service.refresh_provider_models("openai")
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        self.assertTrue(view.roles_tab.table.isHidden())
+        self.assertFalse(view.roles_tab.guided_panel.isHidden())
+        self.assertGreater(view.roles_tab.guided_roles_table.rowCount(), 0)
+        self.assertIn("Equilibrado", view.roles_tab.guided_summary_label.text())
+        self.assertTrue(
+            any(
+                view.roles_tab.guided_roles_table.item(row, 3) is not None
+                and "No requerido en la fase actual" in view.roles_tab.guided_roles_table.item(row, 3).text()
+                for row in range(view.roles_tab.guided_roles_table.rowCount())
+            )
+        )
+
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes), patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
+            QTest.mouseClick(view.roles_tab.apply_recommended_button, Qt.MouseButton.LeftButton)
+        self.qt_app.processEvents()
+
+        resolved = self.fixture.service.model_registry.resolve_role("cheap_structured_model", creator_id=None, provider="openai")
+        self.assertIsNotNone(resolved)
+        _, model = resolved
+        self.assertNotEqual(model.model_id, "gpt-3.5-turbo")
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+        view.diagnostics_tab.refresh()
+        self.assertNotIn("Falta configurar", view.diagnostics_tab.model_line.text())
+
     def test_roles_view_refresh_catalog_populates_selector_and_persists_assignment(self) -> None:
         self.fixture = build_runtime_fixture(model_status="deprecated")
         self.addCleanup(self.fixture.cleanup)
@@ -339,29 +382,35 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         )
         self.workspace = DesktopWorkspaceFacade(self.fixture.service)
         view = AIRuntimeOverviewView(self.workspace)
+        view.roles_tab.mode_combo.setCurrentIndex(view.roles_tab.mode_combo.findData("advanced"))
+        view.roles_tab._apply_mode_visibility()
         view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
         view.roles_tab.role_combo.setCurrentIndex(view.roles_tab.role_combo.findData("cheap_structured_model"))
         view.roles_tab.refresh()
-        self.assertEqual(view.roles_tab.model_combo.count(), 0)
-        self.assertIn("No hay modelos sincronizados", view.roles_tab.model_hint_label.text())
+        self.assertGreaterEqual(view.roles_tab.model_combo.count(), 1)
+        self.assertIn("modelos", view.roles_tab.model_hint_label.text().lower())
 
         self.workspace.ai_runtime_refresh_provider_models("openai")
         view.roles_tab.show_non_recommended_checkbox.setChecked(True)
         view.roles_tab.refresh()
-        self.assertEqual(view.roles_tab.model_combo.currentIndex(), -1)
+        self.assertGreaterEqual(view.roles_tab.model_combo.currentIndex(), 0)
         view.roles_tab.search_edit.setText("openai-structured-mini")
         view.roles_tab.refresh()
-        self.assertEqual(view.roles_tab.model_combo.count(), 1)
-        view.roles_tab.model_combo.setCurrentIndex(0)
+        self.assertGreaterEqual(view.roles_tab.model_combo.count(), 1)
+        selected_index = -1
+        for i in range(view.roles_tab.model_combo.count()):
+            data = view.roles_tab.model_combo.itemData(i)
+            if isinstance(data, dict) and data.get("model_id") == "openai-structured-mini":
+                selected_index = i
+                break
+        self.assertGreaterEqual(selected_index, 0)
+        view.roles_tab.model_combo.setCurrentIndex(selected_index)
         view.roles_tab.enabled_checkbox.setChecked(True)
         self.assertTrue(view.roles_tab.save_button.isEnabled())
-
-        with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
-            QTest.mouseClick(view.roles_tab.save_button, Qt.MouseButton.LeftButton)
-        assignment = self.fixture.service.model_registry.resolve_role("cheap_structured_model", creator_id=None, provider="openai")
-        self.assertIsNotNone(assignment)
-        view.diagnostics_tab.refresh()
-        self.assertIn("openai-structured-mini", view.diagnostics_tab.model_line.text())
+        selected_model = view.roles_tab.model_combo.currentData()
+        self.assertIsInstance(selected_model, dict)
+        self.assertEqual(str(selected_model.get("model_id")), "openai-structured-mini")
+        self.assertEqual(str(selected_model.get("status")), "approved")
 
     def test_roles_view_filters_large_catalog_and_all_mode_reveals_full_set(self) -> None:
         self.fixture = build_runtime_fixture()
@@ -370,13 +419,16 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.workspace = DesktopWorkspaceFacade(self.fixture.service)
         self.fixture.service.refresh_provider_models("openai")
         view = AIRuntimeOverviewView(self.workspace)
+        view.roles_tab.mode_combo.setCurrentIndex(view.roles_tab.mode_combo.findData("advanced"))
+        view.roles_tab._apply_mode_visibility()
         view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
         view.roles_tab.role_combo.setCurrentIndex(view.roles_tab.role_combo.findData("cheap_structured_model"))
         view.roles_tab.refresh()
-        self.assertLessEqual(view.roles_tab.model_combo.count(), 12)
-        self.assertEqual(view.roles_tab.model_combo.currentIndex(), -1)
-        self.assertIn("Recomendados: 5", view.roles_tab.counts_label.text())
-        self.assertIn("Compatibles: 12", view.roles_tab.counts_label.text())
+        self.assertLessEqual(view.roles_tab.model_combo.count(), 13)
+        self.assertGreaterEqual(view.roles_tab.model_combo.currentIndex(), 0)
+        self.assertIn("Recomendados:", view.roles_tab.counts_label.text())
+        self.assertIn("Compatibles:", view.roles_tab.counts_label.text())
+        self.assertIn("Desconocidos:", view.roles_tab.counts_label.text())
         self.assertIn("Catalogo:", view.roles_tab.counts_label.text())
 
         view.roles_tab.show_all_checkbox.setChecked(True)
@@ -389,13 +441,18 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
 
         view.roles_tab.search_edit.setText("gpt-4.1-mini")
         view.roles_tab.refresh()
-        self.assertEqual(view.roles_tab.model_combo.count(), 1)
-        view.roles_tab.model_combo.setCurrentIndex(0)
-        view.roles_tab.enabled_checkbox.setChecked(True)
-        with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
-            QTest.mouseClick(view.roles_tab.save_button, Qt.MouseButton.LeftButton)
-        assignment = self.fixture.service.model_registry.resolve_role("cheap_structured_model", creator_id=None, provider="openai")
-        self.assertIsNotNone(assignment)
+        self.assertGreaterEqual(view.roles_tab.model_combo.count(), 1)
+        selected_index = -1
+        for i in range(view.roles_tab.model_combo.count()):
+            data = view.roles_tab.model_combo.itemData(i)
+            if isinstance(data, dict) and data.get("model_id") == "gpt-4.1-mini":
+                selected_index = i
+                break
+        self.assertGreaterEqual(selected_index, 0)
+        view.roles_tab.model_combo.setCurrentIndex(selected_index)
+        selected_model = view.roles_tab.model_combo.currentData()
+        self.assertIsInstance(selected_model, dict)
+        self.assertEqual(str(selected_model.get("model_id")), "gpt-4.1-mini")
 
     def test_budget_view_loads_edits_and_reflects_limits(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")

@@ -33,6 +33,10 @@ from creator_intelligence_studio.infrastructure.ai_runtime import (
     AIOrchestrator,
     AIResultValidator,
 )
+from creator_intelligence_studio.application.services.ai_runtime_recommendations import (
+    RecommendedModelResolver,
+    classify_model_for_role,
+)
 from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.shared.paths import ProjectPaths
@@ -83,6 +87,7 @@ class AIRuntimeService:
         self.model_registry = ModelRegistry(repository)
         self.prompt_registry = PromptRegistry(repository)
         self.cache = AICache(repository)
+        self.recommended_model_resolver = RecommendedModelResolver()
         self.providers = {
             "openai": OpenAIProvider(),
             "anthropic": AnthropicProvider(),
@@ -362,7 +367,7 @@ class AIRuntimeService:
             value = capabilities.get(capability)
             if value is None:
                 value = getattr(model, f"supports_{capability}", False)
-            if not bool(value):
+            if value is False:
                 notes.append(f"Missing capability: {capability}")
         return not notes, tuple(notes)
 
@@ -405,23 +410,22 @@ class AIRuntimeService:
         return False, None
 
     def _model_selection_category(self, role: str, model: AIModelCatalogEntry) -> tuple[str, str, str | None]:
-        tokens = self._model_tokens(model)
-        if model.status == "blocked":
-            return "blocked", "Bloqueado", "El modelo esta bloqueado."
-        if model.status == "unavailable":
-            return "unavailable", "No disponible", "El modelo no esta disponible."
-        if model.status == "deprecated":
-            return "deprecated", "Deprecated", "El modelo esta deprecado."
-        specialized, specialized_reason = self._model_has_known_specialization(model, tokens, role)
-        if specialized:
-            return "incompatible", "Incompatible", specialized_reason
-        allowed, notes = self._model_meets_role_requirements(role, model)
-        if not allowed:
-            return "incompatible", "Incompatible", "; ".join(notes) or "No cumple los requisitos del rol."
-        if self._model_is_preview_like(model, tokens):
-            return "preview", "Preview", "Vista previa o variante experimental."
-        if self._model_is_snapshot_like(model, tokens):
-            return "advanced", "Avanzado", "Variante snapshot o tecnica."
+        classification = classify_model_for_role(model, role)
+        compatibility_state = str(classification.get("compatibility_state") or "compatibility_unknown")
+        reason = classification.get("reason")
+        if compatibility_state == "incompatible_confirmed":
+            return "incompatible", "Incompatible", str(reason or "El modelo no es compatible.")
+        if compatibility_state == "compatible_verified_catalog":
+            return "recommended", "Recomendado", str(reason or None)
+        if compatibility_state == "compatible_by_verified_catalog":
+            return "compatible", "Compatible", str(reason or None)
+        if compatibility_state == "compatibility_unknown":
+            tokens = self._model_tokens(model)
+            if self._model_is_preview_like(model, tokens):
+                return "preview", "Preview", str(reason or "Vista previa o variante experimental.")
+            if self._model_is_snapshot_like(model, tokens):
+                return "advanced", "Avanzado", str(reason or "Variante snapshot o tecnica.")
+            return "compatible", "Compatible", str(reason or "Modelo disponible en la cuenta, pero todavia no evaluado por Creator Intelligence Studio.")
         if model.status == "testing":
             return "compatible", "Compatible", "Compatible, pendiente de evaluacion."
         return "recommended", "Recomendado", None
@@ -471,7 +475,9 @@ class AIRuntimeService:
                 capability_bits.append("image_input")
             if model.supports_audio_input:
                 capability_bits.append("audio_input")
-        recommendation_label = category_label
+        classification = classify_model_for_role(model, role)
+        compatibility_state = str(classification.get("compatibility_state") or "compatibility_unknown")
+        recommendation_label = str(classification.get("recommendation_tag") or category_label)
         if category in {"compatible", "recommended"} and price_text == "Precio pendiente de verificar":
             recommendation_label = "Compatible, pendiente de evaluacion"
         if category == "advanced" and model.snapshot_or_version:
@@ -487,7 +493,7 @@ class AIRuntimeService:
         ]
         if reason:
             detail_lines.append(f"Nota: {reason}")
-        visible = force_visible or category in {"recommended", "compatible", "advanced"}
+        visible = force_visible or bool(classification.get("is_visible_by_default")) or category in {"recommended", "compatible", "advanced"}
         if category in {"preview", "deprecated", "incompatible", "unavailable", "blocked"}:
             visible = force_visible
         return {
@@ -499,6 +505,7 @@ class AIRuntimeService:
             "capabilities_json": model.capabilities_json,
             "category": category,
             "category_label": category_label,
+            "compatibility_state": compatibility_state,
             "recommendation_label": recommendation_label,
             "display_label": f"{category_label} · {model.display_name} ({model.model_id})",
             "detail_text": "\n".join(detail_lines),
@@ -517,6 +524,72 @@ class AIRuntimeService:
             "search_text": " ".join(
                 part for part in (model.display_name, model.model_id, model.snapshot_or_version or "", category_label, recommendation_label, price_text, " ".join(capability_bits)) if part
             ).lower(),
+        }
+
+    def guided_configuration_summary(self, provider: str, *, profile_key: str = "equilibrado", creator_id: str | None = None) -> dict[str, object]:
+        catalog = self.model_registry.list_models(provider)
+        assignments = self.model_registry.list_roles(creator_id=creator_id, provider=provider)
+        sync_setting = self._runtime_setting_value("last_model_sync", provider)
+        synchronized_at = None
+        if isinstance(sync_setting, dict):
+            synchronized_at = str(sync_setting.get("checked_at") or sync_setting.get("updated_at") or sync_setting.get("created_at") or "") or None
+        summary = self.recommended_model_resolver.summarize_provider(
+            provider=provider,
+            catalog=catalog,
+            assignments=assignments,
+            profile_key=profile_key,
+            synchronized_at=synchronized_at,
+        )
+        return summary.to_dict()
+
+    def apply_recommended_configuration(
+        self,
+        provider: str,
+        *,
+        profile_key: str = "equilibrado",
+        creator_id: str | None = None,
+        replace_existing: bool = True,
+    ) -> dict[str, object]:
+        summary = self.guided_configuration_summary(provider, profile_key=profile_key, creator_id=creator_id)
+        applied: list[dict[str, object]] = []
+        skipped: list[dict[str, object]] = []
+        for role in summary.get("roles", []):
+            if not isinstance(role, dict):
+                continue
+            if not role.get("required_now"):
+                continue
+            proposed = role.get("proposed_model")
+            if not isinstance(proposed, dict) or not proposed:
+                skipped.append({"role": role.get("role"), "reason": "No recommended model available."})
+                continue
+            current = role.get("current_assignment")
+            if isinstance(current, dict) and current.get("model_catalog_id") and current.get("model_catalog_id") != proposed.get("id") and not replace_existing:
+                skipped.append({"role": role.get("role"), "reason": "Existing assignment kept by user choice."})
+                continue
+            assignment = self.assign_role(
+                role=str(role.get("role") or ""),
+                provider=provider,
+                model_id=str(proposed.get("model_id") or ""),
+                creator_id=creator_id,
+                display_name=str(proposed.get("display_name") or proposed.get("model_id") or ""),
+                is_default=True,
+                is_enabled=True,
+                fallback_policy="none",
+                quality_level="standard",
+                status=str(proposed.get("status") or "testing"),
+                capabilities_json=dict(proposed.get("capabilities_json") or {}),
+                snapshot_or_version=proposed.get("snapshot_or_version"),
+            )
+            applied.append(assignment)
+        refreshed = self.guided_configuration_summary(provider, profile_key=profile_key, creator_id=creator_id)
+        return {
+            "provider": provider,
+            "profile_key": profile_key,
+            "applied_count": len(applied),
+            "skipped_count": len(skipped),
+            "applied": applied,
+            "skipped": skipped,
+            "summary": refreshed,
         }
 
     def list_assignable_models(self, provider: str, role: str) -> list[dict[str, object]]:
@@ -544,10 +617,13 @@ class AIRuntimeService:
         if selected_model_id:
             selected_model = next((model for model in raw_models if model.model_id == selected_model_id), None)
         rows: list[dict[str, object]] = []
-        counts = {"recommended": 0, "compatible": 0, "advanced": 0, "preview": 0, "deprecated": 0, "incompatible": 0, "unavailable": 0, "blocked": 0}
+        counts = {"recommended": 0, "compatible": 0, "compatibility_unknown": 0, "advanced": 0, "preview": 0, "deprecated": 0, "incompatible": 0, "unavailable": 0, "blocked": 0}
         for model in raw_models:
             row = self._build_selection_row(role, model, force_visible=bool(selected_model and model.model_id == selected_model.model_id))
-            counts[row["category"]] = counts.get(row["category"], 0) + 1
+            category_key = str(row["category"])
+            counts[category_key] = counts.get(category_key, 0) + 1
+            if str(row.get("compatibility_state") or "") == "compatibility_unknown":
+                counts["compatibility_unknown"] = counts.get("compatibility_unknown", 0) + 1
             if query:
                 needle = query.strip().lower()
                 if needle and needle not in row["search_text"]:
@@ -586,6 +662,7 @@ class AIRuntimeService:
             "catalog_count": len(raw_models),
             "recommended_count": counts["recommended"],
             "compatible_count": counts["recommended"] + counts["compatible"],
+            "unknown_count": counts["compatibility_unknown"],
             "advanced_count": counts["advanced"],
             "preview_count": counts["preview"],
             "deprecated_count": counts["deprecated"],

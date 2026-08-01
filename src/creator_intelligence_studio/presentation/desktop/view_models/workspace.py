@@ -1475,6 +1475,27 @@ class WorkspaceViewModel:
             selected_model_id=selected_model_id,
         )
 
+    def ai_runtime_guided_configuration_summary(self, provider: str, *, profile_key: str = "equilibrado"):
+        if self.ai_runtime_service is None:
+            return {}
+        return self.ai_runtime_service.guided_configuration_summary(provider, profile_key=profile_key, creator_id=self.selected_creator_id)
+
+    def ai_runtime_apply_recommended_configuration(
+        self,
+        provider: str,
+        *,
+        profile_key: str = "equilibrado",
+        replace_existing: bool = True,
+    ):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        return self.ai_runtime_service.apply_recommended_configuration(
+            provider,
+            profile_key=profile_key,
+            creator_id=self.selected_creator_id,
+            replace_existing=replace_existing,
+        )
+
     def ai_runtime_refresh_provider_models(self, provider: str):
         if self.ai_runtime_service is None:
             raise RuntimeError("El servicio de IA no esta disponible.")

@@ -411,6 +411,28 @@ Recomendations are advisory only:
 - the UI never silently replaces a stored assignment with a newer recommendation;
 - missing pricing or verification data is shown as `Compatible, pendiente de evaluacion` instead of being guessed.
 
+Guided configuration is now the default entry point for `Modelos y roles`:
+
+- the default view is `Configuracion recomendada`;
+- the guided panel shows the provider, last sync time, catalog size, compatibility state, profile, and warnings;
+- the `Económico`, `Equilibrado`, `Máxima calidad`, and `Personalizado` profiles are resolved by a dedicated recommendation component;
+- only `cheap_structured_model` is required in v31 for the diagnostic path;
+- the remaining roles are shown as not required in the current phase instead of being treated as mandatory.
+
+The recommended resolver uses a curated local compatibility matrix that is versioned independently from provider discovery:
+
+- discovery still comes from the provider `/models` endpoint;
+- missing metadata is treated as `compatibility_unknown`, not as a confirmed incompatibility;
+- `compatibility_unknown` stays out of the recommended path but can still be surfaced in advanced mode;
+- `incompatible_confirmed` is reserved for explicit evidence such as blocked status, deprecated status, or known role conflicts;
+- the UI can apply the recommended configuration after a confirmation step, and it preserves custom assignments when the user declines a replacement.
+
+Advanced manual selection remains available:
+
+- it is hidden behind `Configuracion avanzada`;
+- search, snapshots, previews, and full catalog browsing remain available there;
+- the advanced selector is no longer the default path for a normal user.
+
 ## Task Center
 
 Diagnostic work can appear as `ai_runtime_diagnostic`.

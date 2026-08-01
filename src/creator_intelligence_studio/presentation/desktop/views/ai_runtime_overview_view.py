@@ -436,6 +436,43 @@ class RolesTab(QWidget):
         subtitle.setWordWrap(True)
         subtitle.setObjectName("MutedLabel")
 
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Configuracion recomendada", "recommended")
+        self.mode_combo.addItem("Configuracion avanzada", "advanced")
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItem("Económico", "economico")
+        self.profile_combo.addItem("Equilibrado", "equilibrado")
+        self.profile_combo.addItem("Máxima calidad", "maxima_calidad")
+        self.profile_combo.addItem("Personalizado", "personalizado")
+        self.profile_combo.setCurrentIndex(self.profile_combo.findData("equilibrado"))
+        self.profile_hint_label = QLabel()
+        self.profile_hint_label.setWordWrap(True)
+        self.profile_hint_label.setObjectName("MutedLabel")
+        self.guided_summary_label = QLabel()
+        self.guided_summary_label.setWordWrap(True)
+        self.guided_summary_label.setObjectName("MutedLabel")
+        self.guided_warning_label = QLabel()
+        self.guided_warning_label.setWordWrap(True)
+        self.guided_warning_label.setObjectName("WarningLabel")
+        self.guided_roles_table = QTableWidget(0, 6)
+        self.guided_roles_table.setObjectName("ai_runtime_guided_roles_table")
+        self.guided_roles_table.setHorizontalHeaderLabels(
+            [
+                "Rol",
+                "Propuesta",
+                "Confianza",
+                "Ahora",
+                "Razón",
+                "Alternativas",
+            ]
+        )
+        self.apply_recommended_button = QPushButton("Aplicar configuracion recomendada")
+        self.open_advanced_button = QPushButton("Configuracion avanzada")
+        self.apply_recommended_button.clicked.connect(self._apply_guided_configuration)
+        self.open_advanced_button.clicked.connect(lambda *_: self._set_mode("advanced"))
+        self.profile_combo.currentIndexChanged.connect(lambda *_: self._refresh_guided_summary())
+        self.mode_combo.currentIndexChanged.connect(lambda *_: self._apply_mode_visibility())
+
         self.table = QTableWidget(0, 10)
         self.table.setObjectName("ai_runtime_roles_table")
         self.table.setHorizontalHeaderLabels(
@@ -486,6 +523,27 @@ class RolesTab(QWidget):
         self.model_hint_label.setWordWrap(True)
         self.model_hint_label.setObjectName("MutedLabel")
 
+        guided_header = QHBoxLayout()
+        guided_header.addWidget(QLabel("Modo"))
+        guided_header.addWidget(self.mode_combo)
+        guided_header.addWidget(QLabel("Perfil"))
+        guided_header.addWidget(self.profile_combo)
+        guided_header.addStretch(1)
+
+        self.guided_panel = QFrame()
+        self.guided_panel.setObjectName("MutedPanel")
+        guided_layout = QVBoxLayout(self.guided_panel)
+        guided_layout.addLayout(guided_header)
+        guided_layout.addWidget(self.profile_hint_label)
+        guided_layout.addWidget(self.guided_summary_label)
+        guided_layout.addWidget(self.guided_warning_label)
+        guided_layout.addWidget(self.guided_roles_table)
+        guided_actions = QHBoxLayout()
+        guided_actions.addWidget(self.apply_recommended_button)
+        guided_actions.addWidget(self.open_advanced_button)
+        guided_actions.addStretch(1)
+        guided_layout.addLayout(guided_actions)
+
         self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.model_combo.currentIndexChanged.connect(lambda *_: self._on_model_combo_changed())
@@ -528,10 +586,12 @@ class RolesTab(QWidget):
         outer = QVBoxLayout(self)
         outer.addWidget(title)
         outer.addWidget(subtitle)
+        outer.addWidget(self.guided_panel)
         outer.addWidget(self.table)
         outer.addWidget(self.editor_frame)
 
         self._seed_role_combo()
+        self._apply_mode_visibility()
         self.refresh()
 
     def _seed_role_combo(self) -> None:
@@ -561,18 +621,137 @@ class RolesTab(QWidget):
     def _selected_creator_scope(self) -> str | None:
         return self.workspace.selected_creator_id
 
+    def _selected_profile(self) -> str:
+        return str(self.profile_combo.currentData() or "equilibrado")
+
+    def _selected_mode(self) -> str:
+        return str(self.mode_combo.currentData() or "recommended")
+
+    def _set_mode(self, mode: str) -> None:
+        index = self.mode_combo.findData(mode)
+        if index >= 0:
+            self.mode_combo.setCurrentIndex(index)
+        self._apply_mode_visibility()
+
+    def _apply_mode_visibility(self) -> None:
+        recommended_mode = self._selected_mode() != "advanced"
+        self.guided_panel.setVisible(recommended_mode)
+        self.table.setVisible(not recommended_mode)
+        self.editor_frame.setVisible(not recommended_mode)
+        if not recommended_mode and self._selection_mode() == "recommended":
+            compatible_index = self.view_mode_combo.findData("compatible")
+            if compatible_index >= 0:
+                self.view_mode_combo.setCurrentIndex(compatible_index)
+        if recommended_mode:
+            self._refresh_guided_summary()
+        else:
+            self._refresh_model_combo()
+
     def _selection_mode(self) -> str:
         return str(self.view_mode_combo.currentData() or "compatible")
+
+    def _refresh_guided_summary(self) -> None:
+        provider = self._selected_provider()
+        profile_key = self._selected_profile()
+        summary = self.workspace.ai_runtime_guided_configuration_summary(provider, profile_key=profile_key)
+        profile_label = str(summary.get("profile_label") or profile_key)
+        self.profile_hint_label.setText(str(summary.get("profile_description") or ""))
+        self.guided_summary_label.setText(
+            " · ".join(
+                [
+                    f"Proveedor: {PROVIDER_LINKS.get(provider, {}).get('label', provider)}",
+                    f"Ultima sincronizacion: {_safe_datetime(summary.get('synchronized_at'))}",
+                    f"Modelos encontrados: {summary.get('found_count', 0)}",
+                    f"Compatibilidad: {summary.get('compatibility_state', 'unknown')}",
+                    f"Perfil: {profile_label}",
+                    f"Costo relativo: {summary.get('relative_cost_label', '-')}",
+                ]
+            )
+        )
+        warnings = summary.get("warnings") or []
+        first_setup = summary.get("first_setup_message")
+        current_warning = summary.get("current_assignment_warning")
+        warning_lines = []
+        if current_warning:
+            warning_lines.append(str(current_warning))
+        if first_setup:
+            warning_lines.append(str(first_setup))
+        if warnings:
+            warning_lines.extend(str(item) for item in warnings)
+        self.guided_warning_label.setText("\n".join(warning_lines) if warning_lines else "Configuracion recomendada lista para aplicar.")
+        roles = summary.get("roles") or []
+        self.guided_roles_table.setRowCount(0)
+        for row_index, role in enumerate(roles):
+            if not isinstance(role, dict):
+                continue
+            self.guided_roles_table.insertRow(row_index)
+            proposed = role.get("proposed_model") or {}
+            proposed_label = "-"
+            if isinstance(proposed, dict) and proposed:
+                proposed_label = f"{proposed.get('display_name') or proposed.get('model_id')} ({proposed.get('model_id')})"
+            alternatives = role.get("alternatives") or []
+            alternative_text = ", ".join(
+                f"{item.get('display_name') or item.get('model_id')} ({item.get('model_id')})"
+                for item in alternatives
+                if isinstance(item, dict)
+            ) or "-"
+            values = [
+                role.get("role_label") or role.get("role"),
+                proposed_label,
+                role.get("confidence"),
+                "Si" if role.get("required_now") else "No requerido en la fase actual",
+                role.get("reason"),
+                alternative_text,
+            ]
+            for column, value in enumerate(values):
+                self.guided_roles_table.setItem(row_index, column, _item(value))
+        self.guided_roles_table.resizeColumnsToContents()
+
+    def _apply_guided_configuration(self) -> None:
+        provider = self._selected_provider()
+        profile_key = self._selected_profile()
+        summary = self.workspace.ai_runtime_guided_configuration_summary(provider, profile_key=profile_key)
+        details: list[str] = []
+        for role in summary.get("roles", []):
+            if not isinstance(role, dict):
+                continue
+            proposal = role.get("proposed_model")
+            if isinstance(proposal, dict) and proposal:
+                details.append(
+                    f"{role.get('role_label')}: {proposal.get('display_name') or proposal.get('model_id')} ({proposal.get('model_id')})"
+                )
+            else:
+                details.append(f"{role.get('role_label')}: sin propuesta")
+        summary_text = "\n".join(details) or "No hay propuestas disponibles."
+        choice = QMessageBox.question(
+            self,
+            "AI Runtime",
+            f"Resumen de configuracion recomendada ({summary.get('profile_label') or profile_key}):\n\n{summary_text}\n\n¿Aplicar esta configuracion?",
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return
+        result = self.workspace.ai_runtime_apply_recommended_configuration(provider, profile_key=profile_key, replace_existing=True)
+        self.refresh()
+        _refresh_enclosing_overview(self)
+        QMessageBox.information(
+            self,
+            "AI Runtime",
+            f"Configuracion recomendada aplicada. Asignaciones creadas: {result.get('applied_count', 0)}.",
+        )
 
     def _refresh_model_combo(self) -> None:
         provider = self._selected_provider()
         role = self._selected_role()
-        current_assignment = self.workspace.ai_runtime_service.model_registry.resolve_role(
+        current_assignment = self.workspace.ai_runtime_service.repository.resolve_role_assignment(
             role,
             creator_id=self._selected_creator_scope(),
             provider=provider,
         )
-        current_model_id = current_assignment[1].model_id if current_assignment is not None else None
+        current_model_id = None
+        if current_assignment is not None:
+            current_model = self.workspace.ai_runtime_service.repository.get_model_catalog_entry(current_assignment.model_catalog_id)
+            if current_model is not None:
+                current_model_id = current_model.model_id
         summary = self.workspace.ai_runtime_list_model_selection(
             provider,
             role,
@@ -616,6 +795,7 @@ class RolesTab(QWidget):
                 [
                     f"Recomendados: {summary.get('recommended_count', 0)}",
                     f"Compatibles: {summary.get('compatible_count', 0)}",
+                    f"Desconocidos: {summary.get('unknown_count', 0)}",
                     f"Avanzados: {summary.get('advanced_count', 0)}",
                     f"Catalogo: {summary.get('catalog_count', 0)}",
                     f"Mostrados: {summary.get('visible_count', 0)}",
@@ -647,11 +827,11 @@ class RolesTab(QWidget):
 
     def _resolve_current_assignment(self, role: str) -> tuple[dict[str, object] | None, dict[str, object] | None]:
         service = self.workspace.ai_runtime_service
-        resolved = service.model_registry.resolve_role(role, creator_id=self._selected_creator_scope())
-        if resolved is None:
+        assignment = service.repository.resolve_role_assignment(role, creator_id=self._selected_creator_scope(), provider=self._selected_provider())
+        if assignment is None:
             return None, None
-        assignment, model = resolved
-        return assignment.to_dict(), model.to_dict()
+        model = service.repository.get_model_catalog_entry(assignment.model_catalog_id)
+        return assignment.to_dict(), model.to_dict() if model is not None else None
 
     def _update_assignment_preview(self) -> None:
         role = self._selected_role()
@@ -659,9 +839,12 @@ class RolesTab(QWidget):
         if assignment is None or model is None:
             self.current_assignment_label.setText("Asignacion actual: sin asignar")
             return
+        warning = ""
+        if str(model.get("status") or "").lower() in {"deprecated", "unavailable", "blocked"}:
+            warning = " (no recomendada)"
         self.current_assignment_label.setText(
             "Asignacion actual: "
-            f"{assignment['provider']} / {model['display_name']} / {model.get('snapshot_or_version') or 'sin snapshot'}"
+            f"{assignment['provider']} / {model['display_name']} / {model.get('snapshot_or_version') or 'sin snapshot'}{warning}"
         )
 
     def _sync_form_from_selection(self) -> None:
@@ -774,6 +957,8 @@ class RolesTab(QWidget):
                     item.setData(Qt.ItemDataRole.UserRole, role)
                 self.table.setItem(row_index, column, item)
         self.table.resizeColumnsToContents()
+        self._apply_mode_visibility()
+        self._refresh_guided_summary()
         self._refresh_model_combo()
 
 
@@ -935,7 +1120,9 @@ class DiagnosticsTab(QWidget):
         self.cache_combo.addItem("Bypass", "bypass")
         self.cache_combo.addItem("Refresh", "refresh")
         self.run_button = QPushButton("Ejecutar diagnostico")
+        self.auto_config_button = QPushButton("Configurar automaticamente")
         self.run_button.clicked.connect(self._run_diagnostic)
+        self.auto_config_button.clicked.connect(self._configure_automatically)
 
         self.message_label = QLabel()
         self.message_label.setWordWrap(True)
@@ -982,6 +1169,7 @@ class DiagnosticsTab(QWidget):
         form.addRow("Modelo resuelto", self.model_line)
         form.addRow("Cache policy", self.cache_combo)
         form.addRow("", self.run_button)
+        form.addRow("", self.auto_config_button)
 
         result = QFormLayout()
         result.addRow("execution_id", self.execution_label)
@@ -1042,12 +1230,40 @@ class DiagnosticsTab(QWidget):
             provider=provider,
         )
         if resolved is None:
-            self.model_line.setText("Sin modelo resuelto")
+            self.model_line.setText("Falta configurar el modelo economico estructurado.")
+            self.auto_config_button.setVisible(True)
             return
         _, model = resolved
         self.model_line.setText(
             f"{model.display_name} / {model.model_id} / {model.snapshot_or_version or 'sin snapshot'}"
         )
+        self.auto_config_button.setVisible(False)
+
+    def _configure_automatically(self) -> None:
+        provider = self._selected_provider()
+        summary = self.workspace.ai_runtime_guided_configuration_summary(provider, profile_key="equilibrado")
+        details = []
+        for role in summary.get("roles", []):
+            if not isinstance(role, dict):
+                continue
+            proposal = role.get("proposed_model")
+            if isinstance(proposal, dict) and proposal:
+                details.append(
+                    f"{role.get('role_label')}: {proposal.get('display_name') or proposal.get('model_id')} ({proposal.get('model_id')})"
+                )
+        choice = QMessageBox.question(
+            self,
+            "AI Runtime",
+            "Falta configurar el modelo economico estructurado.\n\n"
+            f"Perfil {summary.get('profile_label') or 'Equilibrado'}:\n"
+            + ("\n".join(details) if details else "Sin propuesta disponible.")
+            + "\n\n¿Aplicar la configuracion recomendada?",
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return
+        self.workspace.ai_runtime_apply_recommended_configuration(provider, profile_key="equilibrado", replace_existing=True)
+        self.refresh()
+        _refresh_enclosing_overview(self)
 
     def _run_diagnostic(self) -> None:
         provider = self._selected_provider()
