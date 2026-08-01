@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import logging
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QThread, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -33,6 +34,10 @@ from PySide6.QtWidgets import (
 
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 from creator_intelligence_studio.presentation.desktop.widgets.cards import EmptyStateWidget
+from creator_intelligence_studio.presentation.desktop.error_mapping import map_error
+
+
+logger = logging.getLogger(__name__)
 
 
 def _item(value: object) -> QTableWidgetItem:
@@ -57,6 +62,47 @@ def _safe_datetime(value: str | None) -> str:
     if not value:
         return "Sin comprobacion"
     return value.replace("T", " ").replace("Z", "")
+
+
+class DiagnosticRunThread(QThread):
+    result_ready = Signal(object)
+    error_ready = Signal(str)
+
+    def __init__(self, workspace: WorkspaceViewModel, provider: str, role: str, cache_policy: str) -> None:
+        super().__init__()
+        self.workspace = workspace
+        self.provider = provider
+        self.role = role
+        self.cache_policy = cache_policy
+
+    def run(self) -> None:  # pragma: no cover - flujo Qt
+        logger.info(
+            "ai_runtime_diagnostic.provider_call_started provider=%s role=%s cache_policy=%s",
+            self.provider,
+            self.role,
+            self.cache_policy,
+        )
+        try:
+            result = self.workspace.run_ai_runtime_diagnostic(
+                provider=self.provider,
+                role=self.role,
+                cache_policy=self.cache_policy,
+            )
+        except Exception as exc:  # pragma: no cover - defensa general
+            logger.info(
+                "ai_runtime_diagnostic.execution_failed provider=%s role=%s error_class=%s",
+                self.provider,
+                self.role,
+                exc.__class__.__name__,
+            )
+            self.error_ready.emit(str(exc))
+            return
+        logger.info(
+            "ai_runtime_diagnostic.provider_call_completed provider=%s role=%s",
+            self.provider,
+            self.role,
+        )
+        self.result_ready.emit(result)
 
 
 def _capabilities_text(model: dict[str, object]) -> str:
@@ -1147,6 +1193,8 @@ class DiagnosticsTab(QWidget):
     def __init__(self, workspace: WorkspaceViewModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.workspace = workspace
+        self._diagnostic_thread: DiagnosticRunThread | None = None
+        self._diagnostic_running = False
         title = QLabel("Diagnostico")
         title.setObjectName("TitleLabel")
         subtitle = QLabel("Ejecuta un diagnostico real del AI runtime con salida normalizada y segura.")
@@ -1307,25 +1355,116 @@ class DiagnosticsTab(QWidget):
         self.refresh()
         _refresh_enclosing_overview(self)
 
+    def _set_running_state(self, running: bool, message: str | None = None) -> None:
+        self._diagnostic_running = running
+        self.run_button.setEnabled(not running)
+        self.provider_combo.setEnabled(not running)
+        self.role_combo.setEnabled(not running)
+        self.cache_combo.setEnabled(not running)
+        self.auto_config_button.setEnabled(not running)
+        if message is not None:
+            self.message_label.setText(message)
+
+    def _clear_result_fields(self) -> None:
+        self.execution_label.setText("-")
+        self.provider_label.setText("-")
+        self.model_label.setText("-")
+        self.role_label.setText("-")
+        self.status_label.setText("-")
+        self.latency_label.setText("-")
+        self.input_tokens_label.setText("-")
+        self.output_tokens_label.setText("-")
+        self.estimated_cost_label.setText("-")
+        self.calculated_cost_label.setText("-")
+        self.cache_label.setText("-")
+        self.validation_label.setText("-")
+        self.error_label.setText("-")
+        self.suggested_action_label.setText("-")
+
+    def _finalize_diagnostic(self) -> None:
+        self._set_running_state(False)
+
+    def _diagnostic_finished(self) -> None:
+        self._diagnostic_thread = None
+
+    def _diagnostic_completed(self, result: object) -> None:
+        logger.info("ai_runtime_diagnostic.execution_completed")
+        payload = result.to_dict() if hasattr(result, "to_dict") else getattr(result, "__dict__", {})
+        payload_dict = payload if isinstance(payload, dict) else {}
+        self._show_result(payload_dict)
+        self._finalize_diagnostic()
+        self.refresh()
+        status = str(payload_dict.get("status") or "").lower()
+        error = payload_dict.get("error") if isinstance(payload_dict.get("error"), dict) else {}
+        if status == "blocked_by_credentials" or str(error.get("category") or "").lower() == "authentication_error":
+            logger.info("ai_runtime_diagnostic.execution_failed status=%s reason=authentication_error", status)
+        elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
+            logger.info("ai_runtime_diagnostic.execution_failed status=%s", status)
+        _refresh_enclosing_overview(self)
+        if status == "blocked_by_credentials" or str(error.get("category") or "").lower() == "authentication_error":
+            self.message_label.setText("No hay una credencial configurada para este proveedor.")
+        elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
+            self.message_label.setText("No se pudo completar el diagnóstico.")
+        else:
+            self.message_label.setText("Diagnóstico completado.")
+
+    def _diagnostic_failed(self, message: str) -> None:
+        logger.info("ai_runtime_diagnostic.execution_failed")
+        error = map_error(Exception(message))
+        self.execution_label.setText("-")
+        self.provider_label.setText(self._selected_provider())
+        self.model_label.setText(_fmt(self.model_line.text()))
+        self.role_label.setText(_fmt(ROLE_LABELS.get(self._selected_role(), self._selected_role())))
+        self.status_label.setText("failed")
+        self.latency_label.setText("-")
+        self.input_tokens_label.setText("-")
+        self.output_tokens_label.setText("-")
+        self.estimated_cost_label.setText("-")
+        self.calculated_cost_label.setText("-")
+        self.cache_label.setText("-")
+        self.validation_label.setText("rejected")
+        self.error_label.setText(f"{error.explanation} [{error.technical_code}]")
+        self.suggested_action_label.setText(error.recommended_action)
+        self._finalize_diagnostic()
+        self.refresh()
+        _refresh_enclosing_overview(self)
+        self.message_label.setText("No se pudo completar el diagnóstico.")
+
     def _run_diagnostic(self) -> None:
+        if self._diagnostic_thread is not None and self._diagnostic_thread.isRunning():
+            self.message_label.setText("El diagnóstico ya está en ejecución.")
+            return
         provider = self._selected_provider()
         role = self._selected_role()
+        logger.info(
+            "ai_runtime_diagnostic.button_clicked provider=%s role=%s cache_policy=%s",
+            provider,
+            role,
+            str(self.cache_combo.currentData() or "use"),
+        )
         provider_status = self.workspace.ai_runtime_provider_status().get(provider, {})
         if not provider_status.get("configured"):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
-        result = self.workspace.run_ai_runtime_diagnostic(
-            provider=provider,
-            role=role,
-            cache_policy=str(self.cache_combo.currentData() or "use"),
+        self._clear_result_fields()
+        self.status_label.setText("queued")
+        self._set_running_state(True, "Preparando diagnóstico…")
+        logger.info(
+            "ai_runtime_diagnostic.request_built provider=%s role=%s cache_policy=%s",
+            provider,
+            role,
+            str(self.cache_combo.currentData() or "use"),
         )
-        self._show_result(result.to_dict() if hasattr(result, "to_dict") else result)
-        self.message_label.setText(
-            "No hay una credencial configurada para este proveedor."
-            if result.error and result.error.category == "authentication_error"
-            else "Diagnostico ejecutado."
+        self._diagnostic_thread = DiagnosticRunThread(
+            self.workspace,
+            provider,
+            role,
+            str(self.cache_combo.currentData() or "use"),
         )
-        self.refresh()
-        _refresh_enclosing_overview(self)
+        self._diagnostic_thread.result_ready.connect(self._diagnostic_completed)
+        self._diagnostic_thread.error_ready.connect(self._diagnostic_failed)
+        self._diagnostic_thread.finished.connect(self._diagnostic_finished)
+        self._diagnostic_thread.finished.connect(self._diagnostic_thread.deleteLater)
+        self._diagnostic_thread.start()
 
     def _show_result(self, result: dict[str, object]) -> None:
         self.execution_label.setText(str(result.get("execution_id") or "-"))
@@ -1361,7 +1500,9 @@ class DiagnosticsTab(QWidget):
             self.validation_label.setText(f"{validation.get('status')} / issues: {', '.join(validation.get('issues') or ()) or '-'}")
         error = result.get("error") or {}
         if isinstance(error, dict):
-            self.error_label.setText(str(error.get("safe_message") or "-"))
+            technical_reference = str(error.get("technical_reference") or "-")
+            safe_message = str(error.get("safe_message") or "-")
+            self.error_label.setText(f"{safe_message} [{technical_reference}]")
             self.suggested_action_label.setText(str(error.get("suggested_action") or "-"))
         else:
             self.error_label.setText("-")
@@ -1380,10 +1521,22 @@ class DiagnosticsTab(QWidget):
             if role_index >= 0:
                 self.role_combo.setCurrentIndex(role_index)
         self._refresh_model_line()
+        if self._diagnostic_running:
+            self.provider_combo.setEnabled(False)
+            self.role_combo.setEnabled(False)
+            self.cache_combo.setEnabled(False)
+            self.auto_config_button.setEnabled(False)
+            self.run_button.setEnabled(False)
+            return
+        self.run_button.setEnabled(True)
+        self.provider_combo.setEnabled(True)
+        self.role_combo.setEnabled(True)
+        self.cache_combo.setEnabled(True)
+        self.auto_config_button.setEnabled(True)
         if not self.workspace.ai_runtime_provider_status().get(self._selected_provider(), {}).get("configured"):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
         else:
-            self.message_label.setText("Listo para ejecutar diagnostico.")
+            self.message_label.setText("Listo para ejecutar diagnóstico.")
 
 
 class HistoryTab(QWidget):

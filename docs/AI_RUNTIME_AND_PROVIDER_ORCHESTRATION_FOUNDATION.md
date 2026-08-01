@@ -510,6 +510,9 @@ This section records what was verified during the v31 closeout audit.
 - Provider credential validation followed by catalog synchronization into `ai_model_catalog`.
 - GUI model selection populated from synchronized provider models and role assignment persistence.
 - The OpenAI discovery path was corrected to avoid treating every normalized model as audio-capable or otherwise incompatible just because the provider metadata includes false boolean keys.
+- The diagnostics button now launches a background `QThread`, disables the button immediately, shows `Preparando diagnóstico…`, and re-enables the UI when the run finishes.
+- Successful and failed diagnostics both refresh the visible execution fields and the history table without exposing secrets or raw provider payloads.
+- Duplicate clicks are blocked while the diagnostic thread is active, and the Task Center background task entry is created by the workspace view-model before the provider call begins.
 
 ### CredentialStore mechanism
 
@@ -528,6 +531,8 @@ This section records what was verified during the v31 closeout audit.
 - Model capabilities remain conservative when the provider response does not report enough evidence.
 - Pricing may remain marked as pending verification until the provider data is synchronized.
 - The selector intentionally hides snapshots, previews, and technical variants by default to keep role assignment safe and readable.
+- The diagnostics view does not call the provider on the GUI thread; it uses the existing background-task pattern so the window stays responsive while the execution is running.
+- If the provider raises before an execution result exists, the GUI shows a safe failure message and re-enables the button instead of swallowing the exception.
 
 ### Test coverage added or confirmed
 

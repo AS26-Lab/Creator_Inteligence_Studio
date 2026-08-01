@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,8 @@ class FakeProvider:
         discovered_models: list[dict[str, object]] | None = None,
         discovery_status: str = "ok",
         discovery_message: str = "Model catalog synchronized.",
+        execution_delay_ms: int = 0,
+        raise_on_execute: Exception | None = None,
     ) -> None:
         self.provider_name = provider_name
         self.response_text = response_text
@@ -73,6 +76,8 @@ class FakeProvider:
         ]
         self.discovery_status = discovery_status
         self.discovery_message = discovery_message
+        self.execution_delay_ms = execution_delay_ms
+        self.raise_on_execute = raise_on_execute
         self.calls = 0
         self.last_calls: list[dict[str, object]] = []
 
@@ -140,6 +145,10 @@ class FakeProvider:
                 "prompt_text": prompt_text,
             }
         )
+        if self.execution_delay_ms:
+            time.sleep(self.execution_delay_ms / 1000.0)
+        if self.raise_on_execute is not None:
+            raise self.raise_on_execute
         if self.error is not None:
             return AIProviderResponse(
                 provider=self.provider_name,

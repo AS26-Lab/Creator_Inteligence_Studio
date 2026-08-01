@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import replace
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -48,6 +49,9 @@ _ACTIVE_EXECUTION_STATUSES = {
     "running",
     "validating",
 }
+
+
+logger = logging.getLogger(__name__)
 
 
 class AIOrchestrator:
@@ -200,6 +204,13 @@ class AIOrchestrator:
             fallback_policy=fallback_policy,
             approval_policy=approval_policy,
             metadata=metadata or {},
+        )
+        logger.info(
+            "ai_runtime_diagnostic.execution_created request_id=%s provider=%s role=%s cache_policy=%s",
+            request.request_id,
+            provider or "auto",
+            role or "cheap_structured_model",
+            cache_policy,
         )
         return self.run(request, provider=provider)
 
@@ -516,7 +527,22 @@ class AIOrchestrator:
             )
         )
 
+        logger.info(
+            "ai_runtime_diagnostic.provider_call_started execution_uuid=%s provider=%s model_id=%s role=%s",
+            execution_uuid,
+            provider_name,
+            model_entry.model_id,
+            assignment.role,
+        )
         response, attempts = self._execute_with_retry(provider_client, request, api_key, model_entry.model_id, prompt_text)
+        logger.info(
+            "ai_runtime_diagnostic.provider_call_completed execution_uuid=%s provider=%s model_id=%s attempts=%s error=%s",
+            execution_uuid,
+            provider_name,
+            model_entry.model_id,
+            attempts,
+            response.error.category if response.error is not None else "none",
+        )
         if response.error is not None:
             error = response.error
             self.repository.store_execution(
@@ -554,6 +580,7 @@ class AIOrchestrator:
             )
 
         payload_object = response.structured_output or self._safe_parse(response.output_text)
+        logger.info("ai_runtime_diagnostic.validation_started execution_uuid=%s", execution_uuid)
         validation = self.result_validator.validate(request=request, payload=payload_object or {}, output_text=response.output_text)
         if validation.status == "rejected":
             repaired = self.result_validator.repair(response.output_text)
@@ -621,6 +648,13 @@ class AIOrchestrator:
             result=result,
             privacy=privacy,
             context_fingerprint=context_fingerprint,
+        )
+        logger.info(
+            "ai_runtime_diagnostic.execution_completed execution_uuid=%s provider=%s model_id=%s status=%s",
+            execution_uuid,
+            provider_name,
+            model_entry.model_id,
+            result.status,
         )
         return result
 

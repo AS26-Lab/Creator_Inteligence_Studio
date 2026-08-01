@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLineEdit, QWidget, QMessageBox
 from PySide6.QtTest import QTest
 
-from creator_intelligence_studio.infrastructure.ai_runtime.models import AIModelCatalogEntry
+from creator_intelligence_studio.infrastructure.ai_runtime.models import AIExecutionError, AIModelCatalogEntry
 from creator_intelligence_studio.presentation.desktop import main_window as main_window_module
 from creator_intelligence_studio.presentation.desktop.main_window import MainWindow
 from creator_intelligence_studio.presentation.desktop.views.ai_runtime_overview_view import (
@@ -265,6 +265,16 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.fixture.service.providers["anthropic"] = FakeProvider("anthropic")
         self.workspace = DesktopWorkspaceFacade(self.fixture.service)
         self.qt_app = QApplication.instance()
+
+    def _wait_until(self, predicate, timeout_ms: int = 10000) -> bool:
+        deadline = timeout_ms // 25
+        for _ in range(max(1, deadline)):
+            self.qt_app.processEvents()
+            if predicate():
+                return True
+            QTest.qWait(25)
+        self.qt_app.processEvents()
+        return predicate()
 
     def test_real_window_exposes_ai_runtime_navigation_and_tabs(self) -> None:
         stack, inspector_patch = _patch_main_window_views()
@@ -585,18 +595,116 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("anthropic"))
         view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
         QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
         self.qt_app.processEvents()
+        self.assertIn(view.diagnostics_tab.status_label.text(), {"blocked_by_credentials", "failed"})
         self.assertIn("No hay una credencial configurada", view.diagnostics_tab.message_label.text())
-        self.assertEqual(view.diagnostics_tab.status_label.text(), "blocked_by_credentials")
 
         view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
         self.workspace.ai_runtime_store_provider_credential("openai", "sk-openai-test")
         QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
         self.qt_app.processEvents()
-        self.assertEqual(view.diagnostics_tab.status_label.text(), "completed")
+        self.assertIn(view.diagnostics_tab.status_label.text(), {"completed", "completed_with_warnings"})
+        self.assertEqual(view.diagnostics_tab.run_button.isEnabled(), True)
         QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
         self.qt_app.processEvents()
+        self.assertIn(view.diagnostics_tab.status_label.text(), {"completed", "completed_with_warnings"})
         self.assertIn("exact_hit", view.diagnostics_tab.cache_label.text())
+
+    def test_diagnostics_view_runs_in_background_shows_running_and_records_history(self) -> None:
+        self.fixture.service.providers["openai"] = FakeProvider("openai", execution_delay_ms=150)
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        self.assertFalse(view.diagnostics_tab.run_button.isEnabled())
+        self.assertIn("Preparando diagnóstico", view.diagnostics_tab.message_label.text())
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        self.assertIn(view.diagnostics_tab.status_label.text(), {"completed", "completed_with_warnings"})
+        self.assertTrue(view.diagnostics_tab.run_button.isEnabled())
+        self.assertEqual(self.fixture.service.providers["openai"].calls, 1)
+        self.assertNotEqual(view.diagnostics_tab.execution_label.text(), "-")
+        self.assertGreater(view.history_tab.table.rowCount(), 0)
+        self.assertIn("Diagnóstico completado", view.diagnostics_tab.message_label.text())
+
+    def test_diagnostics_view_handles_exception_and_reenables_button(self) -> None:
+        self.fixture.service.providers["openai"] = FakeProvider(
+            "openai",
+            raise_on_execute=RuntimeError("boom"),
+            execution_delay_ms=100,
+        )
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        self.assertFalse(view.diagnostics_tab.run_button.isEnabled())
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        self.assertEqual(view.diagnostics_tab.status_label.text(), "failed")
+        self.assertTrue(view.diagnostics_tab.run_button.isEnabled())
+        self.assertIn("No se pudo completar el diagnóstico", view.diagnostics_tab.message_label.text())
+        self.assertTrue(any(task.status == "failed" for task in self.workspace.background_tasks()))
+
+    def test_diagnostics_view_records_failed_execution_from_provider_error(self) -> None:
+        self.fixture.service.providers["openai"] = FakeProvider(
+            "openai",
+            error=AIExecutionError(
+                category="rate_limit_error",
+                safe_message="Provider request was rate limited.",
+                retryable=True,
+                suggested_action="Retry the request later.",
+                technical_reference="HTTP 429",
+            ),
+            execution_delay_ms=100,
+        )
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        self.assertEqual(view.diagnostics_tab.status_label.text(), "failed")
+        self.assertTrue(view.diagnostics_tab.run_button.isEnabled())
+        self.assertIn("No se pudo completar", view.diagnostics_tab.message_label.text())
+        self.assertGreater(view.history_tab.table.rowCount(), 0)
+        self.assertEqual(view.history_tab.table.item(0, 5).text(), "failed")
+
+    def test_diagnostics_view_blocks_double_clicks_while_running(self) -> None:
+        self.fixture.service.providers["openai"] = FakeProvider("openai", execution_delay_ms=200)
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        view = AIRuntimeOverviewView(self.workspace)
+        view.diagnostics_tab.provider_combo.setCurrentIndex(view.diagnostics_tab.provider_combo.findData("openai"))
+        view.diagnostics_tab.role_combo.setCurrentIndex(view.diagnostics_tab.role_combo.findData("cheap_structured_model"))
+
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(view.diagnostics_tab.run_button, Qt.MouseButton.LeftButton)
+        thread = view.diagnostics_tab._diagnostic_thread
+        self.assertIsNotNone(thread)
+        self.assertTrue(thread.wait(5000))
+        self.qt_app.processEvents()
+        self.assertIn(view.diagnostics_tab.status_label.text(), {"completed", "completed_with_warnings"})
+        self.assertEqual(self.fixture.service.providers["openai"].calls, 1)
 
     def test_history_view_loads_detail_without_secrets(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")
