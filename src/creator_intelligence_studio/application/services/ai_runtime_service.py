@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,14 @@ class AIRuntimeService:
         "multimodal_model": {"structured_output": True, "image_input": True},
         "transcription_fallback_model": {"audio_input": True},
         "evaluation_model": {"structured_output": True},
+    }
+    ROLE_BLOCKED_KEYWORDS: dict[str, tuple[str, ...]] = {
+        "cheap_structured_model": ("audio", "transcrib", "tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
+        "general_reasoning_model": ("audio", "transcrib", "tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
+        "creative_writing_model": ("audio", "transcrib", "tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
+        "multimodal_model": ("transcrib", "tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
+        "transcription_fallback_model": ("tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
+        "evaluation_model": ("audio", "transcrib", "tts", "search", "codex", "embed", "moderation", "realtime", "legacy"),
     }
 
     def __init__(
@@ -357,18 +366,236 @@ class AIRuntimeService:
                 notes.append(f"Missing capability: {capability}")
         return not notes, tuple(notes)
 
+    def _model_text_haystack(self, model: AIModelCatalogEntry) -> str:
+        return " ".join(
+            part
+            for part in (
+                model.provider,
+                model.model_id,
+                model.display_name,
+                model.snapshot_or_version or "",
+                model.replacement_model_id or "",
+                " ".join(str(key) for key in (model.capabilities_json or {}).keys()) if isinstance(model.capabilities_json, dict) else "",
+            )
+        ).lower()
+
+    def _model_tokens(self, model: AIModelCatalogEntry) -> set[str]:
+        return {token for token in re.split(r"[^a-z0-9]+", self._model_text_haystack(model)) if token}
+
+    def _model_is_preview_like(self, model: AIModelCatalogEntry, tokens: set[str]) -> bool:
+        return "preview" in tokens
+
+    def _model_is_snapshot_like(self, model: AIModelCatalogEntry, tokens: set[str]) -> bool:
+        if model.snapshot_or_version is not None:
+            return True
+        return any(token.isdigit() and len(token) >= 4 for token in tokens)
+
+    def _model_has_known_specialization(self, model: AIModelCatalogEntry, tokens: set[str], role: str) -> tuple[bool, str | None]:
+        blocked = self.ROLE_BLOCKED_KEYWORDS.get(role, ())
+        if any(any(token.startswith(prefix) for token in tokens) for prefix in blocked):
+            return True, "Modelo especializado incompatible con este rol."
+        if role == "multimodal_model":
+            if not (model.supports_image_input or any(token in tokens for token in ("image", "vision", "multimodal"))):
+                return True, "Falta confirmacion de entrada de imagen."
+            return False, None
+        if role == "transcription_fallback_model":
+            if not (model.supports_audio_input or any(token in tokens for token in ("transcription", "whisper", "speech", "audio"))):
+                return True, "Falta confirmacion de transcripcion o audio."
+            return False, None
+        return False, None
+
+    def _model_selection_category(self, role: str, model: AIModelCatalogEntry) -> tuple[str, str, str | None]:
+        tokens = self._model_tokens(model)
+        if model.status == "blocked":
+            return "blocked", "Bloqueado", "El modelo esta bloqueado."
+        if model.status == "unavailable":
+            return "unavailable", "No disponible", "El modelo no esta disponible."
+        if model.status == "deprecated":
+            return "deprecated", "Deprecated", "El modelo esta deprecado."
+        specialized, specialized_reason = self._model_has_known_specialization(model, tokens, role)
+        if specialized:
+            return "incompatible", "Incompatible", specialized_reason
+        allowed, notes = self._model_meets_role_requirements(role, model)
+        if not allowed:
+            return "incompatible", "Incompatible", "; ".join(notes) or "No cumple los requisitos del rol."
+        if self._model_is_preview_like(model, tokens):
+            return "preview", "Preview", "Vista previa o variante experimental."
+        if self._model_is_snapshot_like(model, tokens):
+            return "advanced", "Avanzado", "Variante snapshot o tecnica."
+        if model.status == "testing":
+            return "compatible", "Compatible", "Compatible, pendiente de evaluacion."
+        return "recommended", "Recomendado", None
+
+    def _model_selection_score(self, model: AIModelCatalogEntry, category: str) -> tuple[int, int, int, str, str]:
+        tokens = self._model_tokens(model)
+        stable_bonus = 1 if model.status == "approved" else 0
+        price_known = 1 if model.input_price_per_million is not None or model.output_price_per_million is not None else 0
+        snapshot_penalty = 1 if model.snapshot_or_version else 0
+        preview_penalty = 1 if "preview" in tokens else 0
+        size_bonus = 0
+        for token in tokens:
+            if token in {"mini", "small", "nano"}:
+                size_bonus += 2
+            elif token in {"fast", "light", "lite"}:
+                size_bonus += 1
+        category_rank = {
+            "recommended": 0,
+            "compatible": 1,
+            "advanced": 2,
+            "preview": 3,
+            "deprecated": 4,
+            "incompatible": 5,
+            "unavailable": 6,
+            "blocked": 7,
+        }.get(category, 8)
+        return (-category_rank, stable_bonus + price_known + size_bonus, -snapshot_penalty - preview_penalty, model.display_name.lower(), model.model_id.lower())
+
+    def _build_selection_row(self, role: str, model: AIModelCatalogEntry, *, force_visible: bool = False) -> dict[str, object]:
+        category, category_label, reason = self._model_selection_category(role, model)
+        tokens = self._model_tokens(model)
+        price_text = "Precio pendiente de verificar"
+        if model.input_price_per_million is not None or model.output_price_per_million is not None:
+            price_text = f"{model.input_price_per_million or '-'} / {model.output_price_per_million or '-'} {model.pricing_currency or 'USD'}"
+        capability_bits: list[str] = []
+        capabilities = model.capabilities_json if isinstance(model.capabilities_json, dict) else {}
+        for key, value in sorted(capabilities.items()):
+            if isinstance(value, bool):
+                if value:
+                    capability_bits.append(str(key))
+            elif value is not None:
+                capability_bits.append(f"{key}={value}")
+        if not capability_bits:
+            if model.supports_structured_output:
+                capability_bits.append("structured_output")
+            if model.supports_image_input:
+                capability_bits.append("image_input")
+            if model.supports_audio_input:
+                capability_bits.append("audio_input")
+        recommendation_label = category_label
+        if category in {"compatible", "recommended"} and price_text == "Precio pendiente de verificar":
+            recommendation_label = "Compatible, pendiente de evaluacion"
+        if category == "advanced" and model.snapshot_or_version:
+            recommendation_label = "Avanzado"
+        detail_lines = [
+            f"Proveedor: {model.provider}",
+            f"Modelo: {model.model_id}",
+            f"Estado: {model.status}",
+            f"Version: {model.snapshot_or_version or 'sin snapshot'}",
+            f"Capacidades: {', '.join(capability_bits) if capability_bits else '-'}",
+            f"Precio: {price_text}",
+            f"Ultima verificacion: {model.last_verified_at or 'sin verificacion'}",
+        ]
+        if reason:
+            detail_lines.append(f"Nota: {reason}")
+        visible = force_visible or category in {"recommended", "compatible", "advanced"}
+        if category in {"preview", "deprecated", "incompatible", "unavailable", "blocked"}:
+            visible = force_visible
+        return {
+            "provider": model.provider,
+            "model_id": model.model_id,
+            "display_name": model.display_name,
+            "snapshot_or_version": model.snapshot_or_version,
+            "status": model.status,
+            "capabilities_json": model.capabilities_json,
+            "category": category,
+            "category_label": category_label,
+            "recommendation_label": recommendation_label,
+            "display_label": f"{category_label} · {model.display_name} ({model.model_id})",
+            "detail_text": "\n".join(detail_lines),
+            "warning": reason,
+            "price_text": price_text,
+            "capabilities_text": ", ".join(capability_bits) if capability_bits else "-",
+            "is_recommended": category == "recommended",
+            "is_compatible": category in {"recommended", "compatible"},
+            "is_advanced": category == "advanced",
+            "is_preview": category == "preview",
+            "is_deprecated": category == "deprecated",
+            "is_incompatible": category == "incompatible",
+            "is_hidden_by_default": category in {"preview", "deprecated", "incompatible", "unavailable", "blocked"},
+            "is_visible": visible,
+            "sort_key": self._model_selection_score(model, category),
+            "search_text": " ".join(
+                part for part in (model.display_name, model.model_id, model.snapshot_or_version or "", category_label, recommendation_label, price_text, " ".join(capability_bits)) if part
+            ).lower(),
+        }
+
     def list_assignable_models(self, provider: str, role: str) -> list[dict[str, object]]:
+        selection = self.list_model_selection(provider, role)
         models = []
-        for model in self.model_registry.list_models(provider):
-            if model.status not in {"approved", "testing"}:
-                continue
-            allowed, notes = self._model_meets_role_requirements(role, model)
-            if not allowed:
-                continue
-            payload = model.to_dict()
-            payload["compatibility_notes"] = notes
-            models.append(payload)
+        for item in selection["items"]:
+            if item.get("is_visible") and item.get("category") in {"recommended", "compatible", "advanced"}:
+                models.append(item)
         return models
+
+    def list_model_selection(
+        self,
+        provider: str,
+        role: str,
+        *,
+        query: str | None = None,
+        mode: str = "compatible",
+        show_non_recommended: bool = False,
+        show_all_models: bool = False,
+        show_snapshots_and_previews: bool = False,
+        selected_model_id: str | None = None,
+    ) -> dict[str, object]:
+        raw_models = list(self.model_registry.list_models(provider))
+        selected_model = None
+        if selected_model_id:
+            selected_model = next((model for model in raw_models if model.model_id == selected_model_id), None)
+        rows: list[dict[str, object]] = []
+        counts = {"recommended": 0, "compatible": 0, "advanced": 0, "preview": 0, "deprecated": 0, "incompatible": 0, "unavailable": 0, "blocked": 0}
+        for model in raw_models:
+            row = self._build_selection_row(role, model, force_visible=bool(selected_model and model.model_id == selected_model.model_id))
+            counts[row["category"]] = counts.get(row["category"], 0) + 1
+            if query:
+                needle = query.strip().lower()
+                if needle and needle not in row["search_text"]:
+                    if not (selected_model and model.model_id == selected_model.model_id):
+                        continue
+            if show_all_models:
+                row["is_visible"] = True
+            if not show_all_models:
+                if not show_snapshots_and_previews and row["category"] == "preview":
+                    if not (selected_model and model.model_id == selected_model.model_id):
+                        continue
+                if mode == "recommended" and row["category"] != "recommended":
+                    if not (selected_model and model.model_id == selected_model.model_id):
+                        continue
+                if mode == "compatible" and row["category"] not in {"recommended", "compatible"}:
+                    if not show_non_recommended or row["category"] != "advanced":
+                        if not (selected_model and model.model_id == selected_model.model_id):
+                            continue
+                if mode == "all" and row["category"] == "preview" and not show_snapshots_and_previews:
+                    if not (selected_model and model.model_id == selected_model.model_id):
+                        continue
+                if not show_non_recommended and row["category"] == "advanced" and mode != "all":
+                    if not (selected_model and model.model_id == selected_model.model_id):
+                        continue
+            rows.append(row)
+        rows.sort(key=lambda item: item["sort_key"])
+        if selected_model and selected_model.model_id not in {row["model_id"] for row in rows}:
+            row = self._build_selection_row(role, selected_model, force_visible=True)
+            row["warning"] = row["warning"] or "Asignacion existente conservada."
+            row["is_visible"] = True
+            rows.insert(0, row)
+        visible_rows = [row for row in rows if row.get("is_visible")]
+        return {
+            "provider": provider,
+            "role": role,
+            "catalog_count": len(raw_models),
+            "recommended_count": counts["recommended"],
+            "compatible_count": counts["recommended"] + counts["compatible"],
+            "advanced_count": counts["advanced"],
+            "preview_count": counts["preview"],
+            "deprecated_count": counts["deprecated"],
+            "incompatible_count": counts["incompatible"],
+            "unavailable_count": counts["unavailable"],
+            "blocked_count": counts["blocked"],
+            "visible_count": len(visible_rows),
+            "selected_model_id": selected_model_id,
+            "items": rows,
+        }
 
     def refresh_provider_models(self, provider: str) -> dict[str, object]:
         credential = self.credential_store.load(CredentialStore.reference_for_provider(provider))

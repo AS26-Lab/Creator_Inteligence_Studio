@@ -19,6 +19,7 @@ from creator_intelligence_studio.presentation.desktop.views.ai_runtime_overview_
     ProviderCredentialDialog,
 )
 from tests.ai_runtime_test_support import FakeProvider, build_runtime_fixture
+from tests.test_ai_runtime_model_selection import build_role_catalog
 
 
 class DummyView(QWidget):
@@ -138,6 +139,29 @@ class DesktopWorkspaceFacade:
 
     def ai_runtime_list_assignable_models(self, provider: str, role: str):
         return self.ai_runtime_service.list_assignable_models(provider, role)
+
+    def ai_runtime_list_model_selection(
+        self,
+        provider: str,
+        role: str,
+        *,
+        query: str | None = None,
+        mode: str = "compatible",
+        show_non_recommended: bool = False,
+        show_all_models: bool = False,
+        show_snapshots_and_previews: bool = False,
+        selected_model_id: str | None = None,
+    ):
+        return self.ai_runtime_service.list_model_selection(
+            provider,
+            role,
+            query=query,
+            mode=mode,
+            show_non_recommended=show_non_recommended,
+            show_all_models=show_all_models,
+            show_snapshots_and_previews=show_snapshots_and_previews,
+            selected_model_id=selected_model_id,
+        )
 
     def ai_runtime_refresh_provider_models(self, provider: str):
         return self.ai_runtime_service.refresh_provider_models(provider)
@@ -298,7 +322,21 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
     def test_roles_view_refresh_catalog_populates_selector_and_persists_assignment(self) -> None:
         self.fixture = build_runtime_fixture(model_status="deprecated")
         self.addCleanup(self.fixture.cleanup)
-        self.fixture.service.providers["openai"] = FakeProvider("openai")
+        self.fixture.service.providers["openai"] = FakeProvider(
+            "openai",
+            discovered_models=[
+                {
+                    "model_id": "openai-structured-mini",
+                    "display_name": "OpenAI Structured Mini",
+                    "snapshot_or_version": None,
+                    "status": "approved",
+                    "capabilities_json": {"structured_output": True, "image_input": True},
+                    "supports_structured_output": True,
+                    "supports_image_input": True,
+                    "supports_audio_input": False,
+                }
+            ],
+        )
         self.workspace = DesktopWorkspaceFacade(self.fixture.service)
         view = AIRuntimeOverviewView(self.workspace)
         view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
@@ -307,14 +345,14 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertEqual(view.roles_tab.model_combo.count(), 0)
         self.assertIn("No hay modelos sincronizados", view.roles_tab.model_hint_label.text())
 
-        with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
-            QTest.mouseClick(view.providers_tab.cards["openai"].sync_button, Qt.MouseButton.LeftButton)
-        self.qt_app.processEvents()
-
+        self.workspace.ai_runtime_refresh_provider_models("openai")
+        view.roles_tab.show_non_recommended_checkbox.setChecked(True)
         view.roles_tab.refresh()
-        self.assertGreater(view.roles_tab.model_combo.count(), 0)
-        combo_texts = [view.roles_tab.model_combo.itemText(i) for i in range(view.roles_tab.model_combo.count())]
-        self.assertTrue(any("openai-structured-mini" in text for text in combo_texts))
+        self.assertEqual(view.roles_tab.model_combo.currentIndex(), -1)
+        view.roles_tab.search_edit.setText("openai-structured-mini")
+        view.roles_tab.refresh()
+        self.assertEqual(view.roles_tab.model_combo.count(), 1)
+        view.roles_tab.model_combo.setCurrentIndex(0)
         view.roles_tab.enabled_checkbox.setChecked(True)
         self.assertTrue(view.roles_tab.save_button.isEnabled())
 
@@ -324,6 +362,40 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(assignment)
         view.diagnostics_tab.refresh()
         self.assertIn("openai-structured-mini", view.diagnostics_tab.model_line.text())
+
+    def test_roles_view_filters_large_catalog_and_all_mode_reveals_full_set(self) -> None:
+        self.fixture = build_runtime_fixture()
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.service.providers["openai"] = FakeProvider("openai", discovered_models=build_role_catalog())
+        self.workspace = DesktopWorkspaceFacade(self.fixture.service)
+        self.fixture.service.refresh_provider_models("openai")
+        view = AIRuntimeOverviewView(self.workspace)
+        view.roles_tab.provider_combo.setCurrentIndex(view.roles_tab.provider_combo.findData("openai"))
+        view.roles_tab.role_combo.setCurrentIndex(view.roles_tab.role_combo.findData("cheap_structured_model"))
+        view.roles_tab.refresh()
+        self.assertLessEqual(view.roles_tab.model_combo.count(), 12)
+        self.assertEqual(view.roles_tab.model_combo.currentIndex(), -1)
+        self.assertIn("Recomendados: 5", view.roles_tab.counts_label.text())
+        self.assertIn("Compatibles: 12", view.roles_tab.counts_label.text())
+        self.assertIn("Catalogo:", view.roles_tab.counts_label.text())
+
+        view.roles_tab.show_all_checkbox.setChecked(True)
+        view.roles_tab.show_snapshots_checkbox.setChecked(True)
+        view.roles_tab.show_non_recommended_checkbox.setChecked(True)
+        view.roles_tab.refresh()
+        self.assertGreaterEqual(view.roles_tab.model_combo.count(), 100)
+        first_item = view.roles_tab.model_combo.itemText(0)
+        self.assertNotIn("GPT-3.5 Turbo", first_item)
+
+        view.roles_tab.search_edit.setText("gpt-4.1-mini")
+        view.roles_tab.refresh()
+        self.assertEqual(view.roles_tab.model_combo.count(), 1)
+        view.roles_tab.model_combo.setCurrentIndex(0)
+        view.roles_tab.enabled_checkbox.setChecked(True)
+        with patch.object(QMessageBox, "information", return_value=QMessageBox.StandardButton.Ok):
+            QTest.mouseClick(view.roles_tab.save_button, Qt.MouseButton.LeftButton)
+        assignment = self.fixture.service.model_registry.resolve_role("cheap_structured_model", creator_id=None, provider="openai")
+        self.assertIsNotNone(assignment)
 
     def test_budget_view_loads_edits_and_reflects_limits(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")

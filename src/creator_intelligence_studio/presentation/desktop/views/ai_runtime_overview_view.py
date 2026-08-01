@@ -457,11 +457,26 @@ class RolesTab(QWidget):
         self.role_combo = QComboBox()
         self.provider_combo = QComboBox()
         self.model_combo = QComboBox()
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Buscar por nombre o model_id")
+        self.view_mode_combo = QComboBox()
+        self.view_mode_combo.addItem("Recomendados", "recommended")
+        self.view_mode_combo.addItem("Compatibles", "compatible")
+        self.view_mode_combo.addItem("Todos", "all")
+        self.show_all_checkbox = QCheckBox("Mostrar todos los modelos")
+        self.show_snapshots_checkbox = QCheckBox("Mostrar snapshots y previews")
+        self.show_non_recommended_checkbox = QCheckBox("Mostrar modelos no recomendados")
         self.fallback_combo = QComboBox()
         self.enabled_checkbox = QCheckBox("Habilitado")
         self.default_checkbox = QCheckBox("Predeterminado")
         self.save_button = QPushButton("Guardar asignacion")
         self.refresh_catalog_button = QPushButton("Actualizar catalogo")
+        self.counts_label = QLabel()
+        self.counts_label.setWordWrap(True)
+        self.model_detail = QTextEdit()
+        self.model_detail.setReadOnly(True)
+        self.model_detail.setObjectName("ai_runtime_model_detail")
+        self._model_selection_summary: dict[str, object] = {}
         self.save_button.clicked.connect(self._save_assignment)
         self.refresh_catalog_button.clicked.connect(self._refresh_catalog)
         self.current_assignment_label = QLabel("Asignacion actual: sin seleccionar")
@@ -473,6 +488,12 @@ class RolesTab(QWidget):
 
         self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
+        self.model_combo.currentIndexChanged.connect(lambda *_: self._on_model_combo_changed())
+        self.search_edit.textChanged.connect(lambda *_: self._refresh_model_combo())
+        self.view_mode_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
+        self.show_all_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
+        self.show_snapshots_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
+        self.show_non_recommended_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
 
         self.provider_combo.addItem("OpenAI", "openai")
         self.provider_combo.addItem("Anthropic", "anthropic")
@@ -483,7 +504,14 @@ class RolesTab(QWidget):
         form = QFormLayout()
         form.addRow("Rol", self.role_combo)
         form.addRow("Proveedor", self.provider_combo)
+        form.addRow("Buscar", self.search_edit)
+        form.addRow("Vista", self.view_mode_combo)
+        form.addRow("", self.show_all_checkbox)
+        form.addRow("", self.show_snapshots_checkbox)
+        form.addRow("", self.show_non_recommended_checkbox)
+        form.addRow("", self.counts_label)
         form.addRow("Modelo", self.model_combo)
+        form.addRow("Detalle", self.model_detail)
         form.addRow("", self.refresh_catalog_button)
         form.addRow("", self.model_hint_label)
         form.addRow("Fallback", self.fallback_combo)
@@ -523,21 +551,40 @@ class RolesTab(QWidget):
             return data
         return None
 
+    def _selected_model_id(self) -> str | None:
+        model = self._selected_model()
+        if model is None:
+            return None
+        model_id = str(model.get("model_id") or "").strip()
+        return model_id or None
+
     def _selected_creator_scope(self) -> str | None:
         return self.workspace.selected_creator_id
+
+    def _selection_mode(self) -> str:
+        return str(self.view_mode_combo.currentData() or "compatible")
 
     def _refresh_model_combo(self) -> None:
         provider = self._selected_provider()
         role = self._selected_role()
-        models = self._selectable_models(provider, role)
-        current_model_id = None
         current_assignment = self.workspace.ai_runtime_service.model_registry.resolve_role(
             role,
             creator_id=self._selected_creator_scope(),
             provider=provider,
         )
-        if current_assignment is not None:
-            current_model_id = current_assignment[1].model_id
+        current_model_id = current_assignment[1].model_id if current_assignment is not None else None
+        summary = self.workspace.ai_runtime_list_model_selection(
+            provider,
+            role,
+            query=self.search_edit.text().strip() or None,
+            mode=self._selection_mode(),
+            show_non_recommended=self.show_non_recommended_checkbox.isChecked(),
+            show_all_models=self.show_all_checkbox.isChecked(),
+            show_snapshots_and_previews=self.show_snapshots_checkbox.isChecked(),
+            selected_model_id=current_model_id,
+        )
+        self._model_selection_summary = summary
+        models = [item for item in summary.get("items", []) if item.get("is_visible")]
 
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
@@ -553,8 +600,8 @@ class RolesTab(QWidget):
                 selected_index = index
         if selected_index >= 0:
             self.model_combo.setCurrentIndex(selected_index)
-        elif self.model_combo.count():
-            self.model_combo.setCurrentIndex(0)
+        else:
+            self.model_combo.setCurrentIndex(-1)
         self.model_combo.blockSignals(False)
         if not models:
             self.model_hint_label.setText(
@@ -562,15 +609,41 @@ class RolesTab(QWidget):
             )
         else:
             self.model_hint_label.setText(
-                f"{len(models)} modelos disponibles para {PROVIDER_LINKS[provider]['label']} y el rol {ROLE_LABELS.get(role, role)}."
+                f"{len(models)} modelos visibles para {PROVIDER_LINKS[provider]['label']} y el rol {ROLE_LABELS.get(role, role)}."
             )
-        self.save_button.setEnabled(bool(models))
+        self.counts_label.setText(
+            " · ".join(
+                [
+                    f"Recomendados: {summary.get('recommended_count', 0)}",
+                    f"Compatibles: {summary.get('compatible_count', 0)}",
+                    f"Avanzados: {summary.get('advanced_count', 0)}",
+                    f"Catalogo: {summary.get('catalog_count', 0)}",
+                    f"Mostrados: {summary.get('visible_count', 0)}",
+                ]
+            )
+        )
+        self.save_button.setEnabled(self._selected_model() is not None)
         self.model_combo.setEnabled(bool(models))
+        self._update_model_detail(summary)
         self._update_assignment_preview()
 
-    def _selectable_models(self, provider: str, role: str) -> list[dict[str, object]]:
-        models = list(self.workspace.ai_runtime_list_assignable_models(provider, role))
-        return sorted(models, key=lambda model: (str(model.get("display_name") or ""), str(model.get("model_id") or "")))
+    def _update_model_detail(self, summary: dict[str, object]) -> None:
+        model = self._selected_model()
+        if model is None:
+            self.model_detail.setPlainText(
+                f"Selecciona un modelo para ver el detalle seguro.\n"
+                f"El selector muestra {summary.get('visible_count', 0)} de {summary.get('catalog_count', 0)} modelos."
+            )
+            return
+        detail = str(model.get("detail_text") or "")
+        warning = model.get("warning")
+        if warning:
+            detail = f"{detail}\nAdvertencia: {warning}" if detail else f"Advertencia: {warning}"
+        self.model_detail.setPlainText(detail.strip())
+
+    def _on_model_combo_changed(self) -> None:
+        self.save_button.setEnabled(self._selected_model() is not None)
+        self._update_model_detail(self._model_selection_summary)
 
     def _resolve_current_assignment(self, role: str) -> tuple[dict[str, object] | None, dict[str, object] | None]:
         service = self.workspace.ai_runtime_service

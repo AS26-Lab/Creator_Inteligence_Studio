@@ -1435,6 +1435,46 @@ class WorkspaceViewModel:
             return []
         return self.ai_runtime_service.list_assignable_models(provider, role)
 
+    def ai_runtime_list_model_selection(
+        self,
+        provider: str,
+        role: str,
+        *,
+        query: str | None = None,
+        mode: str = "compatible",
+        show_non_recommended: bool = False,
+        show_all_models: bool = False,
+        show_snapshots_and_previews: bool = False,
+        selected_model_id: str | None = None,
+    ):
+        if self.ai_runtime_service is None:
+            return {
+                "provider": provider,
+                "role": role,
+                "catalog_count": 0,
+                "recommended_count": 0,
+                "compatible_count": 0,
+                "advanced_count": 0,
+                "preview_count": 0,
+                "deprecated_count": 0,
+                "incompatible_count": 0,
+                "unavailable_count": 0,
+                "blocked_count": 0,
+                "visible_count": 0,
+                "selected_model_id": selected_model_id,
+                "items": [],
+            }
+        return self.ai_runtime_service.list_model_selection(
+            provider,
+            role,
+            query=query,
+            mode=mode,
+            show_non_recommended=show_non_recommended,
+            show_all_models=show_all_models,
+            show_snapshots_and_previews=show_snapshots_and_previews,
+            selected_model_id=selected_model_id,
+        )
+
     def ai_runtime_refresh_provider_models(self, provider: str):
         if self.ai_runtime_service is None:
             raise RuntimeError("El servicio de IA no esta disponible.")

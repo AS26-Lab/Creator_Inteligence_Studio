@@ -396,6 +396,21 @@ Visible categories:
 
 Model selectors in the runtime page are populated from the synchronized catalog. If no compatible models are available yet, the page explains that the user must validate the credential and refresh the provider catalog first.
 
+The catalog is not reduced in storage. The selector applies conservative presentation rules:
+
+- recommended models appear first;
+- compatible models follow;
+- advanced snapshots and previews are hidden by default;
+- deprecated, unavailable, blocked, and incompatible entries are only shown in the explicit `Mostrar todos los modelos` mode;
+- searches filter the current presentation only and do not alter the catalog itself;
+- existing assignments remain visible even if they are no longer the preferred choice.
+
+Recomendations are advisory only:
+
+- the service computes them from catalog metadata, role constraints, status, pricing, and verification recency;
+- the UI never silently replaces a stored assignment with a newer recommendation;
+- missing pricing or verification data is shown as `Compatible, pendiente de evaluacion` instead of being guessed.
+
 ## Task Center
 
 Diagnostic work can appear as `ai_runtime_diagnostic`.
@@ -482,6 +497,7 @@ This section records what was verified during the v31 closeout audit.
 - The new desktop page is configuration and diagnostics only; it does not add creative generation flows.
 - Model capabilities remain conservative when the provider response does not report enough evidence.
 - Pricing may remain marked as pending verification until the provider data is synchronized.
+- The selector intentionally hides snapshots, previews, and technical variants by default to keep role assignment safe and readable.
 
 ### Test coverage added or confirmed
 
