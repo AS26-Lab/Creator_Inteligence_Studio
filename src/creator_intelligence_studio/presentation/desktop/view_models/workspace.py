@@ -510,6 +510,79 @@ class WorkspaceViewModel:
             personalization_service=self.personalization_service,
         )
         self._sync_default_selection()
+        self._recover_ai_runtime_state()
+
+    def _ai_runtime_task_payload(self, execution: dict[str, object], *, recovery_state: str | None = None) -> dict[str, object]:
+        summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+        payload: dict[str, object] = {
+            "kind": "ai_runtime_diagnostic",
+            "provider": execution.get("provider"),
+            "role": execution.get("requested_model_role"),
+            "cache_policy": summary.get("cache_policy") or "use",
+            "execution_id": execution.get("execution_uuid"),
+            "approval_state": summary.get("approval_state") or execution.get("status"),
+            "model_id": summary.get("model_id") or execution.get("model_catalog_id"),
+            "model_catalog_id": execution.get("model_catalog_id"),
+            "status": execution.get("status"),
+            "created_at": execution.get("created_at"),
+            "updated_at": execution.get("updated_at"),
+        }
+        if recovery_state is not None:
+            payload["recovery_state"] = recovery_state
+        return payload
+
+    def _sync_ai_runtime_task(self, execution: dict[str, object], *, status: str, message: str, progress_percent: float, cancellable: bool = True) -> None:
+        execution_id = str(execution.get("execution_uuid") or "")
+        if not execution_id:
+            return
+        payload = self._ai_runtime_task_payload(execution, recovery_state=execution.get("status"))
+        payload["execution_id"] = execution_id
+        existing = self._background_task_for_execution(execution_id)
+        task_kwargs = dict(
+            title="AI Provider Diagnostics",
+            status=status,
+            stage_name="diagnostic",
+            video_id=None,
+            video_title=f"{execution.get('provider') or '-'} / {payload.get('model_id') or '-'}",
+            action_id="provider_diagnostic",
+            progress_percent=progress_percent,
+            message=message,
+            cancellable=cancellable,
+            payload=payload,
+        )
+        if existing is None:
+            self.register_background_task(**task_kwargs)
+            return
+        self.update_background_task(existing.task_id, **task_kwargs)
+
+    def _recover_ai_runtime_state(self) -> None:
+        if self.ai_runtime_service is None:
+            return
+        try:
+            self.ai_runtime_service.recover_orphaned_diagnostic_executions()
+        except Exception:
+            return
+        executions = self.ai_runtime_service.list_executions(limit=200)
+        for execution in executions:
+            if execution.get("task_type") != "provider_diagnostic":
+                continue
+            status = str(execution.get("status") or "").lower()
+            if status == "awaiting_approval" and execution.get("approved_at") is None:
+                self._sync_ai_runtime_task(
+                    execution,
+                    status="waiting_approval",
+                    progress_percent=40.0,
+                    message="Esperando tu aprobacion",
+                    cancellable=True,
+                )
+            elif status == "cancelled" and str(execution.get("error_category") or "").lower() == "interrupted":
+                self._sync_ai_runtime_task(
+                    execution,
+                    status="interrupted",
+                    progress_percent=100.0,
+                    message=str(execution.get("error_message_safe") or "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla."),
+                    cancellable=True,
+                )
 
     def _sync_default_selection(self) -> None:
         creators = self.service.list_creators()
@@ -1713,6 +1786,53 @@ class WorkspaceViewModel:
             rejected_by=rejected_by,
             rejection_reason=rejection_reason,
         )
+
+    def ai_runtime_cancel_diagnostic_execution(
+        self,
+        execution_uuid: str,
+        *,
+        cancelled_by: str | None = None,
+        cancellation_reason: str | None = None,
+    ):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        task = self._background_task_for_execution(execution_uuid)
+        if task is not None:
+            self.update_background_task(
+                task.task_id,
+                status="interrupted",
+                progress_percent=100.0,
+                message=cancellation_reason or "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.",
+                interrupted_at=to_iso_z(datetime.now(timezone.utc)),
+            )
+        return self.ai_runtime_service.cancel_diagnostic_execution(
+            execution_uuid,
+            cancelled_by=cancelled_by,
+            cancellation_reason=cancellation_reason,
+        )
+
+    def ai_runtime_active_diagnostic_task(self, provider: str | None = None, role: str | None = None):
+        if self.ai_runtime_service is None:
+            return None
+        active_ids = {
+            str(execution.get("execution_uuid") or "")
+            for execution in self.ai_runtime_service.list_executions(limit=200)
+            if execution.get("task_type") == "provider_diagnostic"
+            and str(execution.get("status") or "").lower() in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+        }
+        for task in reversed(self.background_tasks()):
+            payload = getattr(task, "payload", {})
+            if not isinstance(payload, dict) or payload.get("kind") != "ai_runtime_diagnostic":
+                continue
+            execution_id = str(payload.get("execution_id") or "")
+            if execution_id not in active_ids:
+                continue
+            if provider is not None and str(payload.get("provider") or "") != provider:
+                continue
+            if role is not None and str(payload.get("role") or "") != role:
+                continue
+            return task
+        return None
 
     def update_background_task(self, task_id: str, **changes) -> BackgroundTaskRecord | None:
         from datetime import datetime, timezone

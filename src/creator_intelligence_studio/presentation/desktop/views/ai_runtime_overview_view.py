@@ -1240,6 +1240,7 @@ class DiagnosticsTab(QWidget):
         self._diagnostic_running = False
         self._approval_running = False
         self._current_execution_id: str | None = None
+        self._current_execution_status: str | None = None
         title = QLabel("Diagnostico")
         title.setObjectName("TitleLabel")
         subtitle = QLabel("Ejecuta un diagnostico real del AI runtime con salida normalizada y segura.")
@@ -1256,8 +1257,10 @@ class DiagnosticsTab(QWidget):
         self.cache_combo.addItem("Refresh", "refresh")
         self.run_button = QPushButton("Ejecutar diagnostico")
         self.auto_config_button = QPushButton("Configurar automaticamente")
+        self.cancel_active_button = QPushButton("Cancelar ejecucion activa")
         self.run_button.clicked.connect(self._run_diagnostic)
         self.auto_config_button.clicked.connect(self._configure_automatically)
+        self.cancel_active_button.clicked.connect(self._cancel_active_execution)
 
         self.message_label = QLabel()
         self.message_label.setWordWrap(True)
@@ -1361,6 +1364,7 @@ class DiagnosticsTab(QWidget):
         form.addRow("Cache policy", self.cache_combo)
         form.addRow("", self.run_button)
         form.addRow("", self.auto_config_button)
+        form.addRow("", self.cancel_active_button)
 
         result = QFormLayout()
         result.addRow("execution_id", self.execution_label)
@@ -1467,11 +1471,17 @@ class DiagnosticsTab(QWidget):
         self.approve_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
         self.reject_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
         self.review_budget_button.setEnabled(not running and self.approval_group.isVisible())
+        self.cancel_active_button.setEnabled(
+            not running
+            and self._current_execution_id is not None
+            and str(self._current_execution_status or "").lower() in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+        )
         if message is not None:
             self.message_label.setText(message)
 
     def _clear_result_fields(self) -> None:
         self._current_execution_id = None
+        self._current_execution_status = None
         self.execution_label.setText("-")
         self.provider_label.setText("-")
         self.model_label.setText("-")
@@ -1488,6 +1498,7 @@ class DiagnosticsTab(QWidget):
         self.suggested_action_label.setText("-")
         self.approval_group.hide()
         self.approval_message.setText("Esperando tu aprobacion.")
+        self.cancel_active_button.setText("Cancelar ejecucion activa")
         for label in (
             self.approval_provider_label,
             self.approval_model_label,
@@ -1561,6 +1572,61 @@ class DiagnosticsTab(QWidget):
     def _hide_approval_panel(self) -> None:
         self._current_execution_id = None
         self.approval_group.hide()
+
+    def _execution_result_from_record(self, execution: dict[str, object]) -> dict[str, object]:
+        summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+        approval_summary = summary.get("approval_summary") if isinstance(summary, dict) and isinstance(summary.get("approval_summary"), dict) else {}
+        estimated = approval_summary.get("estimated_cost_at_approval") if isinstance(approval_summary, dict) else {}
+        status = str(execution.get("status") or "-")
+        if status == "cancelled" and str(execution.get("error_category") or "").lower() == "interrupted":
+            status = "interrupted"
+        return {
+            "execution_id": execution.get("execution_uuid"),
+            "provider": execution.get("provider"),
+            "model_id": summary.get("model_id") or execution.get("model_catalog_id"),
+            "model_role": execution.get("requested_model_role"),
+            "status": status,
+            "latency": {"latency_ms": execution.get("latency_ms") or 0},
+            "usage": {},
+            "cost": {
+                "estimated_min_cost": estimated.get("minimum_cost") if isinstance(estimated, dict) else None,
+                "estimated_max_cost": estimated.get("maximum_cost") if isinstance(estimated, dict) else None,
+                "calculated_cost": None,
+                "currency": (estimated.get("currency") if isinstance(estimated, dict) else None) or "USD",
+                "notes": summary.get("approval_state") or execution.get("error_message_safe") or "-",
+            },
+            "cache": {"cache_status": execution.get("cache_status") or "invalidated", "hit_count": 0, "refresh_requested": False},
+            "validation": {"status": execution.get("validation_status") or "requires_human_review", "issues": (execution.get("error_message_safe") or "-",)},
+            "error": {
+                "safe_message": execution.get("error_message_safe") or "-",
+                "technical_reference": execution.get("error_category") or "-",
+                "suggested_action": execution.get("input_summary_json", {}).get("retry_allowed") and "Reintenta la ejecucion." or "-",
+            },
+            "provenance": {"approval": approval_summary},
+        }
+
+    def _restore_ai_runtime_state(self) -> None:
+        task = self.workspace.ai_runtime_active_diagnostic_task(self._selected_provider(), self._selected_role())
+        if task is None:
+            return
+        payload = getattr(task, "payload", {})
+        execution_id = str(payload.get("execution_id") or "")
+        execution = self.workspace.ai_runtime_get_execution(execution_id) if execution_id else None
+        if not execution:
+            return
+        result = self._execution_result_from_record(execution)
+        self._show_result(result)
+        if str(result.get("status") or "").lower() == "awaiting_approval":
+            self._approval_requested(execution_id, result)
+        elif str(result.get("status") or "").lower() == "interrupted":
+            self._current_execution_id = execution_id
+            self._current_execution_status = "interrupted"
+            self._set_running_state(False, "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.")
+            self.run_button.setText("Reintentar")
+            self.run_button.setEnabled(True)
+            self.cancel_active_button.setEnabled(False)
+            self.message_label.setText("La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.")
+        _refresh_enclosing_overview(self)
 
     def _approval_requested(self, execution_id: str, result: dict[str, object]) -> None:
         self._current_execution_id = execution_id
@@ -1709,6 +1775,29 @@ class DiagnosticsTab(QWidget):
             _refresh_enclosing_overview(self)
             self.message_label.setText("La ejecucion fue cancelada y no se realizo ningun cargo.")
 
+    def _cancel_active_execution(self) -> None:
+        if not self._current_execution_id:
+            return
+        status = str(self._current_execution_status or "").lower()
+        if status == "awaiting_approval":
+            self._reject_execution()
+            return
+        self._set_approval_controls_enabled(False)
+        result = self.workspace.ai_runtime_cancel_diagnostic_execution(
+            self._current_execution_id,
+            cancelled_by="usuario",
+            cancellation_reason="La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.",
+        )
+        self._show_result(self._execution_result_from_record(result if isinstance(result, dict) else {}))
+        self.status_label.setText("interrupted")
+        self.run_button.setText("Reintentar")
+        self.run_button.setEnabled(True)
+        self.message_label.setText("La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.")
+        self._current_execution_status = "interrupted"
+        self._hide_approval_panel()
+        self._finalize_diagnostic()
+        self.refresh()
+
     def _review_budget(self) -> None:
         if self._on_review_budget is not None:
             self._on_review_budget()
@@ -1729,6 +1818,36 @@ class DiagnosticsTab(QWidget):
             return
         provider = self._selected_provider()
         role = self._selected_role()
+        self._restore_ai_runtime_state()
+        current_status = str(self._current_execution_status or "").lower()
+        if self._current_execution_id:
+            current_status = str(self._current_execution_status or "").lower()
+            if current_status == "awaiting_approval":
+                self.message_label.setText("Esperando tu aprobacion.")
+                return
+            if current_status in {"queued", "preparing_context", "running", "validating"}:
+                self.message_label.setText("Ya existe un diagnostico en curso.")
+                self.run_button.setEnabled(True)
+                self.cancel_active_button.setEnabled(True)
+                return
+        active_task = self.workspace.ai_runtime_active_diagnostic_task(provider, role)
+        if active_task is not None:
+            payload = getattr(active_task, "payload", {})
+            execution_id = str(payload.get("execution_id") or "")
+            execution = self.workspace.ai_runtime_get_execution(execution_id) if execution_id else None
+            if execution is not None:
+                result = self._execution_result_from_record(execution)
+                self._show_result(result)
+                if str(result.get("status") or "").lower() == "awaiting_approval":
+                    self._approval_requested(execution_id, result)
+                else:
+                    self._current_execution_id = execution_id
+                    self._current_execution_status = str(result.get("status") or "queued")
+                    self._set_running_state(False, "Ya existe un diagnostico en curso.")
+                    self.run_button.setEnabled(True)
+                    self.cancel_active_button.setEnabled(True)
+                    self.message_label.setText("Ya existe un diagnostico en curso.")
+                return
         logger.info(
             "ai_runtime_diagnostic.button_clicked provider=%s role=%s cache_policy=%s",
             provider,
@@ -1765,7 +1884,9 @@ class DiagnosticsTab(QWidget):
         self.provider_label.setText(_fmt(result.get("provider")))
         self.model_label.setText(_fmt(result.get("model_id")))
         self.role_label.setText(_fmt(result.get("model_role")))
-        self.status_label.setText(_fmt(result.get("status")))
+        status = str(result.get("status") or "-")
+        self._current_execution_status = status
+        self.status_label.setText(_fmt(status))
         latency = result.get("latency") or {}
         if isinstance(latency, dict):
             self.latency_label.setText(f"{latency.get('latency_ms', 0)} ms")
@@ -1811,7 +1932,7 @@ class DiagnosticsTab(QWidget):
             self.error_label.setText("-")
             self.suggested_action_label.setText("-")
 
-        if str(result.get("status") or "").lower() != "awaiting_approval":
+        if status != "awaiting_approval":
             self._hide_approval_panel()
 
     def refresh(self) -> None:
@@ -1833,12 +1954,22 @@ class DiagnosticsTab(QWidget):
             self.cache_combo.setEnabled(False)
             self.auto_config_button.setEnabled(False)
             self.run_button.setEnabled(False)
+            self.cancel_active_button.setEnabled(False)
+            return
+        self._restore_ai_runtime_state()
+        current_status = str(self._current_execution_status or "").lower()
+        if current_status == "awaiting_approval":
+            self.message_label.setText("Esperando tu aprobacion.")
+            return
+        if current_status in {"queued", "preparing_context", "running", "validating"}:
+            self.message_label.setText("Ya existe un diagnostico en curso.")
             return
         self.run_button.setEnabled(True)
         self.provider_combo.setEnabled(True)
         self.role_combo.setEnabled(True)
         self.cache_combo.setEnabled(True)
         self.auto_config_button.setEnabled(True)
+        self.cancel_active_button.setEnabled(current_status in {"queued", "preparing_context", "awaiting_approval", "running", "validating"})
         if not self.workspace.ai_runtime_provider_status().get(self._selected_provider(), {}).get("configured"):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
         else:

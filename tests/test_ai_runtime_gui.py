@@ -11,13 +11,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLineEdit, QWidget, QMessageBox
 from PySide6.QtTest import QTest
 
-from creator_intelligence_studio.infrastructure.ai_runtime.models import AIExecutionError, AIModelCatalogEntry
+from creator_intelligence_studio.infrastructure.ai_runtime.models import AIExecutionError, AIExecutionRecord, AIModelCatalogEntry
 from creator_intelligence_studio.presentation.desktop import main_window as main_window_module
 from creator_intelligence_studio.presentation.desktop.main_window import MainWindow
 from creator_intelligence_studio.presentation.desktop.views.ai_runtime_overview_view import (
     AIRuntimeOverviewView,
     ProviderCredentialDialog,
 )
+from creator_intelligence_studio.presentation.desktop.views.task_center_view import TaskCenterView
 from tests.ai_runtime_test_support import FakeProvider, build_runtime_fixture
 from tests.test_ai_runtime_model_selection import build_role_catalog
 
@@ -100,7 +101,12 @@ class DesktopWorkspaceFacade:
         self.ui_state.last_page = key
 
     def register_background_task(self, **kwargs):
-        task = SimpleNamespace(task_id=f"task-{len(self._tasks) + 1}", **kwargs)
+        task = SimpleNamespace(
+            task_id=f"task-{len(self._tasks) + 1}",
+            created_at=kwargs.get("created_at", "2026-08-03T16:00:00Z"),
+            updated_at=kwargs.get("updated_at", "2026-08-03T16:00:00Z"),
+            **kwargs,
+        )
         self._tasks.append(task)
         return task
 
@@ -299,6 +305,42 @@ class DesktopWorkspaceFacade:
             rejected_by=rejected_by,
             rejection_reason=rejection_reason,
         )
+
+    def ai_runtime_cancel_diagnostic_execution(self, execution_uuid: str, *, cancelled_by: str | None = None, cancellation_reason: str | None = None):
+        task = self._background_task_for_execution(execution_uuid)
+        if task is not None:
+            self.update_background_task(
+                task.task_id,
+                status="interrupted",
+                progress_percent=100.0,
+                message=cancellation_reason or "Cancelada desde Task Center.",
+            )
+        return self.ai_runtime_service.cancel_diagnostic_execution(
+            execution_uuid,
+            cancelled_by=cancelled_by,
+            cancellation_reason=cancellation_reason,
+        )
+
+    def ai_runtime_active_diagnostic_task(self, provider: str | None = None, role: str | None = None):
+        active_statuses = {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+        active_ids = {
+            str(execution.get("execution_uuid") or "")
+            for execution in self.ai_runtime_service.list_executions(limit=200)
+            if execution.get("task_type") == "provider_diagnostic" and str(execution.get("status") or "").lower() in active_statuses
+        }
+        for task in reversed(self.background_tasks()):
+            payload = getattr(task, "payload", {})
+            if not isinstance(payload, dict) or payload.get("kind") != "ai_runtime_diagnostic":
+                continue
+            execution_id = str(payload.get("execution_id") or "")
+            if execution_id not in active_ids:
+                continue
+            if provider is not None and str(payload.get("provider") or "") != provider:
+                continue
+            if role is not None and str(payload.get("role") or "") != role:
+                continue
+            return task
+        return None
 
 
 def _patch_main_window_views():
@@ -878,6 +920,123 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         QTest.mouseClick(view.diagnostics_tab.review_budget_button, Qt.MouseButton.LeftButton)
         self.qt_app.processEvents()
         self.assertIs(view.tabs.currentWidget(), view.budget_tab)
+
+    def test_diagnostics_view_restores_awaiting_approval_after_restart(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        fixture.service.providers["openai"] = FakeProvider("openai")
+        workspace = DesktopWorkspaceFacade(fixture.service)
+        execution_id = "11111111-1111-1111-1111-111111111111"
+        fixture.repository.store_execution(
+            AIExecutionRecord(
+                execution_uuid=execution_id,
+                creator_id=None,
+                project_id=None,
+                task_type="provider_diagnostic",
+                operation="extract",
+                status="awaiting_approval",
+                requested_model_role="cheap_structured_model",
+                provider="openai",
+                model_catalog_id=fixture.model.id,
+                template_id=fixture.repository.get_prompt_template("provider_diagnostic").id,
+                privacy_class="selected_text_allowed",
+                quality_level="standard",
+                context_fingerprint=None,
+                request_fingerprint="approval-fingerprint",
+                input_summary_json={
+                    "request_id": "approval-request",
+                    "task_type": "provider_diagnostic",
+                    "provider": "openai",
+                    "model_id": fixture.model.id,
+                    "approval_summary": {
+                        "scope": "single_execution",
+                        "requires_approval": True,
+                        "policy": "budget_policy",
+                        "provider": "openai",
+                        "model_catalog_id": fixture.model.id,
+                        "model_id": fixture.model.model_id,
+                        "role": "cheap_structured_model",
+                        "estimated_cost_unknown": True,
+                        "estimated_cost_at_approval": {
+                            "minimum_cost": None,
+                            "maximum_cost": None,
+                            "currency": "USD",
+                            "pricing_version": None,
+                        },
+                    },
+                },
+                output_reference=None,
+                validation_status="rejected",
+                cache_status="active",
+                fallback_policy="none",
+                approval_required=True,
+                approved_at=None,
+                started_at="2026-08-03T16:00:00Z",
+                completed_at=None,
+                latency_ms=None,
+                error_category="budget_block",
+                error_code=None,
+                error_message_safe="Execution requires approval because the budget policy needs review.",
+                created_at="2026-08-03T16:00:00Z",
+                updated_at="2026-08-03T16:00:00Z",
+            )
+        )
+        workspace.register_background_task(
+            title="AI Provider Diagnostics",
+            status="waiting_approval",
+            stage_name="diagnostic",
+            video_title="openai / cheap_structured_model",
+            action_id="provider_diagnostic",
+            progress_percent=40.0,
+            message="Esperando tu aprobacion",
+            cancellable=True,
+            payload={
+                "kind": "ai_runtime_diagnostic",
+                "provider": "openai",
+                "role": "cheap_structured_model",
+                "cache_policy": "use",
+                "execution_id": execution_id,
+                "approval_state": "awaiting_approval",
+            },
+        )
+
+        second_view = AIRuntimeOverviewView(workspace)
+        self.assertEqual(second_view.diagnostics_tab.status_label.text(), "awaiting_approval")
+        self.assertFalse(second_view.diagnostics_tab.approval_group.isHidden())
+        self.assertIn("OpenAI", second_view.diagnostics_tab.approval_provider_label.text())
+        self.assertIn("precio", second_view.diagnostics_tab.approval_warning_label.text().lower())
+        self.assertEqual(second_view.diagnostics_tab.execution_label.text(), execution_id)
+        self.assertTrue(second_view.diagnostics_tab.approve_button.isEnabled())
+        self.assertTrue(second_view.diagnostics_tab.reject_button.isEnabled())
+        self.assertEqual(fixture.service.providers["openai"].calls, 0)
+
+    def test_task_center_shows_ai_runtime_details_and_cancels_execution(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        fixture.service.providers["openai"] = FakeProvider("openai")
+        workspace = DesktopWorkspaceFacade(fixture.service)
+        result = workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")
+        self.assertEqual(getattr(result, "status", None), "awaiting_approval")
+
+        task_center = TaskCenterView(workspace)
+        self.assertEqual(task_center.table.rowCount(), 1)
+        self.assertIn(str(result.execution_id), task_center.table.item(0, 5).text())
+        self.assertIn("openai", task_center.table.item(0, 1).text().lower())
+
+        task_center.table.selectRow(0)
+        self.qt_app.processEvents()
+        with patch.object(QMessageBox, "information") as info_mock:
+            QTest.mouseClick(task_center.open_button, Qt.MouseButton.LeftButton)
+            self.assertTrue(info_mock.called)
+            self.assertIn(str(result.execution_id), str(info_mock.call_args.args[2]))
+
+        QTest.mouseClick(task_center.cancel_button, Qt.MouseButton.LeftButton)
+        self.qt_app.processEvents()
+        execution = fixture.service.get_execution(result.execution_id)
+        self.assertIsNotNone(execution)
+        self.assertEqual(execution["status"], "cancelled")
+        self.assertEqual(fixture.service.providers["openai"].calls, 0)
+        self.assertIn("interrupted", workspace.background_tasks()[0].status)
 
     def test_history_view_loads_detail_without_secrets(self) -> None:
         self.workspace.run_ai_runtime_diagnostic(provider="openai", role="cheap_structured_model")

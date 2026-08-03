@@ -1385,6 +1385,77 @@ class AIRuntimeService:
         )
         return updated.to_dict()
 
+    def recover_orphaned_diagnostic_executions(self) -> list[dict[str, object]]:
+        recovered: list[dict[str, object]] = []
+        now = self._now()
+        for execution in self.repository.list_executions(limit=200):
+            if execution.task_type != "provider_diagnostic":
+                continue
+            if execution.status not in {"queued", "preparing_context", "running", "validating"}:
+                continue
+            updated = self.repository.store_execution(
+                replace(
+                    execution,
+                    status="cancelled",
+                    validation_status="rejected",
+                    completed_at=execution.completed_at or now,
+                    latency_ms=execution.latency_ms or 0,
+                    error_category="interrupted",
+                    error_code=None,
+                    error_message_safe="La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.",
+                    approved_at=execution.approved_at,
+                    updated_at=now,
+                    input_summary_json={
+                        **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
+                        "recovery_state": "interrupted",
+                        "interrupted_at": now,
+                        "interrupted_reason": "startup_recovery",
+                        "retry_allowed": True,
+                    },
+                )
+            )
+            recovered.append(updated.to_dict())
+        return recovered
+
+    def cancel_diagnostic_execution(
+        self,
+        execution_uuid: str,
+        *,
+        cancelled_by: str | None = None,
+        cancellation_reason: str | None = None,
+    ) -> dict[str, object]:
+        execution = self.repository.get_execution_by_uuid(execution_uuid)
+        if execution is None:
+            raise ValueError("Execution not found.")
+        if execution.task_type != "provider_diagnostic":
+            raise ValueError("Execution is not a diagnostic run.")
+        if execution.status in {"completed", "completed_with_warnings", "failed", "cancelled", "blocked_by_budget", "blocked_by_privacy", "blocked_by_credentials", "blocked_by_provider", "blocked_by_model"}:
+            return execution.to_dict()
+        now = self._now()
+        updated = self.repository.store_execution(
+            replace(
+                execution,
+                status="cancelled",
+                validation_status="rejected" if execution.status == "awaiting_approval" else execution.validation_status,
+                completed_at=now,
+                latency_ms=execution.latency_ms or 0,
+                error_category="cancelled_by_user" if cancelled_by else "interrupted",
+                error_code=None,
+                error_message_safe=cancellation_reason or "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.",
+                approved_at=execution.approved_at,
+                updated_at=now,
+                input_summary_json={
+                    **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
+                    "recovery_state": "cancelled_by_user" if cancelled_by else "interrupted",
+                    "cancelled_by": cancelled_by,
+                    "cancelled_at": now,
+                    "cancelled_reason": cancellation_reason,
+                    "retry_allowed": True,
+                },
+            )
+        )
+        return updated.to_dict()
+
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 50) -> list[dict[str, object]]:
         return [execution.to_dict() for execution in self.repository.list_executions(creator_id=creator_id, provider=provider, limit=limit)]
 

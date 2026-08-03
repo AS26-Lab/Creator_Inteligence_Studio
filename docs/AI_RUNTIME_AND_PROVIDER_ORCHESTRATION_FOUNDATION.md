@@ -286,6 +286,27 @@ Rules:
 - when pricing is not verified, the UI must say so explicitly and allow a manual approval for the minimal diagnostic path;
 - history must show pending approval, approved, rejected or cancelled states, along with the actor, date, reason, provider, model, and whether pricing was unknown.
 
+### Execution Recovery
+
+AI runtime executions keep the same persisted row across approval, retry, cancellation, and recovery.
+
+Recovery rules:
+
+- `queued`, `preparing_context`, `running`, and `validating` are active states only while a live worker or task lease still exists;
+- `awaiting_approval` is recoverable and must remain visible after restart so the same execution can be approved or rejected;
+- a startup recovery pass reconciles orphaned active rows and marks stale rows as interrupted or cancelled with a safe reason;
+- the app must not call the provider automatically during recovery;
+- the app must not create a duplicate execution just to report that one already exists;
+- a live execution is the one that still has a recognized task or worker heartbeat, or is waiting for human approval;
+- a stale or interrupted execution can be retried, but a live one must block duplicate provider calls.
+
+Cancellation and retry:
+
+- canceling an active AI runtime execution keeps the row in history and records the actor and time;
+- cancellation should clear the active fingerprint so a later retry can create a new attempt;
+- retry after `cancelled`, `interrupted`, `failed`, or `rejected_by_user` creates a new execution attempt linked to the same semantic request;
+- retry after recovery must not reuse a still-live execution row.
+
 Credential validation and model catalog synchronization are separate steps:
 
 - validation confirms the stored credential can reach the provider;
@@ -474,6 +495,12 @@ Advanced manual selection remains available:
 Diagnostic work can appear as `ai_runtime_diagnostic`.
 
 The Task Center must treat it as a normal background task with safe status and retry behavior.
+
+For AI runtime diagnostics it should show the persisted execution identity, provider, model, status, and last activity, and it should allow:
+
+- opening the active execution details;
+- canceling a live execution when the worker or lease still exists;
+- retrying only after an execution is stale, interrupted, cancelled, failed, or rejected.
 
 ## Security Limits
 

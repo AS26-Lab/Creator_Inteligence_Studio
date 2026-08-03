@@ -374,6 +374,73 @@ class AIOrchestrator:
             timestamps={"created_at": now, "started_at": now, "completed_at": now},
         )
 
+    def _awaiting_approval_existing_result(
+        self,
+        *,
+        execution: AIExecutionRecord,
+        request: AIExecutionRequest,
+        request_hash: str,
+        privacy,
+        error: AIExecutionError,
+        provider: str | None,
+        prompt_template: AIPromptTemplate | None,
+        assignment: AIRoleAssignment | None = None,
+        model_entry: AIModelCatalogEntry | None = None,
+        context_fingerprint: str | None = None,
+    ) -> AIExecutionResult:
+        summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+        approval_summary = summary.get("approval_summary") if isinstance(summary.get("approval_summary"), dict) else {}
+        estimated_cost = approval_summary.get("estimated_cost_at_approval") if isinstance(approval_summary, dict) else None
+        if not isinstance(estimated_cost, dict):
+            estimated_cost = {
+                "minimum_cost": None,
+                "maximum_cost": None,
+                "currency": "USD",
+                "pricing_version": None,
+                "notes": "Precio no verificado. La ejecucion requiere aprobacion manual.",
+            }
+        warnings = (
+            "Creator Intelligence Studio todavia no tiene un precio verificado para este modelo. La llamada puede generar un cargo en tu cuenta de OpenAI.",
+        ) if estimated_cost.get("minimum_cost") is None or estimated_cost.get("maximum_cost") is None else ()
+        return AIExecutionResult(
+            execution_id=execution.execution_uuid,
+            request_id=request.request_id,
+            status="awaiting_approval",
+            provider=provider,
+            model_id=getattr(model_entry, "model_id", None),
+            model_version=getattr(model_entry, "snapshot_or_version", None),
+            model_role=assignment.role if assignment else request.model_role,
+            result=None,
+            structured_output=None,
+            validation=AIExecutionValidation(
+                status="requires_human_review",
+                schema_name=request.task_type,
+                issues=(error.safe_message,),
+                warnings=("awaiting_approval",),
+            ),
+            usage=AIExecutionUsage(),
+            cost=AICostSummary(
+                estimated_min_cost=estimated_cost.get("minimum_cost"),
+                estimated_max_cost=estimated_cost.get("maximum_cost"),
+                calculated_cost=None,
+                provider_reported_cost=None,
+                currency=str(estimated_cost.get("currency") or "USD"),
+                pricing_version=estimated_cost.get("pricing_version"),
+                notes=str(estimated_cost.get("notes") or error.safe_message),
+            ),
+            latency=AIExecutionLatency(latency_ms=execution.latency_ms or 0, started_at=execution.started_at, completed_at=execution.completed_at or execution.updated_at or execution.created_at, attempts=1),
+            cache=AIExecutionCacheInfo(cache_status=execution.cache_status, hit_count=0, refresh_requested=False),
+            fallback={"used": False, "policy": execution.fallback_policy, "approval_required": True},
+            warnings=warnings,
+            error=error,
+            provenance={
+                "request_fingerprint": request_hash,
+                "context_fingerprint": context_fingerprint,
+                "approval": approval_summary or None,
+            },
+            timestamps={"created_at": execution.created_at, "started_at": execution.started_at, "completed_at": execution.completed_at or execution.updated_at or execution.created_at},
+        )
+
     def run_diagnostic(
         self,
         *,
@@ -511,6 +578,19 @@ class AIOrchestrator:
                 safe_message="A matching execution is already in progress.",
                 suggested_action="Wait for the current execution to finish.",
             )
+            if duplicate_execution.status == "awaiting_approval" and duplicate_execution.approved_at is None:
+                return self._awaiting_approval_existing_result(
+                    execution=duplicate_execution,
+                    request=request,
+                    request_hash=request_hash,
+                    privacy=privacy,
+                    error=error,
+                    provider=provider_name,
+                    prompt_template=prompt_template,
+                    assignment=assignment,
+                    model_entry=model_entry,
+                    context_fingerprint=context_fingerprint,
+                )
             if duplicate_execution.request_fingerprint == request_hash:
                 now = _utc_now()
                 return AIExecutionResult(

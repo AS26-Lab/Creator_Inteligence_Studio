@@ -90,6 +90,24 @@ class TaskCenterView(QWidget):
     def _is_ai_runtime_diagnostic_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "ai_runtime_diagnostic")
 
+    def _ai_runtime_task_details(self, task) -> dict[str, str]:
+        payload = getattr(task, "payload", {}) if task is not None else {}
+        execution_id = str(payload.get("execution_id") or "")
+        provider = str(payload.get("provider") or "auto")
+        role = str(payload.get("role") or payload.get("model_role") or "provider_diagnostic")
+        model = str(payload.get("model_id") or payload.get("model_catalog_id") or "-")
+        status = str((payload.get("approval_state") or task.status) if task is not None else "")
+        return {
+            "execution_id": execution_id,
+            "provider": provider,
+            "role": role,
+            "model": model,
+            "status": status,
+            "updated_at": str(getattr(task, "updated_at", "") or ""),
+            "created_at": str(getattr(task, "created_at", "") or ""),
+            "message": str(getattr(task, "message", "") or ""),
+        }
+
     def _is_creator_language_analysis_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "creator_language_analysis")
 
@@ -176,14 +194,31 @@ class TaskCenterView(QWidget):
         self.table.show()
         for row_index, task in enumerate(tasks):
             self.table.insertRow(row_index)
+            if self._is_ai_runtime_diagnostic_task(task):
+                details = self._ai_runtime_task_details(task)
+                title = f"AI Provider Diagnostics ({details['provider']})"
+                video_value = f"{details['provider']} / {details['model']}"
+                stage_value = str(getattr(task, "stage_name", "") or details["status"] or "")
+                status_value = str(getattr(task, "status", "") or details["status"] or "")
+                message_value = details["message"]
+                if details["execution_id"]:
+                    message_value = f"{message_value} | execution_id={details['execution_id']}" if message_value else f"execution_id={details['execution_id']}"
+                updated_value = f"{getattr(task, 'updated_at', '')} | started {details['created_at']}" if details["created_at"] else str(getattr(task, "updated_at", "") or "")
+            else:
+                title = task.title
+                video_value = self._task_video_title(task) or self._task_video_id(task) or ""
+                stage_value = task.stage_name or ""
+                status_value = task.status
+                message_value = task.message or task.error or ""
+                updated_value = task.updated_at
             values = [
-                task.title,
-                self._task_video_title(task) or self._task_video_id(task) or "",
-                task.stage_name or "",
-                task.status,
+                title,
+                video_value,
+                stage_value,
+                status_value,
                 f"{task.progress_percent:.1f}%",
-                task.message or task.error or "",
-                task.updated_at,
+                message_value,
+                updated_value,
                 task.task_id,
             ]
             for column, value in enumerate(values):
@@ -240,11 +275,18 @@ class TaskCenterView(QWidget):
                 QMessageBox.information(self, "Task Center", f"Reporte de experimento disponible en: {report}")
             return
         if self._is_ai_runtime_diagnostic_task(task):
-            payload = getattr(task, "payload", {})
+            details = self._ai_runtime_task_details(task)
             QMessageBox.information(
                 self,
                 "Task Center",
-                f"Diagnostico IA: {payload.get('provider') or 'auto'} / {payload.get('role') or 'provider_diagnostic'} / {task.status}",
+                (
+                    "Diagnostico IA\n"
+                    f"execution_id: {details['execution_id'] or '-'}\n"
+                    f"proveedor: {details['provider']}\n"
+                    f"modelo: {details['model']}\n"
+                    f"estado: {details['status'] or task.status}\n"
+                    f"actualizada: {details['updated_at'] or task.updated_at}"
+                ),
             )
             return
         if self._is_creator_language_analysis_task(task):
@@ -400,7 +442,16 @@ class TaskCenterView(QWidget):
         elif self._is_analytics_lab_analysis_task(task) or self._is_analytics_lab_report_task(task) or self._is_experiment_evaluation_task(task) or self._is_experiment_report_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_ai_runtime_diagnostic_task(task):
-            self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+            details = self._ai_runtime_task_details(task)
+            execution_id = details["execution_id"]
+            if execution_id:
+                self.workspace.ai_runtime_cancel_diagnostic_execution(
+                    execution_id,
+                    cancelled_by="usuario",
+                    cancellation_reason="Cancelada desde Task Center.",
+                )
+            else:
+                self.workspace.interrupt_background_task(task.task_id, "Cancelada desde Task Center")
         elif self._is_creator_language_analysis_task(task) or self._is_creator_language_snapshot_task(task) or self._is_creator_language_export_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_packaging_title_analysis_task(task) or self._is_packaging_thumbnail_analysis_task(task) or self._is_packaging_brand_profile_task(task) or self._is_packaging_pair_evaluation_task(task) or self._is_packaging_frame_candidates_task(task) or self._is_packaging_concept_task(task) or self._is_packaging_prompt_task(task) or self._is_packaging_review_task(task) or self._is_packaging_export_task(task):
@@ -485,14 +536,14 @@ class TaskCenterView(QWidget):
             self.refresh()
             return
         if self._is_ai_runtime_diagnostic_task(task):
-            payload = getattr(task, "payload", {})
-            if self.workspace.ai_runtime_service is not None:
-                self.workspace.ai_runtime_service.diagnostic_run(
-                    provider=payload.get("provider"),
-                    role=payload.get("role"),
-                    cache_policy=payload.get("cache_policy") or "use",
-                )
-                self.workspace.complete_background_task(task.task_id, "Diagnostico de IA completado")
+            details = self._ai_runtime_task_details(task)
+            provider = details["provider"] if details["provider"] != "auto" else None
+            role = details["role"] if details["role"] != "provider_diagnostic" else None
+            self.workspace.run_ai_runtime_diagnostic(
+                provider=provider,
+                role=role,
+                cache_policy=str(getattr(task, "payload", {}).get("cache_policy") or "use"),
+            )
             self.refresh()
             return
         if self._is_creator_language_analysis_task(task):
