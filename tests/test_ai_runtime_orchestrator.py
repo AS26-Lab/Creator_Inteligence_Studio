@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from creator_intelligence_studio.infrastructure.ai_runtime.credentials import CredentialStore, InMemoryCredentialBackend
 from creator_intelligence_studio.infrastructure.ai_runtime.models import AIExecutionError, AIExecutionRecord, AIExecutionRequest, AIExecutionUsage, AIBudgetPolicy, AIRuntimeSetting, build_request_fingerprint
+from creator_intelligence_studio.infrastructure.ai_runtime.models import AIModelCatalogEntry
 from creator_intelligence_studio.infrastructure.ai_runtime.orchestrator import AIOrchestrator
 from creator_intelligence_studio.infrastructure.ai_runtime.policies import AIResultValidator, BudgetPolicy, CostEstimator, CostTracker, PrivacyPolicyEngine
 from creator_intelligence_studio.infrastructure.ai_runtime.repository import SQLiteAIRuntimeRepository
@@ -471,6 +472,186 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
         self.assertEqual(second.cost.calculated_cost, 0.0)
         self.assertEqual(len(self.fixture.repository.list_usage_records()), 1)
         self.assertEqual(provider.calls, 1)
+
+    def test_unknown_price_enters_awaiting_approval_without_provider_call(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai")
+        fixture.service.providers["openai"] = provider
+        orchestrator = AIOrchestrator(
+            model_registry=fixture.model_registry,
+            prompt_registry=fixture.prompt_registry,
+            credential_store=fixture.credential_store,
+            repository=fixture.repository,
+            providers={"openai": provider},
+            privacy_policy=PrivacyPolicyEngine(),
+            cost_estimator=CostEstimator(),
+            cost_tracker=CostTracker(),
+            result_validator=AIResultValidator(),
+        )
+
+        result = orchestrator.run(_request(request_id="unknown-price"), provider="openai")
+
+        self.assertEqual(result.status, "awaiting_approval")
+        self.assertEqual(result.validation.status, "requires_human_review")
+        self.assertIsNone(result.cost.estimated_min_cost)
+        self.assertIsNone(result.cost.estimated_max_cost)
+        self.assertEqual(provider.calls, 0)
+
+    def test_approval_continues_once_and_is_idempotent(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai", execution_delay_ms=25)
+        fixture.service.providers["openai"] = provider
+        awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
+        self.assertEqual(awaiting.status, "awaiting_approval")
+        execution_id = awaiting.execution_id
+
+        completed = fixture.service.approve_and_run_diagnostic(execution_id, approved_by="tester", approval_reason="Manual review")
+        repeated = fixture.service.approve_and_run_diagnostic(execution_id, approved_by="tester", approval_reason="Manual review")
+
+        self.assertIn(completed.status, {"completed", "completed_with_warnings"})
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(repeated.status, completed.status)
+        self.assertEqual(provider.calls, 1)
+        linked = fixture.repository.list_executions(limit=10)
+        self.assertTrue(any((execution.input_summary_json or {}).get("approval_source_execution_id") == execution_id for execution in linked))
+
+    def test_reject_diagnostic_execution_does_not_call_provider(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai")
+        fixture.service.providers["openai"] = provider
+        awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
+        self.assertEqual(awaiting.status, "awaiting_approval")
+        rejected = fixture.service.reject_diagnostic_execution(awaiting.execution_id, rejected_by="tester", rejection_reason="No")
+
+        self.assertEqual(provider.calls, 0)
+        self.assertEqual(rejected["status"], "cancelled")
+        self.assertEqual(rejected["error_category"], "cancelled_by_user")
+        self.assertIn("no se realizo ningun cargo", (rejected.get("error_message_safe") or "").lower())
+
+    def test_approval_invalidates_when_model_changes(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai")
+        fixture.service.providers["openai"] = provider
+        awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
+        self.assertEqual(awaiting.status, "awaiting_approval")
+        alternate = fixture.repository.upsert_model_catalog_entry(
+            replace(
+                fixture.model,
+                id=None,
+                model_id="diag-model-2",
+                display_name="Diagnostic Model 2",
+                input_price_per_million=1.5,
+                output_price_per_million=1.5,
+                cached_input_price_per_million=0.1,
+                updated_at="2026-07-29T00:00:00Z",
+            )
+        )
+        fixture.service.assign_role(
+            role="cheap_structured_model",
+            provider="openai",
+            model_id=alternate.model_id,
+            display_name=alternate.display_name,
+            creator_id=None,
+            is_default=True,
+            is_enabled=True,
+            fallback_policy="none",
+            quality_level="standard",
+            status=alternate.status,
+            capabilities_json=dict(alternate.capabilities_json),
+            snapshot_or_version=alternate.snapshot_or_version,
+        )
+
+        failed = fixture.service.approve_and_run_diagnostic(awaiting.execution_id, approved_by="tester", approval_reason="Manual review")
+
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(provider.calls, 0)
+        self.assertIn("cambio", (failed.error.safe_message or "").lower())
+
+    def test_approval_invalidates_when_cost_changes(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai")
+        fixture.service.providers["openai"] = provider
+        awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
+        self.assertEqual(awaiting.status, "awaiting_approval")
+        fixture.repository.upsert_model_catalog_entry(
+            replace(
+                fixture.model,
+                input_price_per_million=3.0,
+                output_price_per_million=3.0,
+                cached_input_price_per_million=0.2,
+                updated_at="2026-07-29T00:00:00Z",
+            )
+        )
+
+        failed = fixture.service.approve_and_run_diagnostic(awaiting.execution_id, approved_by="tester", approval_reason="Manual review")
+
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(provider.calls, 0)
+        self.assertIn("costo", (failed.error.safe_message or "").lower())
+
+    def test_approval_invalidates_when_provider_changes(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        provider = FakeProvider("openai")
+        fixture.service.providers["openai"] = provider
+        fixture.service.providers["anthropic"] = FakeProvider("anthropic")
+        awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
+        self.assertEqual(awaiting.status, "awaiting_approval")
+        alternate = fixture.repository.upsert_model_catalog_entry(
+            AIModelCatalogEntry(
+                provider="anthropic",
+                model_id="anthropic-diag-model",
+                display_name="Anthropic Diagnostic Model",
+                snapshot_or_version="v1",
+                status="approved",
+                capabilities_json={"structured_output": True},
+                context_limit=4096,
+                supports_structured_output=True,
+                supports_image_input=False,
+                supports_audio_input=False,
+                input_price_per_million=1.0,
+                output_price_per_million=1.0,
+                cached_input_price_per_million=0.1,
+                pricing_currency="USD",
+                pricing_effective_at="2026-07-29T00:00:00Z",
+                last_verified_at="2026-07-29T00:00:00Z",
+            )
+        )
+        fixture.service.assign_role(
+            role="cheap_structured_model",
+            provider="anthropic",
+            model_id=alternate.model_id,
+            display_name=alternate.display_name,
+            creator_id=None,
+            is_default=True,
+            is_enabled=True,
+            fallback_policy="none",
+            quality_level="standard",
+            status=alternate.status,
+            capabilities_json=dict(alternate.capabilities_json),
+            snapshot_or_version=alternate.snapshot_or_version,
+        )
+        awaiting_record = fixture.repository.get_execution_by_uuid(awaiting.execution_id)
+        self.assertIsNotNone(awaiting_record)
+        fixture.repository.store_execution(
+            replace(
+                awaiting_record,
+                provider="anthropic",
+                model_catalog_id=alternate.id,
+                updated_at="2026-07-29T00:00:00Z",
+            )
+        )
+
+        failed = fixture.service.approve_and_run_diagnostic(awaiting.execution_id, approved_by="tester", approval_reason="Manual review")
+
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(provider.calls, 0)
+        self.assertIn("proveedor", (failed.error.safe_message or "").lower())
 
 
 if __name__ == "__main__":

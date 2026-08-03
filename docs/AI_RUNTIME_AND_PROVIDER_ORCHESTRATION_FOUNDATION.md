@@ -269,6 +269,23 @@ Fingerprint rules:
 - `bypass` and `refresh` always start a new execution, but they may share the same historical fingerprint as prior attempts;
 - only active executions block a duplicate diagnostic while a run is still in progress.
 
+### Approval Workflow
+
+When the budget policy determines that a diagnostic needs approval, the execution pauses in `awaiting_approval` instead of failing validation.
+
+Rules:
+
+- `awaiting_approval` means the execution is paused for a human decision;
+- the validation status for that state is `requires_human_review`, not `rejected`;
+- the GUI must surface provider, model, role, reason, estimated cost, currency, scope, and the policy that triggered approval;
+- approval is per execution, not global;
+- approval metadata must record who approved, when, the approval reason, the estimated cost at approval, and the provider/model at approval;
+- approval must be invalidated if the provider, model, privacy decision, or estimated cost changes materially before continuation;
+- rejection must cancel the execution, skip the provider call, and preserve a safe trace in history;
+- price unknown is not treated as zero;
+- when pricing is not verified, the UI must say so explicitly and allow a manual approval for the minimal diagnostic path;
+- history must show pending approval, approved, rejected or cancelled states, along with the actor, date, reason, provider, model, and whether pricing was unknown.
+
 Credential validation and model catalog synchronization are separate steps:
 
 - validation confirms the stored credential can reach the provider;

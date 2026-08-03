@@ -11,10 +11,17 @@ from typing import Any
 from creator_intelligence_studio.infrastructure.ai_runtime import (
     AIBudgetPolicy,
     AICache,
+    AIExecutionCacheInfo,
+    AICostSummary,
     AIExecutionRequest,
+    AIExecutionRecord,
     AIExecutionResult,
+    AIExecutionLatency,
     AIExecutionError,
+    AIExecutionPayload,
+    AIExecutionUsage,
     AIModelCatalogEntry,
+    AIExecutionValidation,
     AIProviderDiagnostic,
     AIProviderModelSyncReport,
     AIPromptTemplate,
@@ -280,6 +287,211 @@ class AIRuntimeService:
         from datetime import datetime, timezone
 
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _execution_to_request(self, execution: AIExecutionRecord) -> AIExecutionRequest:
+        summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+        metadata = summary.get("metadata") if isinstance(summary.get("metadata"), dict) else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return AIExecutionRequest(
+            request_id=str(summary.get("request_id") or f"{execution.execution_uuid}:retry"),
+            task_type=execution.task_type,
+            operation=execution.operation,
+            creator_id=execution.creator_id,
+            project_id=execution.project_id,
+            model_role=execution.requested_model_role,
+            quality_level=execution.quality_level,
+            privacy_class=execution.privacy_class,
+            input_data={
+                "status": "ok",
+                "logical_role": execution.requested_model_role or "cheap_structured_model",
+                "short_message": "Provider diagnostic request.",
+            },
+            context_package={},
+            output_contract={"required": ["status", "logical_role", "short_message"]},
+            budget=dict(summary.get("budget") or {}),
+            cache_policy=str(summary.get("cache_policy") or "use"),
+            fallback_policy=str(summary.get("fallback_policy") or "none"),
+            approval_policy="not_required",
+            metadata=dict(metadata),
+        )
+
+    def _approval_payload(self, *, execution: AIExecutionRecord, approved: bool, actor: str | None, reason: str | None, now: str) -> dict[str, object]:
+        summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+        approval_summary = summary.get("approval_summary") if isinstance(summary.get("approval_summary"), dict) else {}
+        payload: dict[str, object] = {
+            "execution_id": execution.execution_uuid,
+            "decision": "approved" if approved else "rejected",
+            "actor": actor,
+            "reason": reason,
+            "approved_at": now if approved else None,
+            "rejected_at": now if not approved else None,
+            "provider_at_decision": execution.provider,
+            "model_at_decision": execution.model_catalog_id,
+            "role_at_decision": execution.requested_model_role,
+            "scope": approval_summary.get("scope") or "single_execution",
+            "estimated_cost_at_decision": approval_summary.get("estimated_cost_at_approval"),
+            "approval_summary": approval_summary,
+        }
+        return payload
+
+    def _approval_metadata(self, execution: AIExecutionRecord) -> dict[str, object] | None:
+        summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+        approval_summary = summary.get("approval_summary")
+        if isinstance(approval_summary, dict):
+            return approval_summary
+        if summary.get("approval_state") == "approved":
+            approval_summary = summary.get("approval_summary")
+            if isinstance(approval_summary, dict):
+                return approval_summary
+        payloads = self.repository.list_payloads(execution.execution_uuid)
+        for payload in payloads:
+            if payload.payload_type != "approval_decision" or not isinstance(payload.content_json, dict):
+                continue
+            if payload.content_json.get("decision") == "approved":
+                approval_summary = payload.content_json.get("approval_summary")
+                if isinstance(approval_summary, dict):
+                    return approval_summary
+        return None
+
+    def _linked_execution(self, execution_uuid: str) -> AIExecutionRecord | None:
+        for execution in self.repository.list_executions(limit=200):
+            summary = execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}
+            if summary.get("approval_source_execution_id") == execution_uuid:
+                return execution
+        return None
+
+    def _approval_is_still_valid(self, execution: AIExecutionRecord) -> tuple[bool, str]:
+        request = self._execution_to_request(execution)
+        privacy = self.orchestrator.privacy_policy.evaluate(request)
+        if privacy.decision == "blocked":
+            return False, "La privacidad ya no permite continuar esta ejecucion."
+        approval_summary = self._approval_metadata(execution)
+        resolved = self.model_registry.resolve_role(
+            execution.requested_model_role or "",
+            creator_id=execution.creator_id,
+            provider=execution.provider,
+        )
+        if resolved is None:
+            return False, "El modelo aprobado ya no esta disponible."
+        assignment, model = resolved
+        if assignment.provider != execution.provider:
+            return False, "El proveedor cambio desde la aprobacion."
+        if execution.model_catalog_id is not None and model.id != execution.model_catalog_id:
+            return False, "El modelo cambio desde la aprobacion."
+        if isinstance(approval_summary, dict):
+            approved_provider = approval_summary.get("provider")
+            approved_model_id = approval_summary.get("model_id")
+            approved_model_catalog_id = approval_summary.get("model_catalog_id")
+            if approved_provider is not None and approved_provider != execution.provider:
+                return False, "El proveedor cambio desde la aprobacion."
+            if approved_model_id is not None and approved_model_id != model.model_id:
+                return False, "El modelo cambio desde la aprobacion."
+            if approved_model_catalog_id is not None and approved_model_catalog_id != model.id:
+                return False, "El modelo cambio desde la aprobacion."
+        current_estimate = self.orchestrator.cost_estimator.estimate(model, input_tokens=8, output_tokens=32)
+        current_cost = {
+            "minimum_cost": current_estimate.minimum_cost,
+            "maximum_cost": current_estimate.maximum_cost,
+            "currency": current_estimate.currency,
+            "pricing_version": current_estimate.pricing_version,
+        }
+        if approval_summary is not None:
+            approved_cost = approval_summary.get("estimated_cost_at_approval")
+            if not isinstance(approved_cost, dict):
+                return False, "No se puede verificar el costo aprobado."
+            if approved_cost.get("minimum_cost") != current_cost["minimum_cost"] or approved_cost.get("maximum_cost") != current_cost["maximum_cost"]:
+                return False, "El costo estimado cambio desde la aprobacion."
+            if approved_cost.get("currency") != current_cost["currency"]:
+                return False, "La moneda del costo estimado cambio desde la aprobacion."
+        return True, ""
+
+    def _result_from_execution(self, execution: AIExecutionRecord) -> AIExecutionResult:
+        payloads = self.repository.list_payloads(execution.execution_uuid)
+        usage_records = self.repository.list_usage_records(execution.execution_uuid)
+        validated_payload = next((payload for payload in payloads if payload.payload_type == "validated_result"), None)
+        validation_report = next((payload for payload in payloads if payload.payload_type == "validation_report"), None)
+        approval_payload = next((payload for payload in payloads if payload.payload_type == "approval_decision"), None)
+        result_text = validated_payload.content_text if validated_payload else None
+        structured_output = validated_payload.content_json if validated_payload else None
+        validation = AIExecutionValidation(
+            status=execution.validation_status or "rejected",
+            schema_name=execution.task_type,
+            issues=(),
+            warnings=(),
+        )
+        if validation_report and isinstance(validation_report.content_json, dict):
+            validation = AIExecutionValidation(
+                status=str(validation_report.content_json.get("status") or validation.status),
+                schema_name=str(validation_report.content_json.get("schema_name") or execution.task_type),
+                issues=tuple(validation_report.content_json.get("issues") or ()),
+                warnings=tuple(validation_report.content_json.get("warnings") or ()),
+            )
+        usage = AIExecutionUsage()
+        if usage_records:
+            record = usage_records[0]
+            usage = AIExecutionUsage(
+                input_tokens=record.input_tokens,
+                output_tokens=record.output_tokens,
+                cached_input_tokens=record.cached_input_tokens,
+                reasoning_tokens=record.reasoning_tokens,
+                provider_reported_cost=record.provider_reported_cost,
+                calculated_cost=record.calculated_cost,
+                currency=record.currency,
+                pricing_version=record.pricing_version,
+                calculation_notes=record.calculation_notes,
+            )
+        cost = AICostSummary(
+            estimated_min_cost=None,
+            estimated_max_cost=None,
+            calculated_cost=usage.calculated_cost if usage_records else None,
+            provider_reported_cost=usage.provider_reported_cost,
+            currency=usage.currency,
+            pricing_version=usage.pricing_version,
+            notes="Reconstructed from persisted execution.",
+        )
+        if isinstance(execution.input_summary_json, dict) and isinstance(execution.input_summary_json.get("approval_summary"), dict):
+            approval_summary = execution.input_summary_json["approval_summary"]
+        elif approval_payload and isinstance(approval_payload.content_json, dict):
+            approval_summary = approval_payload.content_json.get("approval_summary")
+        else:
+            approval_summary = None
+        provenance = {"approval": approval_summary} if isinstance(approval_summary, dict) else {}
+        return AIExecutionResult(
+            execution_id=execution.execution_uuid,
+            request_id=str((execution.input_summary_json or {}).get("request_id") or execution.execution_uuid),
+            status=execution.status,
+            provider=execution.provider,
+            model_id=str((execution.input_summary_json or {}).get("model_id") or execution.model_catalog_id or ""),
+            model_version=str((execution.input_summary_json or {}).get("model_version") or ""),
+            model_role=execution.requested_model_role,
+            result=result_text,
+            structured_output=structured_output if isinstance(structured_output, dict) else None,
+            validation=validation,
+            usage=usage,
+            cost=cost,
+            latency=AIExecutionLatency(
+                latency_ms=execution.latency_ms,
+                started_at=execution.started_at,
+                completed_at=execution.completed_at,
+                attempts=1,
+            ),
+            cache=AIExecutionCacheInfo(
+                cache_status=execution.cache_status,
+                cache_key=None,
+                hit_count=0,
+                refresh_requested=False,
+            ),
+            fallback={"used": False, "policy": execution.fallback_policy},
+            warnings=(),
+            error=None,
+            provenance=provenance,
+            timestamps={
+                "created_at": execution.created_at,
+                "started_at": execution.started_at,
+                "completed_at": execution.completed_at,
+            },
+        )
 
     def status(self) -> AIRuntimeStatus:
         return AIRuntimeStatus(
@@ -993,6 +1205,185 @@ class AIRuntimeService:
         cache_policy: str = "use",
     ) -> AIExecutionResult:
         return self.orchestrator.run_diagnostic(provider=provider, role=role, cache_policy=cache_policy)
+
+    def approve_and_run_diagnostic(
+        self,
+        execution_uuid: str,
+        *,
+        approved_by: str | None = None,
+        approval_reason: str | None = None,
+    ) -> AIExecutionResult:
+        execution = self.repository.get_execution_by_uuid(execution_uuid)
+        if execution is None:
+            raise ValueError("Execution not found.")
+        if execution.status == "cancelled":
+            raise ValueError("Execution was cancelled and cannot be approved.")
+
+        linked = self._linked_execution(execution_uuid)
+        if linked is not None:
+            return self._result_from_execution(linked)
+
+        if execution.status != "awaiting_approval":
+            raise ValueError("Execution is not waiting for approval.")
+
+        request = self._execution_to_request(execution)
+        valid, invalid_reason = self._approval_is_still_valid(execution)
+        if not valid:
+            now = self._now()
+            payload = self._approval_payload(execution=execution, approved=False, actor=approved_by, reason=invalid_reason, now=now)
+            payload["decision"] = "invalidated"
+            self.repository.store_payload(
+                AIExecutionPayload(
+                    execution_id=execution.execution_uuid,
+                    payload_type="approval_decision",
+                    content_json=payload,
+                    content_text="invalidated",
+                    content_hash=execution.request_fingerprint,
+                    is_redacted=False,
+                    retention_class="diagnostic",
+                    created_at=now,
+                )
+            )
+            updated = self.repository.store_execution(
+                replace(
+                    execution,
+                    status="cancelled",
+                    validation_status="requires_human_review",
+                    completed_at=now,
+                    latency_ms=0,
+                    error_category="budget_block",
+                    error_code=None,
+                    error_message_safe=invalid_reason,
+                    approved_at=execution.approved_at or now,
+                    updated_at=now,
+                    input_summary_json={
+                        **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
+                        "approval_state": "invalidated",
+                        "approval_invalidated_reason": invalid_reason,
+                        "approval_invalidated_at": now,
+                    },
+                )
+            )
+            return AIExecutionResult(
+                execution_id=updated.execution_uuid,
+                request_id=request.request_id,
+                status="failed",
+                provider=updated.provider,
+                model_id=str((updated.input_summary_json or {}).get("model_id") or updated.model_catalog_id or ""),
+                model_version=str((updated.input_summary_json or {}).get("model_version") or ""),
+                model_role=updated.requested_model_role,
+                result=None,
+                structured_output=None,
+                validation=AIExecutionValidation(status="requires_human_review", schema_name=updated.task_type, issues=(invalid_reason,), warnings=()),
+                usage=AIExecutionUsage(),
+                cost=AICostSummary(None, None, calculated_cost=None, provider_reported_cost=None, currency="USD", notes=invalid_reason),
+                latency=AIExecutionLatency(latency_ms=0, started_at=updated.started_at or now, completed_at=now, attempts=1),
+                cache=AIExecutionCacheInfo(cache_status="invalidated"),
+                fallback={"used": False, "policy": updated.fallback_policy},
+                warnings=(),
+                error=AIExecutionError(category="budget_block", safe_message=invalid_reason, suggested_action="Revisar la aprobacion o volver a ejecutar con un modelo compatible."),
+                provenance={"approval": self._approval_metadata(updated), "approval_state": "invalidated"},
+                timestamps={"created_at": updated.created_at, "started_at": updated.started_at, "completed_at": now},
+            )
+
+        now = self._now()
+        approval_summary = self._approval_metadata(execution)
+        payload = self._approval_payload(execution=execution, approved=True, actor=approved_by, reason=approval_reason, now=now)
+        payload["approval_summary"] = approval_summary or payload["approval_summary"]
+        self.repository.store_payload(
+            AIExecutionPayload(
+                execution_id=execution.execution_uuid,
+                payload_type="approval_decision",
+                content_json=payload,
+                content_text="approved",
+                content_hash=execution.request_fingerprint,
+                is_redacted=False,
+                retention_class="diagnostic",
+                created_at=now,
+            )
+        )
+        self.repository.store_execution(
+            replace(
+                execution,
+                approved_at=now,
+                input_summary_json={
+                    **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
+                    "approval_state": "approved",
+                    "approved_by": approved_by,
+                    "approved_at": now,
+                    "approval_reason": approval_reason,
+                },
+                updated_at=now,
+            )
+        )
+
+        approval_source_metadata = {
+            "approval_source_execution_id": execution.execution_uuid,
+            "approval_state": "approved",
+            "approved_by": approved_by,
+            "approved_at": now,
+            "approval_reason": approval_reason,
+            "approval_scope": "single_execution",
+            "provider_at_approval": execution.provider,
+            "model_at_approval": execution.model_catalog_id,
+        }
+        request = replace(
+            request,
+            request_id=f"{request.request_id}:approved:{execution.execution_uuid}",
+            approval_policy="approved_single_execution",
+            metadata={**request.metadata, **approval_source_metadata},
+        )
+        result = self.orchestrator.run(request, provider=execution.provider)
+        return result
+
+    def reject_diagnostic_execution(
+        self,
+        execution_uuid: str,
+        *,
+        rejected_by: str | None = None,
+        rejection_reason: str | None = None,
+    ) -> dict[str, object]:
+        execution = self.repository.get_execution_by_uuid(execution_uuid)
+        if execution is None:
+            raise ValueError("Execution not found.")
+        if execution.status == "cancelled":
+            return execution.to_dict()
+        now = self._now()
+        payload = self._approval_payload(execution=execution, approved=False, actor=rejected_by, reason=rejection_reason, now=now)
+        self.repository.store_payload(
+            AIExecutionPayload(
+                execution_id=execution.execution_uuid,
+                payload_type="approval_decision",
+                content_json=payload,
+                content_text="rejected",
+                content_hash=execution.request_fingerprint,
+                is_redacted=False,
+                retention_class="diagnostic",
+                created_at=now,
+            )
+        )
+        updated = self.repository.store_execution(
+            replace(
+                execution,
+                status="cancelled",
+                validation_status="requires_human_review",
+                completed_at=now,
+                latency_ms=0,
+                error_category="cancelled_by_user",
+                error_code=None,
+                error_message_safe="La ejecucion fue cancelada y no se realizo ningun cargo.",
+                approved_at=None,
+                updated_at=now,
+                input_summary_json={
+                    **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
+                    "approval_state": "rejected",
+                    "rejected_by": rejected_by,
+                    "rejected_at": now,
+                    "rejection_reason": rejection_reason,
+                },
+            )
+        )
+        return updated.to_dict()
 
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 50) -> list[dict[str, object]]:
         return [execution.to_dict() for execution in self.repository.list_executions(creator_id=creator_id, provider=provider, limit=limit)]

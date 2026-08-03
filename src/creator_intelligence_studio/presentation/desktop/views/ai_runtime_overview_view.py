@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import logging
+from typing import Callable
 
 from PySide6.QtCore import QThread, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -68,26 +69,52 @@ class DiagnosticRunThread(QThread):
     result_ready = Signal(object)
     error_ready = Signal(str)
 
-    def __init__(self, workspace: WorkspaceViewModel, provider: str, role: str, cache_policy: str) -> None:
+    def __init__(
+        self,
+        workspace: WorkspaceViewModel,
+        provider: str,
+        role: str,
+        cache_policy: str,
+        *,
+        approval_execution_id: str | None = None,
+        approved_by: str | None = None,
+        approval_reason: str | None = None,
+    ) -> None:
         super().__init__()
         self.workspace = workspace
         self.provider = provider
         self.role = role
         self.cache_policy = cache_policy
+        self.approval_execution_id = approval_execution_id
+        self.approved_by = approved_by
+        self.approval_reason = approval_reason
 
     def run(self) -> None:  # pragma: no cover - flujo Qt
-        logger.info(
-            "ai_runtime_diagnostic.provider_call_started provider=%s role=%s cache_policy=%s",
-            self.provider,
-            self.role,
-            self.cache_policy,
-        )
         try:
-            result = self.workspace.run_ai_runtime_diagnostic(
-                provider=self.provider,
-                role=self.role,
-                cache_policy=self.cache_policy,
-            )
+            if self.approval_execution_id:
+                logger.info(
+                    "ai_runtime_diagnostic.approval_continuation_started execution_id=%s provider=%s role=%s",
+                    self.approval_execution_id,
+                    self.provider,
+                    self.role,
+                )
+                result = self.workspace.ai_runtime_approve_and_run_diagnostic(
+                    self.approval_execution_id,
+                    approved_by=self.approved_by,
+                    approval_reason=self.approval_reason,
+                )
+            else:
+                logger.info(
+                    "ai_runtime_diagnostic.provider_call_started provider=%s role=%s cache_policy=%s",
+                    self.provider,
+                    self.role,
+                    self.cache_policy,
+                )
+                result = self.workspace.run_ai_runtime_diagnostic(
+                    provider=self.provider,
+                    role=self.role,
+                    cache_policy=self.cache_policy,
+                )
         except Exception as exc:  # pragma: no cover - defensa general
             logger.info(
                 "ai_runtime_diagnostic.execution_failed provider=%s role=%s error_class=%s",
@@ -97,11 +124,19 @@ class DiagnosticRunThread(QThread):
             )
             self.error_ready.emit(str(exc))
             return
-        logger.info(
-            "ai_runtime_diagnostic.provider_call_completed provider=%s role=%s",
-            self.provider,
-            self.role,
-        )
+        if self.approval_execution_id:
+            logger.info(
+                "ai_runtime_diagnostic.approval_continuation_completed execution_id=%s provider=%s role=%s",
+                self.approval_execution_id,
+                self.provider,
+                self.role,
+            )
+        else:
+            logger.info(
+                "ai_runtime_diagnostic.provider_call_completed provider=%s role=%s",
+                self.provider,
+                self.role,
+            )
         self.result_ready.emit(result)
 
 
@@ -1190,11 +1225,21 @@ class BudgetTab(QWidget):
 
 
 class DiagnosticsTab(QWidget):
-    def __init__(self, workspace: WorkspaceViewModel, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        workspace: WorkspaceViewModel,
+        parent: QWidget | None = None,
+        *,
+        on_review_budget: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.workspace = workspace
+        self._on_review_budget = on_review_budget
         self._diagnostic_thread: DiagnosticRunThread | None = None
+        self._approval_thread: DiagnosticRunThread | None = None
         self._diagnostic_running = False
+        self._approval_running = False
+        self._current_execution_id: str | None = None
         title = QLabel("Diagnostico")
         title.setObjectName("TitleLabel")
         subtitle = QLabel("Ejecuta un diagnostico real del AI runtime con salida normalizada y segura.")
@@ -1253,6 +1298,62 @@ class DiagnosticsTab(QWidget):
         self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_line())
         self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_line())
 
+        self.approval_group = QFrame()
+        self.approval_group.setObjectName("ai_runtime_approval_group")
+        approval_layout = QVBoxLayout(self.approval_group)
+        self.approval_title = QLabel("Esta ejecucion necesita tu aprobacion.")
+        self.approval_title.setObjectName("SectionLabel")
+        self.approval_message = QLabel("Esperando tu aprobacion.")
+        self.approval_message.setWordWrap(True)
+        self.approval_message.setObjectName("MutedLabel")
+        self.approval_provider_label = QLabel("-")
+        self.approval_model_label = QLabel("-")
+        self.approval_role_label = QLabel("-")
+        self.approval_reason_label = QLabel("-")
+        self.approval_cost_label = QLabel("-")
+        self.approval_currency_label = QLabel("-")
+        self.approval_policy_label = QLabel("-")
+        self.approval_scope_label = QLabel("-")
+        self.approval_warning_label = QLabel("-")
+        for label in (
+            self.approval_provider_label,
+            self.approval_model_label,
+            self.approval_role_label,
+            self.approval_reason_label,
+            self.approval_cost_label,
+            self.approval_currency_label,
+            self.approval_policy_label,
+            self.approval_scope_label,
+            self.approval_warning_label,
+        ):
+            label.setWordWrap(True)
+        self.approve_button = QPushButton("Aprobar y continuar")
+        self.reject_button = QPushButton("Rechazar")
+        self.review_budget_button = QPushButton("Revisar presupuesto")
+        self.approve_button.clicked.connect(self._approve_and_continue)
+        self.reject_button.clicked.connect(self._reject_execution)
+        self.review_budget_button.clicked.connect(self._review_budget)
+        approval_form = QFormLayout()
+        approval_form.addRow("Proveedor", self.approval_provider_label)
+        approval_form.addRow("Modelo", self.approval_model_label)
+        approval_form.addRow("Rol", self.approval_role_label)
+        approval_form.addRow("Motivo", self.approval_reason_label)
+        approval_form.addRow("Costo estimado", self.approval_cost_label)
+        approval_form.addRow("Moneda", self.approval_currency_label)
+        approval_form.addRow("Politica", self.approval_policy_label)
+        approval_form.addRow("Alcance", self.approval_scope_label)
+        approval_form.addRow("Advertencia", self.approval_warning_label)
+        approval_actions = QHBoxLayout()
+        approval_actions.addWidget(self.approve_button)
+        approval_actions.addWidget(self.reject_button)
+        approval_actions.addWidget(self.review_budget_button)
+        approval_actions.addStretch(1)
+        approval_layout.addWidget(self.approval_title)
+        approval_layout.addWidget(self.approval_message)
+        approval_layout.addLayout(approval_form)
+        approval_layout.addLayout(approval_actions)
+        self.approval_group.hide()
+
         form = QFormLayout()
         form.addRow("Proveedor", self.provider_combo)
         form.addRow("Rol", self.role_combo)
@@ -1287,6 +1388,7 @@ class DiagnosticsTab(QWidget):
         outer.addWidget(subtitle)
         outer.addLayout(form)
         outer.addWidget(self.result_group)
+        outer.addWidget(self.approval_group)
         outer.addStretch(1)
 
         self._seed_combos()
@@ -1362,10 +1464,14 @@ class DiagnosticsTab(QWidget):
         self.role_combo.setEnabled(not running)
         self.cache_combo.setEnabled(not running)
         self.auto_config_button.setEnabled(not running)
+        self.approve_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
+        self.reject_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
+        self.review_budget_button.setEnabled(not running and self.approval_group.isVisible())
         if message is not None:
             self.message_label.setText(message)
 
     def _clear_result_fields(self) -> None:
+        self._current_execution_id = None
         self.execution_label.setText("-")
         self.provider_label.setText("-")
         self.model_label.setText("-")
@@ -1380,22 +1486,128 @@ class DiagnosticsTab(QWidget):
         self.validation_label.setText("-")
         self.error_label.setText("-")
         self.suggested_action_label.setText("-")
+        self.approval_group.hide()
+        self.approval_message.setText("Esperando tu aprobacion.")
+        for label in (
+            self.approval_provider_label,
+            self.approval_model_label,
+            self.approval_role_label,
+            self.approval_reason_label,
+            self.approval_cost_label,
+            self.approval_currency_label,
+            self.approval_policy_label,
+            self.approval_scope_label,
+            self.approval_warning_label,
+        ):
+            label.setText("-")
+
+    def _set_approval_controls_enabled(self, enabled: bool) -> None:
+        self.approve_button.setEnabled(enabled)
+        self.reject_button.setEnabled(enabled)
+        self.review_budget_button.setEnabled(enabled)
+
+    def _show_approval_panel(self, result: dict[str, object]) -> None:
+        approval = result.get("provenance") or {}
+        approval_details = approval.get("approval") if isinstance(approval, dict) else {}
+        if not isinstance(approval_details, dict):
+            approval_details = {}
+        cost = result.get("cost") or {}
+        warnings = result.get("warnings") or ()
+        estimated_cost = "-"
+        approval_reasons: list[str] = []
+        if isinstance(approval_details, dict):
+            approval_reasons.extend(str(item) for item in approval_details.get("budget_reasons") or ())
+            approval_reasons.extend(str(item) for item in approval_details.get("privacy_reasons") or ())
+        if isinstance(cost, dict):
+            min_cost = cost.get("estimated_min_cost")
+            max_cost = cost.get("estimated_max_cost")
+            currency = cost.get("currency") or "USD"
+            if min_cost is not None or max_cost is not None:
+                estimated_cost = f"{min_cost} - {max_cost}"
+                self.approval_currency_label.setText(str(currency))
+            else:
+                self.approval_currency_label.setText(str(currency))
+            self.approval_cost_label.setText(estimated_cost)
+        provider_key = str(result.get("provider") or approval_details.get("provider") or "-")
+        provider = PROVIDER_LINKS.get(provider_key, {}).get("label") or provider_key
+        model = str(result.get("model_id") or approval_details.get("model_id") or "-")
+        role = str(result.get("model_role") or approval_details.get("role") or "-")
+        reason = "La politica de presupuesto requiere revision."
+        if approval_reasons:
+            reason = " | ".join(approval_reasons)
+        elif isinstance(approval_details, dict) and approval_details.get("estimated_cost_unknown"):
+            reason = "El precio todavia no esta verificado para este modelo."
+        if isinstance(cost, dict) and cost.get("notes"):
+            reason = str(cost.get("notes"))
+        self.approval_provider_label.setText(provider)
+        self.approval_model_label.setText(model)
+        self.approval_role_label.setText(role)
+        self.approval_reason_label.setText(reason)
+        self.approval_policy_label.setText(str(approval_details.get("policy") or "budget_policy"))
+        self.approval_scope_label.setText(str(approval_details.get("scope") or "single_execution"))
+        if warnings:
+            self.approval_warning_label.setText(" | ".join(str(item) for item in warnings))
+        elif approval_details and approval_details.get("estimated_cost_unknown"):
+            self.approval_warning_label.setText(
+                "Creator Intelligence Studio todavía no tiene un precio verificado para este modelo. La llamada puede generar un cargo en tu cuenta de OpenAI."
+            )
+        else:
+            self.approval_warning_label.setText("-")
+        self.approval_group.show()
+        self.approval_title.setText("Esta ejecucion necesita tu aprobacion.")
+        self.approval_message.setText("Revisa el proveedor, el modelo, el costo estimado y la politica antes de continuar.")
+        self._set_approval_controls_enabled(True)
+
+    def _hide_approval_panel(self) -> None:
+        self._current_execution_id = None
+        self.approval_group.hide()
+
+    def _approval_requested(self, execution_id: str, result: dict[str, object]) -> None:
+        self._current_execution_id = execution_id
+        self._diagnostic_running = False
+        self._set_running_state(False, "Esperando tu aprobacion.")
+        self._show_approval_panel(result)
+        self.run_button.setEnabled(False)
+        self.provider_combo.setEnabled(True)
+        self.role_combo.setEnabled(True)
+        self.cache_combo.setEnabled(True)
+        self.auto_config_button.setEnabled(True)
+        self.message_label.setText("Esperando tu aprobacion.")
 
     def _finalize_diagnostic(self) -> None:
         self._set_running_state(False)
 
+    def shutdown(self) -> None:
+        for thread in (self._diagnostic_thread, self._approval_thread):
+            if thread is None:
+                continue
+            if thread.isRunning():
+                thread.wait(5000)
+        self._diagnostic_thread = None
+        self._approval_thread = None
+        self._approval_running = False
+
     def _diagnostic_finished(self) -> None:
         self._diagnostic_thread = None
+        self._approval_thread = None
+        self._approval_running = False
 
     def _diagnostic_completed(self, result: object) -> None:
         logger.info("ai_runtime_diagnostic.execution_completed")
         payload = result.to_dict() if hasattr(result, "to_dict") else getattr(result, "__dict__", {})
         payload_dict = payload if isinstance(payload, dict) else {}
         self._show_result(payload_dict)
-        self._finalize_diagnostic()
-        self.refresh()
         status = str(payload_dict.get("status") or "").lower()
         error = payload_dict.get("error") if isinstance(payload_dict.get("error"), dict) else {}
+        if status == "awaiting_approval":
+            execution_id = str(payload_dict.get("execution_id") or "")
+            self._approval_requested(execution_id, payload_dict)
+            self.refresh()
+            _refresh_enclosing_overview(self)
+            return
+        self._hide_approval_panel()
+        self._finalize_diagnostic()
+        self.refresh()
         if status == "blocked_by_credentials" or str(error.get("category") or "").lower() == "authentication_error":
             logger.info("ai_runtime_diagnostic.execution_failed status=%s reason=authentication_error", status)
         elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
@@ -1411,6 +1623,7 @@ class DiagnosticsTab(QWidget):
     def _diagnostic_failed(self, message: str) -> None:
         logger.info("ai_runtime_diagnostic.execution_failed")
         error = map_error(Exception(message))
+        self._hide_approval_panel()
         self.execution_label.setText("-")
         self.provider_label.setText(self._selected_provider())
         self.model_label.setText(_fmt(self.model_line.text()))
@@ -1430,6 +1643,86 @@ class DiagnosticsTab(QWidget):
         _refresh_enclosing_overview(self)
         self.message_label.setText("No se pudo completar el diagnóstico.")
 
+    def _approve_and_continue(self) -> None:
+        if not self._current_execution_id or self._approval_running:
+            return
+        self._approval_running = True
+        self._set_approval_controls_enabled(False)
+        self._set_running_state(True, "Aprobación registrada. Preparando diagnóstico…")
+        provider = self._selected_provider()
+        role = self._selected_role()
+        self._approval_thread = DiagnosticRunThread(
+            self.workspace,
+            provider,
+            role,
+            str(self.cache_combo.currentData() or "use"),
+            approval_execution_id=self._current_execution_id,
+        )
+        self._approval_thread.result_ready.connect(self._diagnostic_completed)
+        self._approval_thread.error_ready.connect(self._diagnostic_failed)
+        self._approval_thread.finished.connect(self._diagnostic_finished)
+        self._approval_thread.finished.connect(self._approval_thread.deleteLater)
+        self._approval_thread.start()
+
+    def _reject_execution(self) -> None:
+        if not self._current_execution_id:
+            return
+        self._set_approval_controls_enabled(False)
+        result = self.workspace.ai_runtime_reject_diagnostic_execution(
+            self._current_execution_id,
+            rejected_by="usuario",
+            rejection_reason="El usuario rechazo la ejecucion.",
+        )
+        try:
+            display_result = {
+                "execution_id": result.get("execution_uuid") or self._current_execution_id,
+                "provider": result.get("provider"),
+                "model_id": (result.get("input_summary_json") or {}).get("model_id") if isinstance(result.get("input_summary_json"), dict) else result.get("model_catalog_id"),
+                "model_role": result.get("requested_model_role"),
+                "status": result.get("status") or "cancelled",
+                "latency": {"latency_ms": result.get("latency_ms") or 0},
+                "usage": {},
+                "cost": {
+                    "estimated_min_cost": None,
+                    "estimated_max_cost": None,
+                    "calculated_cost": None,
+                    "currency": "USD",
+                    "notes": "La ejecucion fue cancelada y no se realizo ningun cargo.",
+                },
+                "cache": {"cache_status": result.get("cache_status") or "invalidated", "hit_count": 0, "refresh_requested": False},
+                "validation": {"status": result.get("validation_status") or "requires_human_review", "issues": ("La ejecucion fue cancelada y no se realizo ningun cargo.",)},
+                "error": {
+                    "safe_message": result.get("error_message_safe") or "La ejecucion fue cancelada y no se realizo ningun cargo.",
+                    "technical_reference": "cancelled_by_user",
+                    "suggested_action": "-",
+                },
+            }
+            self._show_result(display_result)
+            self.status_label.setText("cancelled")
+            self.calculated_cost_label.setText("Sin cargo")
+            self.message_label.setText("La ejecucion fue cancelada y no se realizo ningun cargo.")
+        finally:
+            self._approval_running = False
+            self._hide_approval_panel()
+            self._finalize_diagnostic()
+            self.refresh()
+            _refresh_enclosing_overview(self)
+            self.message_label.setText("La ejecucion fue cancelada y no se realizo ningun cargo.")
+
+    def _review_budget(self) -> None:
+        if self._on_review_budget is not None:
+            self._on_review_budget()
+            return
+        tabs = self.parentWidget()
+        while tabs is not None:
+            if hasattr(tabs, "tabs") and hasattr(tabs, "budget_tab"):
+                try:
+                    tabs.tabs.setCurrentWidget(tabs.budget_tab)
+                except Exception:
+                    pass
+                return
+            tabs = tabs.parentWidget()
+
     def _run_diagnostic(self) -> None:
         if self._diagnostic_thread is not None and self._diagnostic_thread.isRunning():
             self.message_label.setText("El diagnóstico ya está en ejecución.")
@@ -1447,6 +1740,7 @@ class DiagnosticsTab(QWidget):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
         self._clear_result_fields()
         self.status_label.setText("queued")
+        self._approval_running = False
         self._set_running_state(True, "Preparando diagnóstico…")
         logger.info(
             "ai_runtime_diagnostic.request_built provider=%s role=%s cache_policy=%s",
@@ -1486,10 +1780,19 @@ class DiagnosticsTab(QWidget):
             self.output_tokens_label.setText("0")
         cost = result.get("cost") or {}
         if isinstance(cost, dict):
-            self.estimated_cost_label.setText(
-                f"{cost.get('estimated_min_cost')} - {cost.get('estimated_max_cost')} {cost.get('currency') or 'USD'}"
-            )
-            self.calculated_cost_label.setText(f"{cost.get('calculated_cost')} {cost.get('currency') or 'USD'}")
+            estimated_min = cost.get("estimated_min_cost")
+            estimated_max = cost.get("estimated_max_cost")
+            currency = cost.get("currency") or "USD"
+            if estimated_min is None and estimated_max is None:
+                self.estimated_cost_label.setText("Precio no verificado")
+            else:
+                self.estimated_cost_label.setText(f"{estimated_min} - {estimated_max} {currency}")
+            calculated_cost = cost.get("calculated_cost")
+            notes = str(cost.get("notes") or "")
+            if calculated_cost is None or "precio no verificado" in notes.lower() or "unknown" in notes.lower():
+                self.calculated_cost_label.setText("No disponible")
+            else:
+                self.calculated_cost_label.setText(f"{calculated_cost} {currency}")
         cache = result.get("cache") or {}
         if isinstance(cache, dict):
             self.cache_label.setText(
@@ -1507,6 +1810,9 @@ class DiagnosticsTab(QWidget):
         else:
             self.error_label.setText("-")
             self.suggested_action_label.setText("-")
+
+        if str(result.get("status") or "").lower() != "awaiting_approval":
+            self._hide_approval_panel()
 
     def refresh(self) -> None:
         selected_provider = self._selected_provider() if self.provider_combo.count() else None
@@ -1549,7 +1855,7 @@ class HistoryTab(QWidget):
         subtitle.setWordWrap(True)
         subtitle.setObjectName("MutedLabel")
 
-        self.table = QTableWidget(0, 10)
+        self.table = QTableWidget(0, 13)
         self.table.setHorizontalHeaderLabels(
             [
                 "Fecha",
@@ -1558,6 +1864,9 @@ class HistoryTab(QWidget):
                 "Proveedor",
                 "Modelo",
                 "Estado",
+                "Aprobacion",
+                "Actor",
+                "Motivo",
                 "Costo",
                 "Latencia",
                 "Cache",
@@ -1577,6 +1886,59 @@ class HistoryTab(QWidget):
         layout.addWidget(self.detail)
         self.refresh()
 
+    def _approval_view(self, execution: dict[str, object], payloads: list[dict[str, object]]) -> dict[str, str]:
+        summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+        approval_summary = summary.get("approval_summary") if isinstance(summary, dict) and isinstance(summary.get("approval_summary"), dict) else {}
+        for payload in payloads:
+            if payload.get("payload_type") != "approval_decision" or not isinstance(payload.get("content_json"), dict):
+                continue
+            content = payload["content_json"]
+            estimated = content.get("estimated_cost_at_decision")
+            price_unknown = "Si"
+            if isinstance(estimated, dict):
+                price_unknown = "Si" if estimated.get("minimum_cost") is None or estimated.get("maximum_cost") is None else "No"
+            return {
+                "decision": str(content.get("decision") or summary.get("approval_state") or execution.get("status") or "-").lower(),
+                "actor": str(content.get("actor") or content.get("approved_by") or content.get("rejected_by") or "-"),
+                "reason": str(content.get("reason") or content.get("approval_reason") or "-"),
+                "date": str(content.get("approved_at") or content.get("rejected_at") or execution.get("approved_at") or execution.get("updated_at") or "-"),
+                "price_unknown": price_unknown,
+            }
+        approval_state = str(summary.get("approval_state") or "-")
+        return {
+            "decision": approval_state,
+            "actor": str(summary.get("approved_by") or summary.get("rejected_by") or "-"),
+            "reason": str(summary.get("approval_reason") or "-"),
+            "date": str(summary.get("approved_at") or summary.get("rejected_at") or execution.get("approved_at") or execution.get("updated_at") or "-"),
+            "price_unknown": "Si" if isinstance(approval_summary, dict) and bool(approval_summary.get("estimated_cost_unknown")) else "No",
+        }
+
+    def _display_status(self, execution: dict[str, object], approval: dict[str, str]) -> str:
+        status = str(execution.get("status") or "-")
+        decision = approval.get("decision") or "-"
+        if decision == "approved":
+            return "approved"
+        if decision == "rejected":
+            return "rejected/cancelled"
+        if status == "awaiting_approval":
+            return "awaiting_approval"
+        return status
+
+    def _cost_display(self, execution: dict[str, object], approval: dict[str, str], usage_cost: float) -> str:
+        status = str(execution.get("status") or "")
+        summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+        approval_summary = summary.get("approval_summary") if isinstance(summary, dict) and isinstance(summary.get("approval_summary"), dict) else {}
+        if status == "cancelled" and approval.get("decision") == "rejected" and usage_cost == 0.0:
+            return "Sin cargo"
+        if status == "awaiting_approval" and usage_cost == 0.0:
+            estimated = approval_summary.get("estimated_cost_at_approval") if isinstance(approval_summary, dict) else None
+            if isinstance(estimated, dict) and estimated.get("minimum_cost") is None and estimated.get("maximum_cost") is None:
+                return "No disponible (precio no verificado)"
+            return "Pendiente"
+        if approval.get("price_unknown") == "Si" and usage_cost == 0.0:
+            return "No disponible"
+        return str(usage_cost)
+
     def refresh(self) -> None:
         executions = self.workspace.ai_runtime_list_executions(self.workspace.selected_creator_id, limit=100)
         usage_records = self.workspace.ai_runtime_list_usage_records()
@@ -1588,15 +1950,22 @@ class HistoryTab(QWidget):
         for row_index, execution in enumerate(executions):
             self.table.insertRow(row_index)
             execution_uuid = str(execution.get("execution_uuid") or "")
+            summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+            model_name = summary.get("model_id") or execution.get("model_catalog_id")
+            payloads = self.workspace.ai_runtime_list_payloads(execution_uuid)
+            approval = self._approval_view(execution, payloads)
             cost = usage_by_execution.get(execution_uuid, 0.0)
             values = [
                 execution.get("created_at"),
                 _safe_short_id(execution_uuid),
                 execution.get("task_type"),
                 execution.get("provider"),
-                execution.get("model_catalog_id"),
-                execution.get("status"),
-                cost,
+                model_name,
+                self._display_status(execution, approval),
+                approval.get("date"),
+                approval.get("actor"),
+                approval.get("reason"),
+                self._cost_display(execution, approval, cost),
                 f"{execution.get('latency_ms') or 0} ms",
                 execution.get("cache_status"),
                 execution.get("error_message_safe"),
@@ -1629,13 +1998,19 @@ class HistoryTab(QWidget):
             return
         usage_records = self.workspace.ai_runtime_list_usage_records(execution_uuid)
         payloads = self.workspace.ai_runtime_list_payloads(execution_uuid)
+        approval = self._approval_view(execution, payloads)
+        summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
         safe_lines = [
             f"execution_id: {execution.get('execution_uuid')}",
             f"task_type: {execution.get('task_type')}",
             f"provider: {execution.get('provider')}",
-            f"model: {execution.get('model_catalog_id')}",
-            f"status: {execution.get('status')}",
+            f"model: {summary.get('model_id') or execution.get('model_catalog_id')}",
+            f"status: {self._display_status(execution, approval)}",
             f"validation: {execution.get('validation_status')}",
+            f"approval: {approval.get('decision')}",
+            f"approval_actor: {approval.get('actor')}",
+            f"approval_reason: {approval.get('reason')}",
+            f"price_unknown: {approval.get('price_unknown')}",
             f"cache: {execution.get('cache_status')}",
             f"latency_ms: {execution.get('latency_ms')}",
             f"error: {execution.get('error_message_safe') or '-'}",
@@ -1664,7 +2039,7 @@ class AIRuntimeOverviewView(QWidget):
         self.providers_tab = ProvidersTab(workspace)
         self.roles_tab = RolesTab(workspace)
         self.budget_tab = BudgetTab(workspace)
-        self.diagnostics_tab = DiagnosticsTab(workspace)
+        self.diagnostics_tab = DiagnosticsTab(workspace, on_review_budget=lambda: self.tabs.setCurrentWidget(self.budget_tab))
         self.history_tab = HistoryTab(workspace)
         self.tabs.addTab(self.providers_tab, "Proveedores")
         self.tabs.addTab(self.roles_tab, "Modelos y roles")

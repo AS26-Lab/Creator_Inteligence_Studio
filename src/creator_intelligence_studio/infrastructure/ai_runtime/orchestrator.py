@@ -54,6 +54,14 @@ _ACTIVE_EXECUTION_STATUSES = {
 logger = logging.getLogger(__name__)
 
 
+def _is_active_execution(execution: AIExecutionRecord) -> bool:
+    if execution.status not in _ACTIVE_EXECUTION_STATUSES:
+        return False
+    if execution.status == "awaiting_approval" and execution.approved_at is not None:
+        return False
+    return True
+
+
 class AIOrchestrator:
     def __init__(
         self,
@@ -130,6 +138,14 @@ class AIOrchestrator:
             "budget": request.budget,
             "metadata_keys": sorted(request.metadata.keys()),
             "metadata_present": bool(request.metadata),
+            "approval_source_execution_id": request.metadata.get("approval_source_execution_id"),
+            "approval_state": request.metadata.get("approval_state"),
+            "approved_by": request.metadata.get("approved_by"),
+            "approved_at": request.metadata.get("approved_at"),
+            "approval_reason": request.metadata.get("approval_reason"),
+            "approval_scope": request.metadata.get("approval_scope"),
+            "provider_at_approval": request.metadata.get("provider_at_approval"),
+            "model_at_approval": request.metadata.get("model_at_approval"),
         }
 
     def _current_cost_totals(
@@ -166,10 +182,10 @@ class AIOrchestrator:
         provider_name: str,
     ) -> AIExecutionRecord | None:
         execution = self.repository.find_execution_by_request_id(request.request_id)
-        if execution is not None and execution.status in _ACTIVE_EXECUTION_STATUSES:
+        if execution is not None and _is_active_execution(execution):
             return execution
         execution = self.repository.get_execution_by_request_fingerprint(request_hash)
-        if execution is not None and execution.status in _ACTIVE_EXECUTION_STATUSES:
+        if execution is not None and _is_active_execution(execution):
             return execution
         return None
 
@@ -180,6 +196,183 @@ class AIOrchestrator:
         payload.pop("fallback_policy", None)
         payload.pop("approval_policy", None)
         return build_request_fingerprint(payload)
+
+    def _approval_summary(
+        self,
+        *,
+        request: AIExecutionRequest,
+        privacy,
+        request_hash: str,
+        provider: str | None,
+        assignment: AIRoleAssignment | None,
+        model_entry: AIModelCatalogEntry | None,
+        budget_decision: Any | None,
+        estimate: Any | None,
+    ) -> dict[str, Any]:
+        estimated_min_cost = getattr(estimate, "minimum_cost", None)
+        estimated_max_cost = getattr(estimate, "maximum_cost", None)
+        pricing_version = getattr(estimate, "pricing_version", None)
+        return {
+            "scope": "single_execution",
+            "requires_approval": True,
+            "policy": "budget_policy",
+            "provider": provider,
+            "provider_label": provider,
+            "model_catalog_id": getattr(model_entry, "id", None),
+            "model_id": getattr(model_entry, "model_id", None),
+            "model_version": getattr(model_entry, "snapshot_or_version", None),
+            "role": assignment.role if assignment else request.model_role,
+            "privacy_decision": privacy.decision,
+            "privacy_reasons": list(getattr(privacy, "reasons", ()) or ()),
+            "budget_reasons": list(getattr(budget_decision, "reasons", ()) or ()),
+            "estimated_cost_unknown": estimated_min_cost is None or estimated_max_cost is None,
+            "estimated_cost_at_approval": {
+                "minimum_cost": estimated_min_cost,
+                "maximum_cost": estimated_max_cost,
+                "currency": getattr(estimate, "currency", "USD"),
+                "pricing_version": pricing_version,
+                "notes": getattr(estimate, "notes", None),
+            },
+            "currency": getattr(estimate, "currency", "USD"),
+            "pricing_version": pricing_version,
+            "request_fingerprint": request_hash,
+        }
+
+    def _awaiting_approval_result(
+        self,
+        *,
+        request: AIExecutionRequest,
+        execution_uuid: str,
+        request_hash: str,
+        privacy,
+        error: AIExecutionError,
+        provider: str | None,
+        prompt_template: AIPromptTemplate | None,
+        assignment: AIRoleAssignment | None = None,
+        model_entry: AIModelCatalogEntry | None = None,
+        context_fingerprint: str | None = None,
+        estimate: Any | None = None,
+        budget_decision: Any | None = None,
+    ) -> AIExecutionResult:
+        now = _utc_now()
+        approval_summary = self._approval_summary(
+            request=request,
+            privacy=privacy,
+            request_hash=request_hash,
+            provider=provider,
+            assignment=assignment,
+            model_entry=model_entry,
+            budget_decision=budget_decision,
+            estimate=estimate,
+        )
+        self.repository.store_execution(
+            AIExecutionRecord(
+                execution_uuid=execution_uuid,
+                creator_id=request.creator_id,
+                project_id=request.project_id,
+                task_type=request.task_type,
+                operation=request.operation,
+                status="awaiting_approval",
+                requested_model_role=assignment.role if assignment else request.model_role,
+                provider=provider,
+                model_catalog_id=getattr(model_entry, "id", None),
+                template_id=prompt_template.id if prompt_template else None,
+                privacy_class=request.privacy_class,
+                quality_level=request.quality_level,
+                context_fingerprint=context_fingerprint,
+                request_fingerprint=request_hash,
+                input_summary_json=self._request_summary(
+                    request=request,
+                    privacy=privacy,
+                    request_hash=request_hash,
+                    context_fingerprint=context_fingerprint,
+                    provider=provider,
+                    assignment=assignment,
+                    model_entry=model_entry,
+                    prompt_template=prompt_template,
+                )
+                | {
+                    "approval_state": "awaiting_approval",
+                    "approval_summary": approval_summary,
+                },
+                output_reference=None,
+                validation_status="requires_human_review",
+                cache_status="invalidated",
+                fallback_policy=request.fallback_policy,
+                approval_required=True,
+                approved_at=None,
+                started_at=now,
+                completed_at=now,
+                latency_ms=0,
+                error_category=error.category,
+                error_code=error.provider_code,
+                error_message_safe=error.safe_message,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        self.repository.store_payload(
+            AIExecutionPayload(
+                execution_id=execution_uuid,
+                payload_type="approval_required",
+                content_json={
+                    "approval_state": "awaiting_approval",
+                    "approval_summary": approval_summary,
+                    "error": error.to_dict(),
+                },
+                content_text=error.safe_message,
+                content_hash=request_hash,
+                is_redacted=False,
+                retention_class="diagnostic",
+                created_at=now,
+            )
+        )
+        return AIExecutionResult(
+            execution_id=execution_uuid,
+            request_id=request.request_id,
+            status="awaiting_approval",
+            provider=provider,
+            model_id=getattr(model_entry, "model_id", None),
+            model_version=getattr(model_entry, "snapshot_or_version", None),
+            model_role=assignment.role if assignment else request.model_role,
+            result=None,
+            structured_output=None,
+            validation=AIExecutionValidation(
+                status="requires_human_review",
+                schema_name=request.task_type,
+                issues=(error.safe_message,),
+                warnings=("awaiting_approval",),
+            ),
+            usage=AIExecutionUsage(),
+            cost=AICostSummary(
+                estimated_min_cost=getattr(estimate, "minimum_cost", None),
+                estimated_max_cost=getattr(estimate, "maximum_cost", None),
+                calculated_cost=None,
+                provider_reported_cost=None,
+                currency=getattr(estimate, "currency", "USD") if estimate is not None else "USD",
+                pricing_version=getattr(estimate, "pricing_version", None),
+                notes=(
+                    "Precio no verificado. La ejecucion requiere aprobacion manual."
+                    if getattr(estimate, "minimum_cost", None) is None or getattr(estimate, "maximum_cost", None) is None
+                    else "La ejecucion requiere aprobacion antes de continuar."
+                ),
+            ),
+            latency=AIExecutionLatency(latency_ms=0, started_at=now, completed_at=now, attempts=1),
+            cache=AIExecutionCacheInfo(cache_status="invalidated"),
+            fallback={"used": False, "policy": request.fallback_policy, "approval_required": True},
+            warnings=(
+                "Creator Intelligence Studio todavía no tiene un precio verificado para este modelo. La llamada puede generar un cargo en tu cuenta de OpenAI.",
+            )
+            if getattr(estimate, "minimum_cost", None) is None or getattr(estimate, "maximum_cost", None) is None
+            else (),
+            error=error,
+            provenance={
+                "request_fingerprint": request_hash,
+                "context_fingerprint": context_fingerprint,
+                "approval": approval_summary,
+            },
+            timestamps={"created_at": now, "started_at": now, "completed_at": now},
+        )
 
     def run_diagnostic(
         self,
@@ -437,6 +630,7 @@ class AIOrchestrator:
         budget_decision = None
         current_month_cost = 0.0
         current_task_cost = 0.0
+        approval_override = request.approval_policy in {"approved", "approved_single_execution"}
         if budget_policy is not None:
             current_month_cost, current_task_cost = self._current_cost_totals(
                 request=request,
@@ -468,25 +662,26 @@ class AIOrchestrator:
                     model_entry=model_entry,
                     context_fingerprint=context_fingerprint,
                 )
-            if budget_decision.approval_required:
+            if budget_decision.approval_required and not approval_override:
                 error = AIExecutionError(
                     category="budget_block",
-                    safe_message="Execution requires approval because the budget policy needs review.",
+                    safe_message="Esta ejecucion necesita tu aprobacion.",
                     suggested_action="Approve the execution or reduce the estimated cost.",
                     technical_reference="budget_policy",
                 )
-                return self._blocked_result(
+                return self._awaiting_approval_result(
                     request=request,
                     execution_uuid=execution_uuid,
                     request_hash=request_hash,
                     privacy=privacy,
                     error=error,
-                    status="awaiting_approval",
                     provider=provider_name,
                     prompt_template=prompt_template,
                     assignment=assignment,
                     model_entry=model_entry,
                     context_fingerprint=context_fingerprint,
+                    estimate=estimate,
+                    budget_decision=budget_decision,
                 )
 
         if request.cache_policy == "refresh":

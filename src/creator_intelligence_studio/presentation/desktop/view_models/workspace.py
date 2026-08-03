@@ -1617,6 +1617,13 @@ class WorkspaceViewModel:
             return {}
         return self.ai_runtime_service.budget_snapshot(creator_id=creator_id, provider=provider)
 
+    def _background_task_for_execution(self, execution_id: str):
+        for task in self.background_tasks():
+            payload = getattr(task, "payload", {})
+            if isinstance(payload, dict) and payload.get("execution_id") == execution_id:
+                return task
+        return None
+
     def run_ai_runtime_diagnostic(self, *, provider: str | None = None, role: str | None = None, cache_policy: str = "use"):
         if self.ai_runtime_service is None:
             raise RuntimeError("El servicio de IA no esta disponible.")
@@ -1636,8 +1643,76 @@ class WorkspaceViewModel:
         except Exception as exc:
             self.fail_background_task(task.task_id, f"Diagnostico de IA fallido: {exc}")
             raise
-        self.complete_background_task(task.task_id, "Diagnostico de IA completado")
+        if getattr(result, "status", None) == "awaiting_approval":
+            self.update_background_task(
+                task.task_id,
+                status="waiting_approval",
+                progress_percent=40.0,
+                message="Esperando tu aprobacion",
+                payload={**task.payload, "execution_id": getattr(result, "execution_id", None), "approval_state": "awaiting_approval"},
+            )
+        else:
+            self.complete_background_task(task.task_id, "Diagnostico de IA completado")
         return result
+
+    def ai_runtime_approve_and_run_diagnostic(
+        self,
+        execution_uuid: str,
+        *,
+        approved_by: str | None = None,
+        approval_reason: str | None = None,
+    ):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        task = self._background_task_for_execution(execution_uuid)
+        if task is not None:
+            self.update_background_task(
+                task.task_id,
+                status="running",
+                progress_percent=50.0,
+                message="Aprobacion registrada. Preparando diagnostico",
+            )
+        result = self.ai_runtime_service.approve_and_run_diagnostic(
+            execution_uuid,
+            approved_by=approved_by,
+            approval_reason=approval_reason,
+        )
+        if task is not None:
+            if getattr(result, "status", None) in {"completed", "completed_with_warnings"}:
+                self.complete_background_task(task.task_id, "Diagnostico de IA completado")
+            elif getattr(result, "status", None) == "failed":
+                self.fail_background_task(task.task_id, "Diagnostico de IA fallido")
+            else:
+                self.update_background_task(
+                    task.task_id,
+                    status="waiting_approval",
+                    progress_percent=40.0,
+                    message="Esperando tu aprobacion",
+                )
+        return result
+
+    def ai_runtime_reject_diagnostic_execution(
+        self,
+        execution_uuid: str,
+        *,
+        rejected_by: str | None = None,
+        rejection_reason: str | None = None,
+    ):
+        if self.ai_runtime_service is None:
+            raise RuntimeError("El servicio de IA no esta disponible.")
+        task = self._background_task_for_execution(execution_uuid)
+        if task is not None:
+            self.update_background_task(
+                task.task_id,
+                status="cancelled",
+                progress_percent=100.0,
+                message="La ejecucion fue cancelada y no se realizo ningun cargo.",
+            )
+        return self.ai_runtime_service.reject_diagnostic_execution(
+            execution_uuid,
+            rejected_by=rejected_by,
+            rejection_reason=rejection_reason,
+        )
 
     def update_background_task(self, task_id: str, **changes) -> BackgroundTaskRecord | None:
         from datetime import datetime, timezone
