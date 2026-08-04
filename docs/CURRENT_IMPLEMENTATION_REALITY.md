@@ -20,6 +20,7 @@ This document records what is actually implemented in the repository at the v30 
 - bootstrap
 - CLI
 - GUI desktop shell
+- interactive launcher cleans inherited test-only GUI variables before opening the visible window
 - logging
 - environment diagnostics
 - local paths

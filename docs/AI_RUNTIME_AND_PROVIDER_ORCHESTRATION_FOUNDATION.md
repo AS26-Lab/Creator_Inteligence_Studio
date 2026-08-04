@@ -559,7 +559,8 @@ This section records what was verified during the v31 closeout audit.
 - Credential round-trip behavior with the in-memory backend used in tests.
 - Workspace view-model wiring for AI runtime status, credentials, tests, roles, budgets, diagnostics, and history.
 - Desktop CLI execution with `python -m creator_intelligence_studio --diagnostic-json`.
-- Offscreen GUI startup and auto-exit via `scripts/run_gui.bat`.
+- Interactive GUI startup via `scripts/run_gui.bat`, which clears inherited test variables before launching a visible desktop window.
+- Offscreen GUI startup and auto-exit are reserved for `scripts/run_gui_test.bat` with `CIS_GUI_TEST_MODE=1`.
 - Dedicated desktop navigation into the `AI Runtime` page from the sidebar.
 - Reversible navigation between recommended and advanced model configuration panels without mutating assignments.
 - Real GUI tab presence for providers, roles, budget, diagnostics, and history.

@@ -638,15 +638,6 @@ class RolesTab(QWidget):
         guided_actions.addStretch(1)
         guided_layout.addLayout(guided_actions)
 
-        self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
-        self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
-        self.model_combo.currentIndexChanged.connect(lambda *_: self._on_model_combo_changed())
-        self.search_edit.textChanged.connect(lambda *_: self._refresh_model_combo())
-        self.view_mode_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
-        self.show_all_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
-        self.show_snapshots_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
-        self.show_non_recommended_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
-
         self.provider_combo.addItem("OpenAI", "openai")
         self.provider_combo.addItem("Anthropic", "anthropic")
         self.fallback_combo.addItem("Sin fallback", "none")
@@ -687,14 +678,25 @@ class RolesTab(QWidget):
         outer.addWidget(self.editor_frame)
 
         self._seed_role_combo()
+        self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
+        self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
+        self.model_combo.currentIndexChanged.connect(lambda *_: self._on_model_combo_changed())
+        self.search_edit.textChanged.connect(lambda *_: self._refresh_model_combo())
+        self.view_mode_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
+        self.show_all_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
+        self.show_snapshots_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
+        self.show_non_recommended_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
         self._sync_mode_controls(self._selected_mode())
         self._apply_mode_visibility()
         self.refresh()
 
     def _seed_role_combo(self) -> None:
+        self.role_combo.blockSignals(True)
         self.role_combo.clear()
         for role, label in ROLE_LABELS.items():
             self.role_combo.addItem(label, role)
+        self.role_combo.setCurrentIndex(0 if self.role_combo.count() else -1)
+        self.role_combo.blockSignals(False)
 
     def _selected_role(self) -> str:
         return str(self.role_combo.currentData() or "cheap_structured_model")
@@ -764,7 +766,9 @@ class RolesTab(QWidget):
         if not recommended_mode and self._selection_mode() == "recommended":
             compatible_index = self.view_mode_combo.findData("compatible")
             if compatible_index >= 0:
+                self.view_mode_combo.blockSignals(True)
                 self.view_mode_combo.setCurrentIndex(compatible_index)
+                self.view_mode_combo.blockSignals(False)
         if recommended_mode:
             self._refresh_guided_summary()
         else:
@@ -776,7 +780,15 @@ class RolesTab(QWidget):
     def _refresh_guided_summary(self) -> None:
         provider = self._selected_provider()
         profile_key = self._selected_profile()
-        summary = self.workspace.ai_runtime_guided_configuration_summary(provider, profile_key=profile_key)
+        try:
+            summary = self.workspace.ai_runtime_guided_configuration_summary(provider, profile_key=profile_key)
+        except Exception as exc:
+            logger.warning("ai_runtime.guided_summary_refresh_failed provider=%s profile=%s error=%s", provider, profile_key, exc)
+            self.profile_hint_label.setText("No se pudo cargar el resumen guiado en este arranque.")
+            self.guided_summary_label.setText("Resumen guiado no disponible")
+            self.guided_warning_label.setText("La GUI seguira disponible aunque el catalogo no responda.")
+            self.guided_roles_table.setRowCount(0)
+            return
         profile_label = str(summary.get("profile_label") or profile_key)
         self.profile_hint_label.setText(str(summary.get("profile_description") or ""))
         self.guided_summary_label.setText(
@@ -865,26 +877,41 @@ class RolesTab(QWidget):
     def _refresh_model_combo(self) -> None:
         provider = self._selected_provider()
         role = self._selected_role()
-        current_assignment = self.workspace.ai_runtime_service.repository.resolve_role_assignment(
-            role,
-            creator_id=self._selected_creator_scope(),
-            provider=provider,
-        )
-        current_model_id = None
-        if current_assignment is not None:
-            current_model = self.workspace.ai_runtime_service.repository.get_model_catalog_entry(current_assignment.model_catalog_id)
-            if current_model is not None:
-                current_model_id = current_model.model_id
-        summary = self.workspace.ai_runtime_list_model_selection(
-            provider,
-            role,
-            query=self.search_edit.text().strip() or None,
-            mode=self._selection_mode(),
-            show_non_recommended=self.show_non_recommended_checkbox.isChecked(),
-            show_all_models=self.show_all_checkbox.isChecked(),
-            show_snapshots_and_previews=self.show_snapshots_checkbox.isChecked(),
-            selected_model_id=current_model_id,
-        )
+        try:
+            current_assignment = self.workspace.ai_runtime_service.repository.resolve_role_assignment(
+                role,
+                creator_id=self._selected_creator_scope(),
+                provider=provider,
+            )
+            current_model_id = None
+            if current_assignment is not None:
+                current_model = self.workspace.ai_runtime_service.repository.get_model_catalog_entry(current_assignment.model_catalog_id)
+                if current_model is not None:
+                    current_model_id = current_model.model_id
+            summary = self.workspace.ai_runtime_list_model_selection(
+                provider,
+                role,
+                query=self.search_edit.text().strip() or None,
+                mode=self._selection_mode(),
+                show_non_recommended=self.show_non_recommended_checkbox.isChecked(),
+                show_all_models=self.show_all_checkbox.isChecked(),
+                show_snapshots_and_previews=self.show_snapshots_checkbox.isChecked(),
+                selected_model_id=current_model_id,
+            )
+        except Exception as exc:
+            logger.warning("ai_runtime.model_selection_refresh_failed provider=%s role=%s error=%s", provider, role, exc)
+            self._model_selection_summary = {}
+            self.model_combo.blockSignals(True)
+            self.model_combo.clear()
+            self.model_combo.setCurrentIndex(-1)
+            self.model_combo.blockSignals(False)
+            self.model_hint_label.setText("No se pudieron cargar los modelos en este arranque. La GUI seguira disponible.")
+            self.counts_label.setText("Catalogo no disponible")
+            self.save_button.setEnabled(False)
+            self.model_combo.setEnabled(False)
+            self.model_detail.setPlainText("No se pudo cargar el catalogo seguro en este arranque.")
+            self.current_assignment_label.setText("Asignacion actual: catalogo no disponible")
+            return
         self._model_selection_summary = summary
         models = [item for item in summary.get("items", []) if item.get("is_visible")]
 
@@ -950,15 +977,37 @@ class RolesTab(QWidget):
 
     def _resolve_current_assignment(self, role: str) -> tuple[dict[str, object] | None, dict[str, object] | None]:
         service = self.workspace.ai_runtime_service
-        assignment = service.repository.resolve_role_assignment(role, creator_id=self._selected_creator_scope(), provider=self._selected_provider())
+        try:
+            assignment = service.repository.resolve_role_assignment(
+                role,
+                creator_id=self._selected_creator_scope(),
+                provider=self._selected_provider(),
+            )
+        except Exception as exc:
+            logger.warning("ai_runtime.assignment_resolution_failed role=%s error=%s", role, exc)
+            return None, None
         if assignment is None:
             return None, None
-        model = service.repository.get_model_catalog_entry(assignment.model_catalog_id)
+        try:
+            model = service.repository.get_model_catalog_entry(assignment.model_catalog_id)
+        except Exception as exc:
+            logger.warning(
+                "ai_runtime.assignment_model_lookup_failed role=%s catalog_id=%s error=%s",
+                role,
+                assignment.model_catalog_id,
+                exc,
+            )
+            return assignment.to_dict(), None
         return assignment.to_dict(), model.to_dict() if model is not None else None
 
     def _update_assignment_preview(self) -> None:
         role = self._selected_role()
-        assignment, model = self._resolve_current_assignment(role)
+        try:
+            assignment, model = self._resolve_current_assignment(role)
+        except Exception as exc:
+            logger.warning("ai_runtime.assignment_preview_refresh_failed role=%s error=%s", role, exc)
+            self.current_assignment_label.setText("Asignacion actual: no disponible")
+            return
         if assignment is None or model is None:
             self.current_assignment_label.setText("Asignacion actual: sin asignar")
             return
@@ -1050,11 +1099,15 @@ class RolesTab(QWidget):
         if selected_role is not None:
             role_index = self.role_combo.findData(selected_role)
             if role_index >= 0:
+                self.role_combo.blockSignals(True)
                 self.role_combo.setCurrentIndex(role_index)
+                self.role_combo.blockSignals(False)
         if selected_provider is not None:
             provider_index = self.provider_combo.findData(selected_provider)
             if provider_index >= 0:
+                self.provider_combo.blockSignals(True)
                 self.provider_combo.setCurrentIndex(provider_index)
+                self.provider_combo.blockSignals(False)
         if self.role_combo.count() == 0:
             return
         self._current_creator_id = creator_id

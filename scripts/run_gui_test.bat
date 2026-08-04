@@ -1,9 +1,9 @@
 @echo off
 setlocal
-set "QT_QPA_PLATFORM="
-set "CIS_GUI_AUTO_EXIT_MS="
-set "CIS_GUI_TEST_MODE="
-set "CIS_RUN_GUI_TESTS="
+set "CIS_GUI_TEST_MODE=1"
+set "QT_QPA_PLATFORM=offscreen"
+set "CIS_GUI_AUTO_EXIT_MS=1000"
+set "CIS_RUN_GUI_TESTS=1"
 pushd "%~dp0\.."
 if not exist ".venv\Scripts\python.exe" (
     echo Error: no se encontro .venv\Scripts\python.exe

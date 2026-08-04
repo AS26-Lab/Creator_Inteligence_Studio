@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QByteArray, QPoint, QRect, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -146,6 +147,7 @@ class MainWindow(QMainWindow):
         self.workspace = workspace
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
+        self._window_geometry_restored = False
 
         self._page_keys = [
             "home",
@@ -564,6 +566,7 @@ class MainWindow(QMainWindow):
         self._build_topbar()
         self.refresh_all()
         self.show_page(self.workspace.ui_state.last_page if self.workspace.ui_state.last_page in self._page_keys else "home")
+        self._restore_saved_window_geometry()
 
     def _build_sidebar(self) -> None:
         for item in build_navigation_items():
@@ -577,6 +580,86 @@ class MainWindow(QMainWindow):
                 list_item.setToolTip(f"Abrir {item.label}")
             self.sidebar.addItem(list_item)
         self.sidebar.setCurrentRow(0)
+
+    def _saved_window_geometry(self) -> QByteArray | None:
+        encoded = self.workspace.ui_state.window_geometry
+        if not encoded:
+            return None
+        decoded = self.workspace.ui_state_store.decode_blob(encoded)
+        if not decoded:
+            return None
+        return QByteArray(decoded)
+
+    def _save_window_geometry(self) -> None:
+        try:
+            encoded = self.workspace.ui_state_store.encode_blob(bytes(self.saveGeometry()))
+        except Exception:
+            return
+        if not encoded:
+            return
+        self.workspace.ui_state = self.workspace.ui_state_store.update(self.workspace.ui_state, window_geometry=encoded)
+
+    def _screen_areas(self) -> list[QRect]:
+        areas: list[QRect] = []
+        for screen in QGuiApplication.screens():
+            try:
+                areas.append(screen.availableGeometry())
+            except Exception:
+                continue
+        return areas
+
+    def _rect_is_visible(self, rect: QRect) -> bool:
+        for area in self._screen_areas():
+            if area.intersects(rect):
+                return True
+        return False
+
+    def _center_on_primary_screen(self) -> None:
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        width = min(max(self.width(), 1280), max(640, area.width() - 80))
+        height = min(max(self.height(), 800), max(480, area.height() - 80))
+        self.resize(width, height)
+        top_left = QPoint(
+            max(area.left(), area.center().x() - self.width() // 2),
+            max(area.top(), area.center().y() - self.height() // 2),
+        )
+        self.move(top_left)
+
+    def _restore_saved_window_geometry(self) -> None:
+        if self._window_geometry_restored:
+            return
+        self._window_geometry_restored = True
+        geometry = self._saved_window_geometry()
+        restored = False
+        if geometry is not None:
+            try:
+                restored = self.restoreGeometry(geometry)
+            except Exception:
+                restored = False
+        if not restored or self.width() <= 0 or self.height() <= 0:
+            self._center_on_primary_screen()
+            return
+        frame = self.frameGeometry()
+        if not self._rect_is_visible(frame):
+            self._center_on_primary_screen()
+            self.showNormal()
+        if str(QGuiApplication.platformName()).lower() != "offscreen":
+            self.raise_()
+            self.activateWindow()
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        self._restore_saved_window_geometry()
+        if self.isVisible() and str(QGuiApplication.platformName()).lower() != "offscreen":
+            self.raise_()
+            self.activateWindow()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        self._save_window_geometry()
+        super().closeEvent(event)
 
     def _build_topbar(self) -> None:
         self.creator_combo.currentIndexChanged.connect(self._creator_changed)
