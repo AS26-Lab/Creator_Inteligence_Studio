@@ -1223,10 +1223,22 @@ class AIRuntimeService:
             raise ValueError("Execution was cancelled and cannot be approved.")
 
         linked = self._linked_execution(execution_uuid)
-        if linked is not None:
+        if linked is not None and execution.approved_at is None and execution.status == "awaiting_approval":
             return self._result_from_execution(linked)
 
+        if execution.status in {"completed", "completed_with_warnings", "failed"}:
+            return self.orchestrator.resume_approved_execution(
+                execution_uuid,
+                approved_by=approved_by,
+                approval_reason=approval_reason,
+            )
         if execution.status != "awaiting_approval":
+            if execution.status == "approved":
+                return self.orchestrator.resume_approved_execution(
+                    execution_uuid,
+                    approved_by=approved_by,
+                    approval_reason=approval_reason,
+                )
             raise ValueError("Execution is not waiting for approval.")
 
         request = self._execution_to_request(execution)
@@ -1316,6 +1328,7 @@ class AIRuntimeService:
         self.repository.store_execution(
             replace(
                 execution,
+                status="preparing_context",
                 approved_at=now,
                 input_summary_json={
                     **(execution.input_summary_json if isinstance(execution.input_summary_json, dict) else {}),
@@ -1329,22 +1342,6 @@ class AIRuntimeService:
             )
         )
 
-        approval_source_metadata = {
-            "approval_source_execution_id": execution.execution_uuid,
-            "approval_state": "approved",
-            "approved_by": approved_by,
-            "approved_at": now,
-            "approval_reason": approval_reason,
-            "approval_scope": "single_execution",
-            "provider_at_approval": execution.provider,
-            "model_at_approval": execution.model_catalog_id,
-        }
-        request = replace(
-            request,
-            request_id=f"{request.request_id}:approved:{execution.execution_uuid}",
-            approval_policy="approved_single_execution",
-            metadata={**request.metadata, **approval_source_metadata},
-        )
         logger.info(
             "ai_runtime_diagnostic.resume_started execution_uuid=%s provider=%s model_id=%s role=%s",
             execution.execution_uuid,
@@ -1352,7 +1349,11 @@ class AIRuntimeService:
             execution.model_catalog_id,
             execution.requested_model_role,
         )
-        result = self.orchestrator.run(request, provider=execution.provider)
+        result = self.orchestrator.resume_approved_execution(
+            execution.execution_uuid,
+            approved_by=approved_by,
+            approval_reason=approval_reason,
+        )
         return result
 
     def reject_diagnostic_execution(
@@ -1410,7 +1411,7 @@ class AIRuntimeService:
         for execution in self.repository.list_executions(limit=200):
             if execution.task_type != "provider_diagnostic":
                 continue
-            if execution.status not in {"queued", "preparing_context", "running", "validating"}:
+            if execution.status not in {"queued", "preparing_context", "approved", "running", "validating"}:
                 continue
             updated = self.repository.store_execution(
                 replace(

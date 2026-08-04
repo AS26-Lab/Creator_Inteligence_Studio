@@ -280,14 +280,16 @@ Rules:
 - the GUI must surface provider, model, role, reason, estimated cost, currency, scope, and the policy that triggered approval;
 - approval is per execution, not global;
 - approval metadata must record who approved, when, the approval reason, the estimated cost at approval, and the provider/model at approval;
-- approval must be invalidated if the provider, model, privacy decision, or estimated cost changes materially before continuation;
+- approval is invalidated if the provider, model, privacy decision, or estimated cost changes materially before resume;
 - rejection must cancel the execution, skip the provider call, and preserve a safe trace in history;
 - price unknown is not treated as zero;
 - when pricing is not verified, the UI must say so explicitly and allow a manual approval for the minimal diagnostic path;
-- history must show pending approval, approved, rejected or cancelled states, along with the actor, date, reason, provider, model, and whether pricing was unknown.
-- the persisted v31 row keeps the same `execution_uuid`; approval is recorded in `approved_at` plus approval metadata, and the GUI derives the visible `approved` state from that persisted approval marker while the same execution is resumed;
-- `Aprobar y continuar` must disable approval controls immediately, persist approval, validate the approval context, and resume the same execution in the background;
-- if the continuation cannot resume, the UI must fail visibly instead of leaving an `awaiting_approval + approved` mismatch on screen.
+- history must show pending approval, approved, rejected or cancelled states, along with the actor, date, reason, provider, model, and whether pricing was unknown;
+- approval does not create a second execution row;
+- the persisted row keeps the same `execution_uuid`, `request_id`, and `request_fingerprint` from creation through completion;
+- `create_execution(request)` creates a fresh row, while `resume_approved_execution(execution_uuid)` continues the same row after approval;
+- `Aprobar y continuar` must disable approval controls immediately, persist approval on the existing row, validate the approval context, and resume the same execution in the background;
+- if resume cannot proceed, the UI must fail visibly instead of leaving an `awaiting_approval + approved` mismatch on screen.
 
 ### Button States
 
@@ -311,12 +313,13 @@ Recovery rules:
 
 - `queued`, `preparing_context`, `running`, and `validating` are active states only while a live worker or task lease still exists;
 - `awaiting_approval` is recoverable and must remain visible after restart so the same execution can be approved or rejected;
-- `approved` is a runtime-visible continuation state derived from the persisted approval marker while the same row is being resumed;
+- `approved` is a brief resume marker on the same row and must not become a second execution;
 - a startup recovery pass reconciles orphaned active rows and marks stale rows as interrupted or cancelled with a safe reason;
 - the app must not call the provider automatically during recovery;
 - the app must not create a duplicate execution just to report that one already exists;
 - a live execution is the one that still has a recognized task or worker heartbeat, or is waiting for human approval;
-- a stale or interrupted execution can be retried, but a live one must block duplicate provider calls.
+- a stale or interrupted execution can be retried, but a live one must block duplicate provider calls;
+- legacy linked continuation rows remain readable, but new approvals do not create them.
 
 Cancellation and retry:
 

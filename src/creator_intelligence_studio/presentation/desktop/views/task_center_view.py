@@ -99,6 +99,8 @@ class TaskCenterView(QWidget):
         approval_state = str(payload.get("approval_state") or "").lower()
         if task_status in {"completed", "failed", "cancelled", "interrupted"}:
             status = task_status
+        elif task_status in {"queued", "preparing_context", "approved", "running", "validating"}:
+            status = task_status
         elif approval_state:
             status = approval_state
         else:

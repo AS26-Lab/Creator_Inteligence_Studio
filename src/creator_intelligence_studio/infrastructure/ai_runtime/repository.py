@@ -71,6 +71,59 @@ class AIExecutionRepository(Protocol):
     def store_execution(self, execution: AIExecutionRecord) -> AIExecutionRecord: ...
     def get_execution_by_uuid(self, execution_uuid: str) -> AIExecutionRecord | None: ...
     def list_executions(self, creator_id: str | None = None, provider: str | None = None, limit: int = 100) -> list[AIExecutionRecord]: ...
+    def claim_execution_for_resume(
+        self,
+        execution_uuid: str,
+        *,
+        approved_at: str,
+        approved_by: str | None = None,
+        approval_reason: str | None = None,
+        approval_summary: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None: ...
+    def update_execution_status(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        expected_statuses: tuple[str, ...] | None = None,
+        input_summary_updates: dict[str, Any] | None = None,
+        approved_at: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        latency_ms: int | None = None,
+        validation_status: str | None = None,
+        cache_status: str | None = None,
+        output_reference: str | None = None,
+        error_category: str | None = None,
+        error_code: str | None = None,
+        error_message_safe: str | None = None,
+        approval_required: bool | None = None,
+    ) -> AIExecutionRecord | None: ...
+    def persist_provider_result(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        validation_status: str,
+        cache_status: str,
+        completed_at: str,
+        latency_ms: int | None,
+        output_reference: str,
+        input_summary_updates: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None: ...
+    def persist_execution_failure(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        completed_at: str,
+        latency_ms: int | None,
+        error_category: str,
+        error_code: str | None,
+        error_message_safe: str,
+        validation_status: str | None = None,
+        input_summary_updates: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None: ...
     def store_payload(self, payload: AIExecutionPayload) -> AIExecutionPayload: ...
     def list_payloads(self, execution_id: str) -> list[AIExecutionPayload]: ...
     def store_usage(self, usage: AIUsageRecord) -> AIUsageRecord: ...
@@ -717,6 +770,183 @@ class SQLiteAIRuntimeRepository:
                 )
                 row = connection.execute("SELECT * FROM ai_executions WHERE id = ?", (existing["id"],)).fetchone()
         return self._row_to_execution(row)
+
+    def _update_execution_columns(
+        self,
+        execution_uuid: str,
+        *,
+        values: dict[str, Any],
+        expected_statuses: tuple[str, ...] | None = None,
+    ) -> AIExecutionRecord | None:
+        with self.database.connect() as connection:
+            current_row = connection.execute("SELECT * FROM ai_executions WHERE execution_uuid = ?", (execution_uuid,)).fetchone()
+            if current_row is None:
+                return None
+            current = self._row_to_execution(current_row)
+            if expected_statuses is not None and current.status not in expected_statuses:
+                return None
+            assignments: list[str] = []
+            params: list[Any] = []
+            for column, value in values.items():
+                assignments.append(f"{column} = ?")
+                if column == "input_summary_json" and value is not None:
+                    params.append(_json(value))
+                else:
+                    params.append(value)
+            params.append(execution_uuid)
+            connection.execute(
+                f"UPDATE ai_executions SET {', '.join(assignments)} WHERE execution_uuid = ?",
+                tuple(params),
+            )
+            row = connection.execute("SELECT * FROM ai_executions WHERE execution_uuid = ?", (execution_uuid,)).fetchone()
+        return self._row_to_execution(row)
+
+    def claim_execution_for_resume(
+        self,
+        execution_uuid: str,
+        *,
+        approved_at: str,
+        approved_by: str | None = None,
+        approval_reason: str | None = None,
+        approval_summary: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None:
+        current = self.get_execution_by_uuid(execution_uuid)
+        if current is None:
+            return None
+        summary = current.input_summary_json if isinstance(current.input_summary_json, dict) else {}
+        if current.status in {"preparing_context", "running", "validating", "completed", "completed_with_warnings", "failed", "cancelled"}:
+            return current
+        merged_summary = {
+            **summary,
+            "approval_state": "approved",
+            "approved_at": approved_at,
+            "approved_by": approved_by,
+            "approval_reason": approval_reason,
+            "approval_transition_at": approved_at,
+            "approval_summary": approval_summary or summary.get("approval_summary"),
+            "resume_claimed_at": approved_at,
+            "resume_claimed_by": approved_by,
+        }
+        return self._update_execution_columns(
+            execution_uuid,
+            expected_statuses=("awaiting_approval", "approved"),
+            values={
+                "status": "preparing_context",
+                "approved_at": approved_at,
+                "updated_at": approved_at,
+                "input_summary_json": merged_summary,
+            },
+        )
+
+    def update_execution_status(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        expected_statuses: tuple[str, ...] | None = None,
+        input_summary_updates: dict[str, Any] | None = None,
+        approved_at: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        latency_ms: int | None = None,
+        validation_status: str | None = None,
+        cache_status: str | None = None,
+        output_reference: str | None = None,
+        error_category: str | None = None,
+        error_code: str | None = None,
+        error_message_safe: str | None = None,
+        approval_required: bool | None = None,
+    ) -> AIExecutionRecord | None:
+        current = self.get_execution_by_uuid(execution_uuid)
+        if current is None:
+            return None
+        summary = current.input_summary_json if isinstance(current.input_summary_json, dict) else {}
+        merged_summary = {**summary, **(input_summary_updates or {})}
+        values: dict[str, Any] = {
+            "status": status,
+            "updated_at": completed_at or started_at or approved_at or _utc_now(),
+            "input_summary_json": merged_summary,
+        }
+        if approved_at is not None:
+            values["approved_at"] = approved_at
+        if started_at is not None:
+            values["started_at"] = started_at
+        if completed_at is not None:
+            values["completed_at"] = completed_at
+        if latency_ms is not None:
+            values["latency_ms"] = latency_ms
+        if validation_status is not None:
+            values["validation_status"] = validation_status
+        if cache_status is not None:
+            values["cache_status"] = cache_status
+        if output_reference is not None:
+            values["output_reference"] = output_reference
+        if error_category is not None:
+            values["error_category"] = error_category
+        if error_code is not None:
+            values["error_code"] = error_code
+        if error_message_safe is not None:
+            values["error_message_safe"] = error_message_safe
+        if approval_required is not None:
+            values["approval_required"] = approval_required
+        return self._update_execution_columns(
+            execution_uuid,
+            expected_statuses=expected_statuses,
+            values=values,
+        )
+
+    def persist_provider_result(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        validation_status: str,
+        cache_status: str,
+        completed_at: str,
+        latency_ms: int | None,
+        output_reference: str,
+        input_summary_updates: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None:
+        return self.update_execution_status(
+            execution_uuid,
+            status=status,
+            expected_statuses=("running", "validating", "preparing_context", "approved"),
+            input_summary_updates=input_summary_updates,
+            completed_at=completed_at,
+            latency_ms=latency_ms,
+            validation_status=validation_status,
+            cache_status=cache_status,
+            output_reference=output_reference,
+            error_category=None,
+            error_code=None,
+            error_message_safe=None,
+        )
+
+    def persist_execution_failure(
+        self,
+        execution_uuid: str,
+        *,
+        status: str,
+        completed_at: str,
+        latency_ms: int | None,
+        error_category: str,
+        error_code: str | None,
+        error_message_safe: str,
+        validation_status: str | None = None,
+        input_summary_updates: dict[str, Any] | None = None,
+    ) -> AIExecutionRecord | None:
+        return self.update_execution_status(
+            execution_uuid,
+            status=status,
+            expected_statuses=("approved", "preparing_context", "running", "validating", "awaiting_approval"),
+            input_summary_updates=input_summary_updates,
+            completed_at=completed_at,
+            latency_ms=latency_ms,
+            validation_status=validation_status,
+            error_category=error_category,
+            error_code=error_code,
+            error_message_safe=error_message_safe,
+        )
 
     def get_execution_by_uuid(self, execution_uuid: str) -> AIExecutionRecord | None:
         row = self._query_one("SELECT * FROM ai_executions WHERE execution_uuid = ?", (execution_uuid,))

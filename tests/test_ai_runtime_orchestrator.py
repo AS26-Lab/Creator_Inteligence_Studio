@@ -506,6 +506,8 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
         awaiting = fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
         self.assertEqual(awaiting.status, "awaiting_approval")
         execution_id = awaiting.execution_id
+        before_rows = fixture.repository.list_executions(limit=10)
+        self.assertEqual(len(before_rows), 1)
 
         completed = fixture.service.approve_and_run_diagnostic(execution_id, approved_by="tester", approval_reason="Manual review")
         repeated = fixture.service.approve_and_run_diagnostic(execution_id, approved_by="tester", approval_reason="Manual review")
@@ -514,8 +516,12 @@ class AIRuntimeOrchestratorTests(unittest.TestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(repeated.status, completed.status)
         self.assertEqual(provider.calls, 1)
-        linked = fixture.repository.list_executions(limit=10)
-        self.assertTrue(any((execution.input_summary_json or {}).get("approval_source_execution_id") == execution_id for execution in linked))
+        after_rows = fixture.repository.list_executions(limit=10)
+        self.assertEqual(len(after_rows), 1)
+        self.assertEqual(after_rows[0].execution_uuid, execution_id)
+        self.assertEqual(after_rows[0].request_fingerprint, before_rows[0].request_fingerprint)
+        self.assertEqual((after_rows[0].input_summary_json or {}).get("request_id"), (before_rows[0].input_summary_json or {}).get("request_id"))
+        self.assertEqual(after_rows[0].status, completed.status)
 
     def test_reject_diagnostic_execution_does_not_call_provider(self) -> None:
         fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)

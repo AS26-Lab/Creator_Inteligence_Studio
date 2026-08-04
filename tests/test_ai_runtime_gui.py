@@ -901,12 +901,16 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertFalse(view.diagnostics_tab.reject_button.isEnabled())
         self.assertFalse(view.diagnostics_tab.review_budget_button.isEnabled())
         self.assertTrue(self._wait_until(lambda: view.diagnostics_tab.status_label.text() in {"completed", "completed_with_warnings"}))
+        self.assertNotEqual(view.diagnostics_tab.execution_label.text(), "-")
         self.assertEqual(fixture.service.providers["openai"].calls, 1)
         self.assertTrue(view.diagnostics_tab.run_button.isEnabled())
         self.assertFalse(view.diagnostics_tab.approval_group.isVisible())
         self.assertFalse(view.diagnostics_tab.cancel_active_button.isVisible())
         self.assertGreater(view.history_tab.table.rowCount(), 0)
-        self.assertTrue(any(view.history_tab.table.item(row, 5) and view.history_tab.table.item(row, 5).text() == "approved" for row in range(view.history_tab.table.rowCount())))
+        self.assertTrue(any(view.history_tab.table.item(row, 5) and view.history_tab.table.item(row, 5).text() in {"completed", "completed_with_warnings"} for row in range(view.history_tab.table.rowCount())))
+        view.history_tab.table.selectRow(0)
+        self.qt_app.processEvents()
+        self.assertIn("approval: approved", view.history_tab.detail.toPlainText().lower())
 
     def test_diagnostics_view_rejects_without_call_and_updates_history(self) -> None:
         fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
@@ -1111,6 +1115,8 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertEqual(getattr(result, "status", None), "awaiting_approval")
 
         task_center = TaskCenterView(workspace)
+        task_center.refresh()
+        self.qt_app.processEvents()
         self.assertEqual(task_center.table.rowCount(), 1)
         self.assertIn(str(result.execution_id), task_center.table.item(0, 5).text())
         self.assertIn("openai", task_center.table.item(0, 1).text().lower())

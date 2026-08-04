@@ -1844,9 +1844,12 @@ class WorkspaceViewModel:
             execution_status = str(execution.get("status") or "").lower()
             approval_state = str((execution.get("input_summary_json") or {}).get("approval_state") or payload.get("approval_state") or "").lower()
             approval_marker = execution.get("approved_at") is not None or approval_state == "approved"
-            live = execution_status in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+            live = execution_status in {"queued", "preparing_context", "awaiting_approval", "approved", "running", "validating"}
+            task_status = str(getattr(task, "status", "") or "").lower()
             if execution_status == "awaiting_approval" and approval_marker:
-                live = str(getattr(task, "status", "") or "").lower() in live_task_statuses
+                live = task_status in live_task_statuses
+            elif execution_status == "approved":
+                live = task_status in live_task_statuses
             if not live:
                 continue
             if provider is not None and str(payload.get("provider") or "") != provider:
