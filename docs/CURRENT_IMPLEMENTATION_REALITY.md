@@ -21,6 +21,7 @@ This document records what is actually implemented in the repository at the v30 
 - CLI
 - GUI desktop shell
 - interactive launcher cleans inherited test-only GUI variables before opening the visible window
+- the desktop shell defers startup recovery and heavy AI Runtime refresh work until after `show()`
 - logging
 - environment diagnostics
 - local paths

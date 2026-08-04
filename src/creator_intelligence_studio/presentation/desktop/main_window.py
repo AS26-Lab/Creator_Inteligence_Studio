@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QPoint, QRect, Qt
+import logging
+
+from PySide6.QtCore import QByteArray, QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
@@ -139,6 +141,9 @@ from creator_intelligence_studio.presentation.desktop.views import (
 from creator_intelligence_studio.presentation.desktop.widgets.inspector import InspectorPanel
 
 
+logger = logging.getLogger(__name__)
+
+
 class MainWindow(QMainWindow):
     """Ventana principal con navegación lateral y panel contextual."""
 
@@ -148,6 +153,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Creator Intelligence Studio")
         self.resize(1600, 900)
         self._window_geometry_restored = False
+        self._post_show_bootstrap_started = False
 
         self._page_keys = [
             "home",
@@ -416,12 +422,15 @@ class MainWindow(QMainWindow):
         self.brief_privacy_view = BriefPrivacyView(workspace)
         self.creator_memory_view = CreatorMemoryView(workspace)
         self.creator_language_view = CreatorLanguageView(workspace)
+        logger.info("GUI_BOOT_ai_runtime_view_started")
         self.ai_runtime_view = AIRuntimeOverviewView(workspace)
+        logger.info("GUI_BOOT_ai_runtime_view_completed")
         self.thumbnail_lab_view = ThumbnailLabView(workspace)
         self.youtube_view = YouTubeIntegrationView(workspace)
         self.instagram_view = InstagramIntegrationView(workspace)
         self.tiktok_view = TikTokIntegrationView(workspace)
         self.workflow_view = WorkflowView(workspace)
+        logger.info("GUI_BOOT_task_center_created")
         self.task_center_view = TaskCenterView(workspace)
         self.onboarding_view = OnboardingView(workspace)
         self.transcription_view = TranscriptionView(workspace)
@@ -541,6 +550,8 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.evaluation_view)
         self.stack.addWidget(self.personalization_models_view)
         self.stack.addWidget(self.system_view)
+        logger.info("GUI_BOOT_navigation_created")
+        logger.info("GUI_BOOT_all_views_registered")
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -564,9 +575,9 @@ class MainWindow(QMainWindow):
 
         self._build_sidebar()
         self._build_topbar()
-        self.refresh_all()
         self.show_page(self.workspace.ui_state.last_page if self.workspace.ui_state.last_page in self._page_keys else "home")
         self._restore_saved_window_geometry()
+        logger.info("GUI_BOOT_geometry_restored")
 
     def _build_sidebar(self) -> None:
         for item in build_navigation_items():
@@ -670,8 +681,28 @@ class MainWindow(QMainWindow):
         self.onboarding_button.clicked.connect(lambda: self.show_page("onboarding"))
         self._refresh_topbar()
 
+    def start_post_show_bootstrap(self) -> None:
+        if self._post_show_bootstrap_started:
+            return
+        self._post_show_bootstrap_started = True
+        QTimer.singleShot(250, self._run_post_show_bootstrap)
+
+    def _run_post_show_bootstrap(self) -> None:
+        logger.info("GUI_BOOT_startup_recovery_started")
+        try:
+            self.workspace.recover_ai_runtime_state()
+        except Exception as exc:
+            logger.warning("startup_recovery_failed error=%s", exc)
+        logger.info("GUI_BOOT_startup_recovery_completed")
+        try:
+            self.refresh_all()
+        except Exception as exc:
+            logger.warning("deferred_refresh_failed error=%s", exc)
+
     def refresh_all(self) -> None:
+        logger.info("GUI_BOOT_refresh_all_started")
         self.workspace.refresh()
+        logger.info("GUI_BOOT_refresh_workspace_completed")
         self._refresh_topbar()
         self.dashboard_view.refresh()
         self.integrations_view.refresh()
@@ -762,13 +793,17 @@ class MainWindow(QMainWindow):
         self.brief_privacy_view.refresh()
         self.creator_memory_view.refresh()
         self.creator_language_view.refresh()
+        logger.info("GUI_BOOT_refresh_ai_runtime_started")
         self.ai_runtime_view.refresh()
+        logger.info("GUI_BOOT_refresh_ai_runtime_completed")
         self.thumbnail_lab_view.refresh()
         self.youtube_view.refresh()
         self.instagram_view.refresh()
         self.tiktok_view.refresh()
         self.workflow_view.refresh()
+        logger.info("GUI_BOOT_refresh_task_center_started")
         self.task_center_view.refresh()
+        logger.info("GUI_BOOT_refresh_task_center_completed")
         self.onboarding_view.refresh()
         self.transcription_view.refresh()
         self.subtitle_editor_view.refresh()
@@ -780,6 +815,7 @@ class MainWindow(QMainWindow):
         self.personalization_models_view.refresh()
         self.system_view.refresh()
         self._refresh_gpu_state()
+        logger.info("GUI_BOOT_refresh_all_completed")
 
     def _refresh_topbar(self) -> None:
         self.creator_combo.blockSignals(True)

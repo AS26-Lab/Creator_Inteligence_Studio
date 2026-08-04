@@ -510,7 +510,6 @@ class WorkspaceViewModel:
             personalization_service=self.personalization_service,
         )
         self._sync_default_selection()
-        self._recover_ai_runtime_state()
 
     def _ai_runtime_task_payload(self, execution: dict[str, object], *, recovery_state: str | None = None) -> dict[str, object]:
         summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
@@ -583,6 +582,9 @@ class WorkspaceViewModel:
                     message=str(execution.get("error_message_safe") or "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla."),
                     cancellable=True,
                 )
+
+    def recover_ai_runtime_state(self) -> None:
+        self._recover_ai_runtime_state()
 
     def _sync_default_selection(self) -> None:
         creators = self.service.list_creators()

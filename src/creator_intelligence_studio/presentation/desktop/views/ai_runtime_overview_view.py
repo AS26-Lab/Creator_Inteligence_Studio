@@ -678,6 +678,7 @@ class RolesTab(QWidget):
         outer.addWidget(self.editor_frame)
 
         self._seed_role_combo()
+        self._startup_refresh_pending = True
         self.role_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.provider_combo.currentIndexChanged.connect(lambda *_: self._refresh_model_combo())
         self.model_combo.currentIndexChanged.connect(lambda *_: self._on_model_combo_changed())
@@ -688,7 +689,11 @@ class RolesTab(QWidget):
         self.show_non_recommended_checkbox.toggled.connect(lambda *_: self._refresh_model_combo())
         self._sync_mode_controls(self._selected_mode())
         self._apply_mode_visibility()
-        self.refresh()
+        self.model_hint_label.setText("La carga de modelos se completara despues de abrir la ventana.")
+        self.counts_label.setText("Catalogo pendiente")
+        self.model_detail.setPlainText("El catalogo se cargara despues de abrir la ventana.")
+        self.current_assignment_label.setText("Asignacion actual: pendiente de carga")
+        self._startup_refresh_pending = False
 
     def _seed_role_combo(self) -> None:
         self.role_combo.blockSignals(True)
@@ -769,6 +774,8 @@ class RolesTab(QWidget):
                 self.view_mode_combo.blockSignals(True)
                 self.view_mode_combo.setCurrentIndex(compatible_index)
                 self.view_mode_combo.blockSignals(False)
+        if self._startup_refresh_pending:
+            return
         if recommended_mode:
             self._refresh_guided_summary()
         else:
@@ -1679,7 +1686,6 @@ class DiagnosticsTab(QWidget):
             self.run_button.setEnabled(True)
             self.cancel_active_button.setEnabled(False)
             self.message_label.setText("La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.")
-        _refresh_enclosing_overview(self)
 
     def _approval_requested(self, execution_id: str, result: dict[str, object]) -> None:
         self._current_execution_id = execution_id
@@ -2027,8 +2033,6 @@ class DiagnosticsTab(QWidget):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
         else:
             self.message_label.setText("Listo para ejecutar diagnóstico.")
-
-
 class HistoryTab(QWidget):
     def __init__(self, workspace: WorkspaceViewModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)

@@ -701,7 +701,9 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
 
     try:
         if args.gui:
+            print("GUI_BOOT_03 before_bootstrap", file=stderr)
             context = _load_service_context()
+            print("GUI_BOOT_04 bootstrap_completed", file=stderr)
             from creator_intelligence_studio.presentation.desktop.app import launch_gui
 
             return launch_gui(context, stdout=stdout, stderr=stderr)

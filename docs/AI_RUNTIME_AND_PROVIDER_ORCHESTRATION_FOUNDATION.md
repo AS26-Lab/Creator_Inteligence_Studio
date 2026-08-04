@@ -561,6 +561,8 @@ This section records what was verified during the v31 closeout audit.
 - Desktop CLI execution with `python -m creator_intelligence_studio --diagnostic-json`.
 - Interactive GUI startup via `scripts/run_gui.bat`, which clears inherited test variables before launching a visible desktop window.
 - Offscreen GUI startup and auto-exit are reserved for `scripts/run_gui_test.bat` with `CIS_GUI_TEST_MODE=1`.
+- The desktop shell now shows the main window before deferred AI Runtime recovery and `refresh_all()`, so a slow local section cannot block window presentation.
+- `AIRuntimeOverviewView` restores the current diagnostic state without recursively refreshing the whole page, preventing startup loops.
 - Dedicated desktop navigation into the `AI Runtime` page from the sidebar.
 - Reversible navigation between recommended and advanced model configuration panels without mutating assignments.
 - Real GUI tab presence for providers, roles, budget, diagnostics, and history.

@@ -54,7 +54,6 @@ class TaskCenterView(QWidget):
         self.open_button.clicked.connect(self._open_video)
         self.cancel_button.clicked.connect(self._interrupt_task)
         self.retry_button.clicked.connect(self._retry_task)
-        self.refresh()
 
     def _selected_task_id(self) -> str | None:
         rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []

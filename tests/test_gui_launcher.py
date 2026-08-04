@@ -295,6 +295,29 @@ class MainWindowGeometryTests(unittest.TestCase):
             self.assertGreater(window.width(), 0)
             self.assertGreater(window.height(), 0)
 
+    def test_main_window_defers_startup_recovery_until_post_show(self) -> None:
+        fixture = build_runtime_fixture()
+        self.addCleanup(fixture.cleanup)
+        workspace = DesktopWorkspaceFacade(fixture.service)
+        workspace.ui_state_store = SimpleNamespace(
+            encode_blob=lambda data: data,
+            decode_blob=lambda data: data,
+            update=lambda state, **changes: SimpleNamespace(**{**state.__dict__, **changes}),
+        )
+        workspace.ui_state = SimpleNamespace(last_page="home", window_geometry=None, window_state=None, tasks=())
+        calls: list[str] = []
+        workspace.recover_ai_runtime_state = lambda: calls.append("recover")
+        workspace.refresh = lambda: calls.append("refresh")
+
+        stack, inspector_patch = _patch_main_window_views()
+        with stack, inspector_patch:
+            window = MainWindow(workspace)
+            self.addCleanup(window.close)
+            self.assertEqual(calls, [])
+            window._run_post_show_bootstrap()
+
+        self.assertEqual(calls, ["recover", "refresh"])
+
 
 if __name__ == "__main__":
     unittest.main()

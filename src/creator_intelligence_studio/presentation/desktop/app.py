@@ -37,17 +37,25 @@ def _sanitize_gui_environment(*, stderr=None) -> None:
         )
 
 
+def _boot_trace(marker: str, *, stderr=None) -> None:
+    stream = sys.stderr if stderr is None else stderr
+    print(marker, file=stream)
+
+
 def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Sequence[str] | None = None) -> int:
     """Inicia la aplicacion de escritorio."""
 
     del stdout
+    _boot_trace("GUI_BOOT_01 before_qapplication", stderr=stderr)
     _sanitize_gui_environment(stderr=stderr)
 
     try:
         app = QApplication(list(argv or sys.argv))
+        _boot_trace("GUI_BOOT_02 qapplication_created", stderr=stderr)
         app.setApplicationName(context.settings.application_name)
         apply_theme(app)
 
+        _boot_trace("GUI_BOOT_05 before_main_window", stderr=stderr)
         workspace = WorkspaceViewModel(
             service=context.service,
             media_service=context.media_service,
@@ -80,11 +88,21 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
             settings=context.settings,
             paths=context.paths,
         )
+        _boot_trace("GUI_BOOT_06 workspace_view_model_created", stderr=stderr)
+        _boot_trace("GUI_BOOT_07 main_window_constructing", stderr=stderr)
         window = MainWindow(workspace)
+        _boot_trace("GUI_BOOT_08 main_window_constructed", stderr=stderr)
+        _boot_trace("GUI_BOOT_09 before_show", stderr=stderr)
         window.show()
         if str(app.platformName()).lower() != "offscreen":
             window.raise_()
             window.activateWindow()
+        if hasattr(app, "processEvents"):
+            app.processEvents()
+        _boot_trace("GUI_BOOT_10 after_show", stderr=stderr)
+
+        if hasattr(window, "start_post_show_bootstrap") and callable(getattr(window, "start_post_show_bootstrap")):
+            window.start_post_show_bootstrap()
 
         auto_exit = os.environ.get("CIS_GUI_AUTO_EXIT_MS") if _gui_test_mode_enabled() else None
         if auto_exit:
@@ -94,6 +112,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
                 delay = 0
             if delay > 0:
                 QTimer.singleShot(delay, app.quit)
+        _boot_trace("GUI_BOOT_11 event_loop_started", stderr=stderr)
         return app.exec()
     except Exception:
         print("Error inesperado durante el arranque grafico.", file=stderr)
