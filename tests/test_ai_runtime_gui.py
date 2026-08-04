@@ -115,6 +115,7 @@ class DesktopWorkspaceFacade:
             if task.task_id == task_id:
                 task.status = "completed"
                 task.message = message
+                task.cancellable = False
                 return task
         return SimpleNamespace(task_id=task_id, status="completed", message=message)
 
@@ -123,6 +124,7 @@ class DesktopWorkspaceFacade:
             if task.task_id == task_id:
                 task.status = "failed"
                 task.error = error
+                task.cancellable = False
                 return task
         return SimpleNamespace(task_id=task_id, status="failed", error=error)
 
@@ -268,9 +270,15 @@ class DesktopWorkspaceFacade:
         if task is not None:
             self.update_background_task(
                 task.task_id,
-                status="running",
-                progress_percent=50.0,
-                message="Aprobacion registrada. Preparando diagnostico",
+                status="preparing_context",
+                progress_percent=45.0,
+                message="Registrando aprobacion...",
+                payload={
+                    **task.payload,
+                    "approval_state": "approved",
+                    "approved_by": approved_by,
+                    "approval_reason": approval_reason,
+                },
             )
         result = self.ai_runtime_service.approve_and_run_diagnostic(
             execution_uuid,
@@ -285,9 +293,11 @@ class DesktopWorkspaceFacade:
             else:
                 self.update_background_task(
                     task.task_id,
-                    status="waiting_approval",
-                    progress_percent=40.0,
-                    message="Esperando tu aprobacion",
+                    status="failed",
+                    progress_percent=100.0,
+                    message="No se pudo reanudar la ejecucion aprobada.",
+                    cancellable=False,
+                    error="No se pudo reanudar la ejecucion aprobada.",
                 )
         return result
 
@@ -299,6 +309,7 @@ class DesktopWorkspaceFacade:
                 status="cancelled",
                 progress_percent=100.0,
                 message="La ejecucion fue cancelada y no se realizo ningun cargo.",
+                cancellable=False,
             )
         return self.ai_runtime_service.reject_diagnostic_execution(
             execution_uuid,
@@ -314,6 +325,7 @@ class DesktopWorkspaceFacade:
                 status="interrupted",
                 progress_percent=100.0,
                 message=cancellation_reason or "Cancelada desde Task Center.",
+                cancellable=False,
             )
         return self.ai_runtime_service.cancel_diagnostic_execution(
             execution_uuid,
@@ -322,18 +334,23 @@ class DesktopWorkspaceFacade:
         )
 
     def ai_runtime_active_diagnostic_task(self, provider: str | None = None, role: str | None = None):
-        active_statuses = {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
-        active_ids = {
-            str(execution.get("execution_uuid") or "")
-            for execution in self.ai_runtime_service.list_executions(limit=200)
-            if execution.get("task_type") == "provider_diagnostic" and str(execution.get("status") or "").lower() in active_statuses
-        }
         for task in reversed(self.background_tasks()):
             payload = getattr(task, "payload", {})
             if not isinstance(payload, dict) or payload.get("kind") != "ai_runtime_diagnostic":
                 continue
             execution_id = str(payload.get("execution_id") or "")
-            if execution_id not in active_ids:
+            if not execution_id:
+                continue
+            execution = self.ai_runtime_service.get_execution(execution_id)
+            if not isinstance(execution, dict):
+                continue
+            execution_status = str(execution.get("status") or "").lower()
+            approval_state = str((execution.get("input_summary_json") or {}).get("approval_state") or payload.get("approval_state") or "").lower()
+            approval_marker = execution.get("approved_at") is not None or approval_state == "approved"
+            live = execution_status in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+            if execution_status == "awaiting_approval" and approval_marker:
+                live = str(getattr(task, "status", "") or "").lower() in {"pending", "preparing_context", "waiting_approval", "running"}
+            if not live:
                 continue
             if provider is not None and str(payload.get("provider") or "") != provider:
                 continue
@@ -881,9 +898,13 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
 
         QTest.mouseClick(view.diagnostics_tab.approve_button, Qt.MouseButton.LeftButton)
         self.assertFalse(view.diagnostics_tab.approve_button.isEnabled())
+        self.assertFalse(view.diagnostics_tab.reject_button.isEnabled())
+        self.assertFalse(view.diagnostics_tab.review_budget_button.isEnabled())
         self.assertTrue(self._wait_until(lambda: view.diagnostics_tab.status_label.text() in {"completed", "completed_with_warnings"}))
         self.assertEqual(fixture.service.providers["openai"].calls, 1)
         self.assertTrue(view.diagnostics_tab.run_button.isEnabled())
+        self.assertFalse(view.diagnostics_tab.approval_group.isVisible())
+        self.assertFalse(view.diagnostics_tab.cancel_active_button.isVisible())
         self.assertGreater(view.history_tab.table.rowCount(), 0)
         self.assertTrue(any(view.history_tab.table.item(row, 5) and view.history_tab.table.item(row, 5).text() == "approved" for row in range(view.history_tab.table.rowCount())))
 
@@ -903,8 +924,10 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertIn(view.diagnostics_tab.status_label.text(), {"cancelled", "failed"})
         self.assertIn("no se realizo ningun cargo", view.diagnostics_tab.message_label.text().lower())
         self.assertEqual(fixture.service.providers["openai"].calls, 0)
+        self.assertFalse(view.diagnostics_tab.approval_group.isVisible())
+        self.assertFalse(view.diagnostics_tab.cancel_active_button.isVisible())
         self.assertGreater(view.history_tab.table.rowCount(), 0)
-        self.assertTrue(any(view.history_tab.table.item(row, 5) and view.history_tab.table.item(row, 5).text() == "rejected/cancelled" for row in range(view.history_tab.table.rowCount())))
+        self.assertTrue(any(view.history_tab.table.item(row, 5) and view.history_tab.table.item(row, 5).text() == "rejected_by_user" for row in range(view.history_tab.table.rowCount())))
 
     def test_review_budget_button_navigates_to_budget_tab(self) -> None:
         fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
@@ -920,6 +943,75 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         QTest.mouseClick(view.diagnostics_tab.review_budget_button, Qt.MouseButton.LeftButton)
         self.qt_app.processEvents()
         self.assertIs(view.tabs.currentWidget(), view.budget_tab)
+
+    def test_cancel_button_is_hidden_for_terminal_ai_runtime_states(self) -> None:
+        fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
+        self.addCleanup(fixture.cleanup)
+        fixture.service.providers["openai"] = FakeProvider("openai")
+        workspace = DesktopWorkspaceFacade(fixture.service)
+        execution_id = "22222222-2222-2222-2222-222222222222"
+        fixture.repository.store_execution(
+            AIExecutionRecord(
+                execution_uuid=execution_id,
+                creator_id=None,
+                project_id=None,
+                task_type="provider_diagnostic",
+                operation="extract",
+                status="cancelled",
+                requested_model_role="cheap_structured_model",
+                provider="openai",
+                model_catalog_id=fixture.model.id,
+                template_id=fixture.repository.get_prompt_template("provider_diagnostic").id,
+                privacy_class="selected_text_allowed",
+                quality_level="standard",
+                context_fingerprint=None,
+                request_fingerprint="cancelled-fingerprint",
+                input_summary_json={
+                    "request_id": "cancelled-request",
+                    "task_type": "provider_diagnostic",
+                    "provider": "openai",
+                    "model_id": fixture.model.id,
+                    "approval_state": "rejected",
+                    "approval_reason": "No",
+                },
+                output_reference=None,
+                validation_status="requires_human_review",
+                cache_status="invalidated",
+                fallback_policy="none",
+                approval_required=True,
+                approved_at=None,
+                started_at="2026-08-03T16:00:00Z",
+                completed_at="2026-08-03T16:00:00Z",
+                latency_ms=0,
+                error_category="cancelled_by_user",
+                error_code=None,
+                error_message_safe="La ejecucion fue cancelada y no se realizo ningun cargo.",
+                created_at="2026-08-03T16:00:00Z",
+                updated_at="2026-08-03T16:00:00Z",
+            )
+        )
+        workspace.register_background_task(
+            title="AI Provider Diagnostics",
+            status="cancelled",
+            stage_name="diagnostic",
+            video_title="openai / cheap_structured_model",
+            action_id="provider_diagnostic",
+            progress_percent=100.0,
+            message="La ejecucion fue cancelada y no se realizo ningun cargo.",
+            cancellable=False,
+            payload={
+                "kind": "ai_runtime_diagnostic",
+                "provider": "openai",
+                "role": "cheap_structured_model",
+                "cache_policy": "use",
+                "execution_id": execution_id,
+                "approval_state": "rejected",
+            },
+        )
+
+        terminal_view = AIRuntimeOverviewView(workspace)
+        self.assertFalse(terminal_view.diagnostics_tab.cancel_active_button.isVisible())
+        self.assertFalse(terminal_view.diagnostics_tab.approval_group.isVisible())
 
     def test_diagnostics_view_restores_awaiting_approval_after_restart(self) -> None:
         fixture = build_runtime_fixture(input_price_per_million=None, output_price_per_million=None, cached_input_price_per_million=None)
@@ -1036,6 +1128,7 @@ class AIRuntimeGUIIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(execution)
         self.assertEqual(execution["status"], "cancelled")
         self.assertEqual(fixture.service.providers["openai"].calls, 0)
+        self.assertFalse(task_center.cancel_button.isEnabled())
         self.assertIn("interrupted", workspace.background_tasks()[0].status)
 
     def test_history_view_loads_detail_without_secrets(self) -> None:

@@ -95,7 +95,14 @@ class TaskCenterView(QWidget):
         provider = str(payload.get("provider") or "auto")
         role = str(payload.get("role") or payload.get("model_role") or "provider_diagnostic")
         model = str(payload.get("model_id") or payload.get("model_catalog_id") or "-")
-        status = str((payload.get("approval_state") or task.status) if task is not None else "")
+        task_status = str(getattr(task, "status", "") or "")
+        approval_state = str(payload.get("approval_state") or "").lower()
+        if task_status in {"completed", "failed", "cancelled", "interrupted"}:
+            status = task_status
+        elif approval_state:
+            status = approval_state
+        else:
+            status = task_status
         return {
             "execution_id": execution_id,
             "provider": provider,

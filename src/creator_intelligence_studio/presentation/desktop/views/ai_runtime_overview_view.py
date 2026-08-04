@@ -125,6 +125,15 @@ class DiagnosticRunThread(QThread):
             self.error_ready.emit(str(exc))
             return
         if self.approval_execution_id:
+            if getattr(result, "status", None) == "awaiting_approval":
+                logger.info(
+                    "ai_runtime_diagnostic.approval_continuation_failed execution_id=%s provider=%s role=%s",
+                    self.approval_execution_id,
+                    self.provider,
+                    self.role,
+                )
+                self.error_ready.emit("No se pudo reanudar la ejecucion aprobada.")
+                return
             logger.info(
                 "ai_runtime_diagnostic.approval_continuation_completed execution_id=%s provider=%s role=%s",
                 self.approval_execution_id,
@@ -1458,6 +1467,43 @@ class DiagnosticsTab(QWidget):
         self._seed_combos()
         self.refresh()
 
+    def _current_status(self) -> str:
+        return str(self._current_execution_status or "").lower()
+
+    def _has_live_background_task(self) -> bool:
+        if not self._current_execution_id:
+            return False
+        provider = self._selected_provider()
+        role = self._selected_role()
+        task = self.workspace.ai_runtime_active_diagnostic_task(provider, role)
+        if task is not None:
+            payload = getattr(task, "payload", {})
+            if isinstance(payload, dict) and str(payload.get("execution_id") or "") == self._current_execution_id:
+                return True
+        return self._current_status() in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+
+    def _can_cancel_current_execution(self) -> bool:
+        status = self._current_status()
+        if status in {"completed", "completed_with_warnings", "failed", "cancelled", "interrupted", "rejected_by_user"}:
+            return False
+        if self._current_execution_id is None:
+            return False
+        if status == "awaiting_approval":
+            return True
+        return self._has_live_background_task() and status in {"queued", "preparing_context", "approved", "running", "validating"}
+
+    def _refresh_cancel_button(self) -> None:
+        visible = self._can_cancel_current_execution()
+        self.cancel_active_button.setVisible(visible)
+        self.cancel_active_button.setEnabled(visible and not self._diagnostic_running)
+
+    def _refresh_approval_buttons(self) -> None:
+        visible = (not self.approval_group.isHidden()) and self._current_execution_id is not None and self._current_status() == "awaiting_approval"
+        self.approve_button.setVisible(visible)
+        self.reject_button.setVisible(visible)
+        self.review_budget_button.setVisible(visible)
+        self._set_approval_controls_enabled(visible and not self._diagnostic_running)
+
     def _seed_combos(self) -> None:
         self.provider_combo.blockSignals(True)
         self.role_combo.blockSignals(True)
@@ -1528,14 +1574,8 @@ class DiagnosticsTab(QWidget):
         self.role_combo.setEnabled(not running)
         self.cache_combo.setEnabled(not running)
         self.auto_config_button.setEnabled(not running)
-        self.approve_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
-        self.reject_button.setEnabled(not running and self._current_execution_id is not None and self.approval_group.isVisible())
-        self.review_budget_button.setEnabled(not running and self.approval_group.isVisible())
-        self.cancel_active_button.setEnabled(
-            not running
-            and self._current_execution_id is not None
-            and str(self._current_execution_status or "").lower() in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
-        )
+        self._refresh_approval_buttons()
+        self._refresh_cancel_button()
         if message is not None:
             self.message_label.setText(message)
 
@@ -1559,6 +1599,7 @@ class DiagnosticsTab(QWidget):
         self.approval_group.hide()
         self.approval_message.setText("Esperando tu aprobacion.")
         self.cancel_active_button.setText("Cancelar ejecucion activa")
+        self.cancel_active_button.hide()
         for label in (
             self.approval_provider_label,
             self.approval_model_label,
@@ -1628,18 +1669,26 @@ class DiagnosticsTab(QWidget):
         self.approval_title.setText("Esta ejecucion necesita tu aprobacion.")
         self.approval_message.setText("Revisa el proveedor, el modelo, el costo estimado y la politica antes de continuar.")
         self._set_approval_controls_enabled(True)
+        self._refresh_approval_buttons()
+        self._refresh_cancel_button()
 
     def _hide_approval_panel(self) -> None:
-        self._current_execution_id = None
         self.approval_group.hide()
+        self._refresh_approval_buttons()
+        self._refresh_cancel_button()
 
     def _execution_result_from_record(self, execution: dict[str, object]) -> dict[str, object]:
         summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
         approval_summary = summary.get("approval_summary") if isinstance(summary, dict) and isinstance(summary.get("approval_summary"), dict) else {}
         estimated = approval_summary.get("estimated_cost_at_approval") if isinstance(approval_summary, dict) else {}
         status = str(execution.get("status") or "-")
+        approval_state = str(summary.get("approval_state") or "").lower()
+        if status == "awaiting_approval" and approval_state == "approved" and execution.get("approved_at") is not None:
+            status = "approved"
         if status == "cancelled" and str(execution.get("error_category") or "").lower() == "interrupted":
             status = "interrupted"
+        elif status == "cancelled" and approval_state == "rejected":
+            status = "rejected_by_user"
         return {
             "execution_id": execution.get("execution_uuid"),
             "provider": execution.get("provider"),
@@ -1676,9 +1725,20 @@ class DiagnosticsTab(QWidget):
             return
         result = self._execution_result_from_record(execution)
         self._show_result(result)
-        if str(result.get("status") or "").lower() == "awaiting_approval":
+        status = str(result.get("status") or "").lower()
+        if status == "awaiting_approval":
             self._approval_requested(execution_id, result)
-        elif str(result.get("status") or "").lower() == "interrupted":
+        elif status == "approved":
+            self._current_execution_id = execution_id
+            self._current_execution_status = "approved"
+            self._set_running_state(False, "Aprobacion registrada. Preparando diagnostico...")
+            self.run_button.setEnabled(False)
+            self.provider_combo.setEnabled(True)
+            self.role_combo.setEnabled(True)
+            self.cache_combo.setEnabled(True)
+            self.auto_config_button.setEnabled(True)
+            self.message_label.setText("Aprobacion registrada. Preparando diagnostico...")
+        elif status == "interrupted":
             self._current_execution_id = execution_id
             self._current_execution_status = "interrupted"
             self._set_running_state(False, "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.")
@@ -1749,6 +1809,7 @@ class DiagnosticsTab(QWidget):
         logger.info("ai_runtime_diagnostic.execution_failed")
         error = map_error(Exception(message))
         self._hide_approval_panel()
+        self._current_execution_status = "failed"
         self.execution_label.setText("-")
         self.provider_label.setText(self._selected_provider())
         self.model_label.setText(_fmt(self.model_line.text()))
@@ -1771,9 +1832,15 @@ class DiagnosticsTab(QWidget):
     def _approve_and_continue(self) -> None:
         if not self._current_execution_id or self._approval_running:
             return
+        logger.info(
+            "ai_runtime_diagnostic.approval_clicked execution_id=%s provider=%s role=%s",
+            self._current_execution_id,
+            self._selected_provider(),
+            self._selected_role(),
+        )
         self._approval_running = True
         self._set_approval_controls_enabled(False)
-        self._set_running_state(True, "Aprobación registrada. Preparando diagnóstico…")
+        self._set_running_state(True, "Registrando aprobacion...")
         provider = self._selected_provider()
         role = self._selected_role()
         self._approval_thread = DiagnosticRunThread(
@@ -1884,7 +1951,7 @@ class DiagnosticsTab(QWidget):
             if current_status == "awaiting_approval":
                 self.message_label.setText("Esperando tu aprobacion.")
                 return
-            if current_status in {"queued", "preparing_context", "running", "validating"}:
+            if current_status in {"approved", "queued", "preparing_context", "running", "validating"}:
                 self.message_label.setText("Ya existe un diagnostico en curso.")
                 self.run_button.setEnabled(True)
                 self.cancel_active_button.setEnabled(True)
@@ -2019,16 +2086,19 @@ class DiagnosticsTab(QWidget):
         current_status = str(self._current_execution_status or "").lower()
         if current_status == "awaiting_approval":
             self.message_label.setText("Esperando tu aprobacion.")
+            self._refresh_cancel_button()
             return
-        if current_status in {"queued", "preparing_context", "running", "validating"}:
+        if current_status in {"approved", "queued", "preparing_context", "running", "validating"}:
             self.message_label.setText("Ya existe un diagnostico en curso.")
+            self._refresh_cancel_button()
             return
         self.run_button.setEnabled(True)
         self.provider_combo.setEnabled(True)
         self.role_combo.setEnabled(True)
         self.cache_combo.setEnabled(True)
         self.auto_config_button.setEnabled(True)
-        self.cancel_active_button.setEnabled(current_status in {"queued", "preparing_context", "awaiting_approval", "running", "validating"})
+        self._refresh_approval_buttons()
+        self._refresh_cancel_button()
         if not self.workspace.ai_runtime_provider_status().get(self._selected_provider(), {}).get("configured"):
             self.message_label.setText("No hay una credencial configurada para este proveedor.")
         else:
@@ -2107,9 +2177,11 @@ class HistoryTab(QWidget):
         if decision == "approved":
             return "approved"
         if decision == "rejected":
-            return "rejected/cancelled"
+            return "rejected_by_user"
         if status == "awaiting_approval":
             return "awaiting_approval"
+        if status == "cancelled" and str(execution.get("error_category") or "").lower() == "cancelled_by_user":
+            return "rejected_by_user"
         return status
 
     def _cost_display(self, execution: dict[str, object], approval: dict[str, str], usage_cost: float) -> str:

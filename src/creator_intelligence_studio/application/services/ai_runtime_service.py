@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, replace
@@ -47,6 +48,8 @@ from creator_intelligence_studio.application.services.ai_runtime_recommendations
 from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.shared.paths import ProjectPaths
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1290,6 +1293,14 @@ class AIRuntimeService:
         approval_summary = self._approval_metadata(execution)
         payload = self._approval_payload(execution=execution, approved=True, actor=approved_by, reason=approval_reason, now=now)
         payload["approval_summary"] = approval_summary or payload["approval_summary"]
+        logger.info(
+            "ai_runtime_diagnostic.approval_persisted execution_uuid=%s provider=%s model_id=%s role=%s approved_by=%s",
+            execution.execution_uuid,
+            execution.provider,
+            execution.model_catalog_id,
+            execution.requested_model_role,
+            approved_by or "-",
+        )
         self.repository.store_payload(
             AIExecutionPayload(
                 execution_id=execution.execution_uuid,
@@ -1312,6 +1323,7 @@ class AIRuntimeService:
                     "approved_by": approved_by,
                     "approved_at": now,
                     "approval_reason": approval_reason,
+                    "approval_transition_at": now,
                 },
                 updated_at=now,
             )
@@ -1332,6 +1344,13 @@ class AIRuntimeService:
             request_id=f"{request.request_id}:approved:{execution.execution_uuid}",
             approval_policy="approved_single_execution",
             metadata={**request.metadata, **approval_source_metadata},
+        )
+        logger.info(
+            "ai_runtime_diagnostic.resume_started execution_uuid=%s provider=%s model_id=%s role=%s",
+            execution.execution_uuid,
+            execution.provider,
+            execution.model_catalog_id,
+            execution.requested_model_role,
         )
         result = self.orchestrator.run(request, provider=execution.provider)
         return result

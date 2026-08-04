@@ -513,13 +513,17 @@ class WorkspaceViewModel:
 
     def _ai_runtime_task_payload(self, execution: dict[str, object], *, recovery_state: str | None = None) -> dict[str, object]:
         summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
+        approval_state = str(summary.get("approval_state") or "").lower()
+        derived_status = str(execution.get("status") or "")
+        if approval_state == "approved" and derived_status == "awaiting_approval" and execution.get("approved_at") is not None:
+            derived_status = "approved"
         payload: dict[str, object] = {
             "kind": "ai_runtime_diagnostic",
             "provider": execution.get("provider"),
             "role": execution.get("requested_model_role"),
             "cache_policy": summary.get("cache_policy") or "use",
             "execution_id": execution.get("execution_uuid"),
-            "approval_state": summary.get("approval_state") or execution.get("status"),
+            "approval_state": summary.get("approval_state") or derived_status,
             "model_id": summary.get("model_id") or execution.get("model_catalog_id"),
             "model_catalog_id": execution.get("model_catalog_id"),
             "status": execution.get("status"),
@@ -1743,9 +1747,15 @@ class WorkspaceViewModel:
         if task is not None:
             self.update_background_task(
                 task.task_id,
-                status="running",
-                progress_percent=50.0,
-                message="Aprobacion registrada. Preparando diagnostico",
+                status="preparing_context",
+                progress_percent=45.0,
+                message="Registrando aprobacion...",
+                payload={
+                    **task.payload,
+                    "approval_state": "approved",
+                    "approved_by": approved_by,
+                    "approval_reason": approval_reason,
+                },
             )
         result = self.ai_runtime_service.approve_and_run_diagnostic(
             execution_uuid,
@@ -1760,9 +1770,11 @@ class WorkspaceViewModel:
             else:
                 self.update_background_task(
                     task.task_id,
-                    status="waiting_approval",
-                    progress_percent=40.0,
-                    message="Esperando tu aprobacion",
+                    status="failed",
+                    progress_percent=100.0,
+                    message="No se pudo completar la aprobacion y reanudar el diagnostico.",
+                    cancellable=False,
+                    error="No se pudo reanudar la ejecucion aprobada.",
                 )
         return result
 
@@ -1782,6 +1794,7 @@ class WorkspaceViewModel:
                 status="cancelled",
                 progress_percent=100.0,
                 message="La ejecucion fue cancelada y no se realizo ningun cargo.",
+                cancellable=False,
             )
         return self.ai_runtime_service.reject_diagnostic_execution(
             execution_uuid,
@@ -1806,6 +1819,7 @@ class WorkspaceViewModel:
                 progress_percent=100.0,
                 message=cancellation_reason or "La ejecucion anterior se interrumpio al cerrar la aplicacion. Puedes volver a intentarla.",
                 interrupted_at=to_iso_z(datetime.now(timezone.utc)),
+                cancellable=False,
             )
         return self.ai_runtime_service.cancel_diagnostic_execution(
             execution_uuid,
@@ -1816,18 +1830,24 @@ class WorkspaceViewModel:
     def ai_runtime_active_diagnostic_task(self, provider: str | None = None, role: str | None = None):
         if self.ai_runtime_service is None:
             return None
-        active_ids = {
-            str(execution.get("execution_uuid") or "")
-            for execution in self.ai_runtime_service.list_executions(limit=200)
-            if execution.get("task_type") == "provider_diagnostic"
-            and str(execution.get("status") or "").lower() in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
-        }
+        live_task_statuses = {"pending", "preparing_context", "waiting_approval", "running"}
         for task in reversed(self.background_tasks()):
             payload = getattr(task, "payload", {})
             if not isinstance(payload, dict) or payload.get("kind") != "ai_runtime_diagnostic":
                 continue
             execution_id = str(payload.get("execution_id") or "")
-            if execution_id not in active_ids:
+            if not execution_id:
+                continue
+            execution = self.ai_runtime_service.get_execution(execution_id)
+            if not isinstance(execution, dict):
+                continue
+            execution_status = str(execution.get("status") or "").lower()
+            approval_state = str((execution.get("input_summary_json") or {}).get("approval_state") or payload.get("approval_state") or "").lower()
+            approval_marker = execution.get("approved_at") is not None or approval_state == "approved"
+            live = execution_status in {"queued", "preparing_context", "awaiting_approval", "running", "validating"}
+            if execution_status == "awaiting_approval" and approval_marker:
+                live = str(getattr(task, "status", "") or "").lower() in live_task_statuses
+            if not live:
                 continue
             if provider is not None and str(payload.get("provider") or "") != provider:
                 continue
@@ -1861,10 +1881,11 @@ class WorkspaceViewModel:
             progress_percent=100.0,
             message=message,
             completed_at=to_iso_z(datetime.now(timezone.utc)),
+            cancellable=False,
         )
 
     def fail_background_task(self, task_id: str, error: str) -> BackgroundTaskRecord | None:
-        return self.update_background_task(task_id, status="failed", error=error, message=error)
+        return self.update_background_task(task_id, status="failed", error=error, message=error, cancellable=False)
 
     def interrupt_background_task(self, task_id: str, message: str | None = None) -> BackgroundTaskRecord | None:
         from datetime import datetime, timezone
@@ -1874,6 +1895,7 @@ class WorkspaceViewModel:
             status="interrupted",
             message=message,
             interrupted_at=to_iso_z(datetime.now(timezone.utc)),
+            cancellable=False,
         )
 
     def dashboard_cards(self) -> list[CardViewModel]:

@@ -285,6 +285,23 @@ Rules:
 - price unknown is not treated as zero;
 - when pricing is not verified, the UI must say so explicitly and allow a manual approval for the minimal diagnostic path;
 - history must show pending approval, approved, rejected or cancelled states, along with the actor, date, reason, provider, model, and whether pricing was unknown.
+- the persisted v31 row keeps the same `execution_uuid`; approval is recorded in `approved_at` plus approval metadata, and the GUI derives the visible `approved` state from that persisted approval marker while the same execution is resumed;
+- `Aprobar y continuar` must disable approval controls immediately, persist approval, validate the approval context, and resume the same execution in the background;
+- if the continuation cannot resume, the UI must fail visibly instead of leaving an `awaiting_approval + approved` mismatch on screen.
+
+### Button States
+
+- `awaiting_approval`: show `Aprobar y continuar`, `Rechazar`, and `Revisar presupuesto`; `Cancelar ejecucion activa` is optional only when the execution is still live.
+- `approved`, `preparing_context`, `running`, `validating`: hide the approval buttons and show cancel only while a live worker or lease still exists.
+- `completed`, `failed`, `cancelled`, `rejected_by_user`, `interrupted`: hide the approval controls and hide `Cancelar ejecucion activa`.
+- button visibility must follow `status` plus live worker state, not the mere presence of an `execution_id`.
+
+### Idempotence
+
+- double clicks on approval must produce one persisted approval and one provider call;
+- the same execution must not get a second `execution_uuid` or `request_id` just to continue after approval;
+- if the app reopens while approval is pending or the worker is live, it must restore the same execution and continue or recover safely without creating a duplicate;
+- if provider, model, privacy, or materially relevant cost changes before continuation, the approval must be invalidated and the execution marked with a safe reason.
 
 ### Execution Recovery
 
@@ -294,6 +311,7 @@ Recovery rules:
 
 - `queued`, `preparing_context`, `running`, and `validating` are active states only while a live worker or task lease still exists;
 - `awaiting_approval` is recoverable and must remain visible after restart so the same execution can be approved or rejected;
+- `approved` is a runtime-visible continuation state derived from the persisted approval marker while the same row is being resumed;
 - a startup recovery pass reconciles orphaned active rows and marks stale rows as interrupted or cancelled with a safe reason;
 - the app must not call the provider automatically during recovery;
 - the app must not create a duplicate execution just to report that one already exists;
@@ -306,6 +324,12 @@ Cancellation and retry:
 - cancellation should clear the active fingerprint so a later retry can create a new attempt;
 - retry after `cancelled`, `interrupted`, `failed`, or `rejected_by_user` creates a new execution attempt linked to the same semantic request;
 - retry after recovery must not reuse a still-live execution row.
+
+### Price Unknown
+
+- an unknown price must stay unknown; it can be approved manually, but it must not be converted to `0` as a verified cost;
+- the UI must show that pricing is not verified when approval is required for that reason;
+- if the provider returns no verified price, the visible calculated cost remains `No disponible` unless a verified price later appears.
 
 Credential validation and model catalog synchronization are separate steps:
 
