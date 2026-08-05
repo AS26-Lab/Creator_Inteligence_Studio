@@ -24,6 +24,11 @@ from .models import (
     AIProviderName,
     AIProviderResponse,
 )
+from .request_profiles import (
+    build_openai_diagnostic_payload,
+    parse_openai_chat_completions_response,
+    resolve_provider_request_profile,
+)
 
 
 class AIProvider(Protocol):
@@ -131,7 +136,11 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
             error = payload["error"]
             text = str(error.get("message") or error.get("type") or text)
             provider_code = provider_code or error.get("code") or error.get("type")
-    safe_message = _safe_error_message(text)
+    lowered = text.lower()
+    if category == "invalid_request" and ("unsupported_parameter" in lowered or "max_tokens" in lowered):
+        safe_message = "No se pudo completar la solicitud porque la configuracion de este modelo necesita actualizarse."
+    else:
+        safe_message = _safe_error_message(text)
     suggested_action = {
         "authentication_error": "Check the stored API key.",
         "authorization_error": "Check provider permissions and account access.",
@@ -151,6 +160,8 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
         "cancelled_by_user": "No action required.",
         "internal_error": "Inspect local logs and repository state.",
     }.get(category, "Inspect the provider error.")
+    if category == "invalid_request" and ("unsupported_parameter" in lowered or "max_tokens" in lowered):
+        suggested_action = "Actualiza el perfil de solicitud para usar el parametro de salida compatible del modelo."
     retryable = category in {"timeout", "network_error", "rate_limit_error", "provider_error"}
     return AIExecutionError(
         category=category,
@@ -158,7 +169,7 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
         provider_code=str(provider_code or status_code),
         retryable=retryable,
         suggested_action=suggested_action,
-        technical_reference=f"HTTP {status_code}",
+        technical_reference=f"HTTP {status_code}" + (f" / {provider_code}" if provider_code else ""),
     )
 
 
@@ -179,23 +190,17 @@ def _openai_compatibility(model_id: str, raw: dict[str, Any]) -> tuple[bool, dic
     blocked_prefixes = ("text-", "tts-", "whisper", "dall-e", "image-", "moderation", "embedding")
     if lowered.startswith(blocked_prefixes) or "embedding" in lowered or "moderation" in lowered:
         return False, {"endpoint": "chat_completions", "reason": "incompatible_endpoint"}, ("Modelo incompatible con chat/completions.",)
-    recognized_current_families = (
-        lowered.startswith("gpt-5.6-"),
-        lowered.startswith("gpt-5.1"),
-        lowered.startswith("gpt-5-mini"),
-        lowered.startswith("gpt-5-"),
-        lowered.startswith("gpt-4.1"),
-        lowered.startswith("gpt-4o"),
-    )
-    supports_structured_output = any(recognized_current_families)
-    supports_image = any(recognized_current_families)
+    profile = resolve_provider_request_profile("openai", model_id)
+    supports_structured_output = bool(profile.capabilities.supports_structured_output)
+    supports_image = bool(profile.capabilities.supports_image_input)
     supports_audio = any(token in lowered for token in ("audio", "realtime", "transcrib", "tts"))
     capabilities = {
-        "endpoint": "chat_completions",
+        "endpoint": profile.endpoint,
         "structured_output": supports_structured_output,
         "image_input": supports_image,
         "audio_input": supports_audio,
         "source": "provider_discovery",
+        "request_profile": profile.to_dict(),
     }
     return True, capabilities, ()
 
@@ -204,13 +209,14 @@ def _anthropic_compatibility(model_id: str, raw: dict[str, Any]) -> tuple[bool, 
     lowered = model_id.lower()
     if not lowered.startswith("claude-"):
         return False, {"endpoint": "messages", "reason": "incompatible_endpoint"}, ("Modelo incompatible con messages.",)
-    supports_image = any(token in lowered for token in ("claude-3", "claude-4", "sonnet", "opus"))
+    profile = resolve_provider_request_profile("anthropic", model_id)
     capabilities = {
-        "endpoint": "messages",
-        "structured_output": True,
-        "image_input": supports_image,
-        "audio_input": False,
+        "endpoint": profile.endpoint,
+        "structured_output": profile.capabilities.supports_structured_output,
+        "image_input": profile.capabilities.supports_image_input,
+        "audio_input": profile.capabilities.supports_audio_input,
         "source": "provider_discovery",
+        "request_profile": profile.to_dict(),
     }
     return True, capabilities, ()
 
@@ -442,20 +448,12 @@ class OpenAIProvider:
     ) -> AIProviderResponse:
         started = time.perf_counter()
         try:
+            request_profile = resolve_provider_request_profile("openai", model_id)
             status_code, payload, latency_ms = _http_json(
                 "POST",
-                f"{self.base_url}/chat/completions",
+                f"{self.base_url}/{request_profile.endpoint}",
                 headers={"Authorization": f"Bearer {api_key}"},
-                payload={
-                    "model": model_id,
-                    "messages": [
-                        {"role": "system", "content": "Return only the requested JSON object."},
-                        {"role": "user", "content": prompt_text},
-                    ],
-                    "temperature": 0,
-                    "max_tokens": 128,
-                    "response_format": {"type": "json_object"},
-                },
+                payload=build_openai_diagnostic_payload(profile=request_profile, model_id=model_id, prompt_text=prompt_text),
                 timeout=30.0,
             )
         except (ConnectionError, TimeoutError) as exc:
@@ -476,6 +474,7 @@ class OpenAIProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
         if status_code >= 400:
             error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
@@ -488,6 +487,7 @@ class OpenAIProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
         if not isinstance(payload, dict):
             error = AIExecutionError(
@@ -506,30 +506,26 @@ class OpenAIProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
-        output_text = ""
+        parsed = parse_openai_chat_completions_response(payload)
+        output_text = parsed["output_text"]
         structured_output = None
-        usage = AIExecutionUsage()
-        model_version = None
-        raw_finish_reason = None
-        choices = payload.get("choices") or []
-        if choices:
-            choice = choices[0] or {}
-            message = choice.get("message") or {}
-            output_text = str(message.get("content") or "")
-            raw_finish_reason = choice.get("finish_reason")
-        model_version = payload.get("model")
-        usage_payload = payload.get("usage") or {}
+        model_version = parsed["model_version"]
+        raw_finish_reason = parsed["raw_finish_reason"]
+        usage_payload = parsed["usage"]
         usage = AIExecutionUsage(
-            input_tokens=int(usage_payload.get("prompt_tokens") or 0),
-            output_tokens=int(usage_payload.get("completion_tokens") or 0),
-            cached_input_tokens=int(usage_payload.get("cached_tokens") or 0),
+            input_tokens=int(usage_payload.get("input_tokens") or 0),
+            output_tokens=int(usage_payload.get("output_tokens") or 0),
+            cached_input_tokens=int(usage_payload.get("cached_input_tokens") or 0),
+            reasoning_tokens=usage_payload.get("reasoning_tokens"),
             provider_reported_cost=None,
             calculated_cost=0.0,
             currency="USD",
             pricing_version=None,
-            calculation_notes="Provider reported usage normalized locally.",
+            calculation_notes="Provider reported usage normalized locally." if usage_payload.get("has_usage") else "Usage unavailable from provider.",
         )
+        usage_missing = not bool(usage_payload.get("has_usage"))
         try:
             structured_output = json.loads(output_text)
         except Exception:
@@ -552,6 +548,7 @@ class OpenAIProvider:
                 latency_ms=latency_ms,
                 raw_finish_reason=raw_finish_reason,
                 error=error,
+                warnings=("usage_unavailable",) if usage_missing else (),
             )
         return AIProviderResponse(
             provider=self.provider_name,
@@ -562,6 +559,7 @@ class OpenAIProvider:
             usage=usage,
             latency_ms=latency_ms,
             raw_finish_reason=raw_finish_reason,
+            warnings=("usage_unavailable",) if usage_missing else (),
         )
 
 
@@ -717,13 +715,14 @@ class AnthropicProvider:
     ) -> AIProviderResponse:
         started = time.perf_counter()
         try:
+            request_profile = resolve_provider_request_profile("anthropic", model_id)
             status_code, payload, latency_ms = _http_json(
                 "POST",
-                f"{self.base_url}/messages",
+                f"{self.base_url}/{request_profile.endpoint}",
                 headers={"x-api-key": api_key, "anthropic-version": self.api_version},
                 payload={
                     "model": model_id,
-                    "max_tokens": 128,
+                    request_profile.output_token_parameter: 128,
                     "temperature": 0,
                     "messages": [
                         {"role": "user", "content": prompt_text},
@@ -749,6 +748,7 @@ class AnthropicProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
         if status_code >= 400:
             error = _sanitize_error(_map_error_category(status_code, payload), status_code, payload)
@@ -761,6 +761,7 @@ class AnthropicProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
         if not isinstance(payload, dict):
             error = AIExecutionError(
@@ -779,6 +780,7 @@ class AnthropicProvider:
                 usage=AIExecutionUsage(),
                 latency_ms=latency_ms,
                 error=error,
+                warnings=("usage_unavailable",),
             )
         output_text = ""
         structured_output = None

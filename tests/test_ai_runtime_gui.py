@@ -42,7 +42,8 @@ class DesktopWorkspaceFacade:
         self.ai_runtime_service = service
         self.selected_creator_id = None
         self.selected_project_id = None
-        self.ui_state = SimpleNamespace(last_page="home")
+        self.ui_state = SimpleNamespace(last_page="home", window_geometry=None)
+        self.ui_state_store = SimpleNamespace(decode_blob=lambda encoded: None, encode_blob=lambda raw: None, update=lambda state, **changes: SimpleNamespace(**{**state.__dict__, **changes}))
         self.activity_log: list[str] = []
         self._tasks: list[SimpleNamespace] = []
         self._ai_runtime_roles_mode = "recommended"

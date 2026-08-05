@@ -54,6 +54,11 @@ Direct provider calls are not allowed from product modules.
 - `OpenAIProvider`
 - `AnthropicProvider`
 - `AIOrchestrator`
+- `ProviderRequestProfile`
+- `OpenAIRequestProfile`
+- `OpenAIRequestCapabilities`
+- `AnthropicRequestProfile`
+- `AnthropicRequestCapabilities`
 - `ModelRegistry`
 - `PromptRegistry`
 - `CredentialStore`
@@ -256,6 +261,19 @@ Diagnostics must work with:
 - only one provider configured;
 - no provider configured, where the app still opens and reports the missing state.
 
+### Request Profiles
+
+Provider request compatibility is resolved centrally through versioned request profiles.
+
+Current v31 rules:
+
+- OpenAI diagnostics use the Chat Completions endpoint for the approved v31 flow.
+- gpt-5.6-luna uses max_completion_tokens on Chat Completions and does not send max_tokens.
+- OpenAI structured output support is handled through the request profile, not through GUI conditionals.
+- Anthropic retains its own request profile and output-token parameter contract.
+- The catalog version for request-profile decisions is stored as v31-request-profiles-2026-08-05.
+
+The request-profile layer is intentionally central so that endpoint and parameter exceptions are not duplicated across GUI, service, and provider code.
 Execution identity is split into three distinct values:
 
 - `request_id` identifies one concrete attempt and is unique per run;
@@ -497,7 +515,7 @@ Guided configuration is now the default entry point for `Modelos y roles`:
 - the user can return to `Configuracion recomendada` at any time without leaving the page;
 - switching modes does not save assignments or change models automatically;
 - the guided panel shows the provider, last sync time, catalog size, compatibility state, profile, and warnings;
-- the `Económico`, `Equilibrado`, `Máxima calidad`, and `Personalizado` profiles are resolved by a dedicated recommendation component;
+- the `EconÃ³mico`, `Equilibrado`, `MÃ¡xima calidad`, and `Personalizado` profiles are resolved by a dedicated recommendation component;
 - only `cheap_structured_model` is required in v31 for the diagnostic path;
 - the remaining roles are shown as not required in the current phase instead of being treated as mandatory.
 - when the synchronized catalog includes a verified current OpenAI family entry, the balanced profile proposes a concrete `cheap_structured_model` instead of falling back to the legacy GPT-3.5 assignment.
@@ -598,7 +616,7 @@ This section records what was verified during the v31 closeout audit.
 - GUI model selection populated from synchronized provider models and role assignment persistence.
 - The OpenAI discovery path was corrected to avoid treating every normalized model as audio-capable or otherwise incompatible just because the provider metadata includes false boolean keys.
 - The v31 repair path now normalizes `ai_executions` so `request_fingerprint` is indexed but not globally unique, preserving historical rows while allowing repeated diagnostics.
-- The diagnostics button now launches a background `QThread`, disables the button immediately, shows `Preparando diagnóstico…`, and re-enables the UI when the run finishes.
+- The diagnostics button now launches a background `QThread`, disables the button immediately, shows `Preparando diagnÃ³sticoâ€¦`, and re-enables the UI when the run finishes.
 - Successful and failed diagnostics both refresh the visible execution fields and the history table without exposing secrets or raw provider payloads.
 - Duplicate clicks are blocked while the diagnostic thread is active, and the Task Center background task entry is created by the workspace view-model before the provider call begins.
 

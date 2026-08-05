@@ -420,7 +420,7 @@ class AIUsageRecord:
     cached_input_tokens: int
     reasoning_tokens: int | None
     provider_reported_cost: float | None
-    calculated_cost: float
+    calculated_cost: float | None
     currency: str
     pricing_version: str | None
     calculation_notes: str | None

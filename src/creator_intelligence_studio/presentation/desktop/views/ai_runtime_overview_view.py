@@ -703,6 +703,7 @@ class RolesTab(QWidget):
         self.model_detail.setPlainText("El catalogo se cargara despues de abrir la ventana.")
         self.current_assignment_label.setText("Asignacion actual: pendiente de carga")
         self._startup_refresh_pending = False
+        self._apply_mode_visibility()
 
     def _seed_role_combo(self) -> None:
         self.role_combo.blockSignals(True)
@@ -1707,6 +1708,24 @@ class DiagnosticsTab(QWidget):
         self._refresh_approval_buttons()
         self._refresh_cancel_button()
 
+    def _friendly_diagnostic_message(self, status: str, error: dict[str, object]) -> str:
+        category = str(error.get("category") or "").lower()
+        technical_reference = str(error.get("technical_reference") or "").lower()
+        safe_message = str(error.get("safe_message") or "").lower()
+        if status == "blocked_by_credentials" or category == "authentication_error":
+            return "No hay una credencial configurada para este proveedor."
+        if category == "authorization_error":
+            return "La cuenta no tiene permisos para usar este modelo."
+        if category in {"billing_error", "quota_error"}:
+            return "OpenAI no pudo completar la solicitud por saldo o cuota."
+        if category in {"timeout", "network_error"}:
+            return "No se pudo contactar al proveedor. Reintenta en unos minutos."
+        if category == "invalid_request" and ("unsupported_parameter" in technical_reference or "max_tokens" in safe_message):
+            return "No se pudo completar la solicitud porque la configuración de este modelo necesita actualizarse."
+        if status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or error:
+            return "No se pudo completar el diagnóstico."
+        return "Diagnóstico completado."
+
     def _execution_result_from_record(self, execution: dict[str, object]) -> dict[str, object]:
         summary = execution.get("input_summary_json") if isinstance(execution.get("input_summary_json"), dict) else {}
         approval_summary = summary.get("approval_summary") if isinstance(summary, dict) and isinstance(summary.get("approval_summary"), dict) else {}
@@ -1834,12 +1853,7 @@ class DiagnosticsTab(QWidget):
         elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
             logger.info("ai_runtime_diagnostic.execution_failed status=%s", status)
         _refresh_enclosing_overview(self)
-        if status == "blocked_by_credentials" or str(error.get("category") or "").lower() == "authentication_error":
-            self.message_label.setText("No hay una credencial configurada para este proveedor.")
-        elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
-            self.message_label.setText("No se pudo completar el diagnóstico.")
-        else:
-            self.message_label.setText("Diagnóstico completado.")
+        self.message_label.setText(self._friendly_diagnostic_message(status, error))
 
     def _diagnostic_failed(self, message: str) -> None:
         logger.info("ai_runtime_diagnostic.execution_failed")
@@ -1995,7 +2009,7 @@ class DiagnosticsTab(QWidget):
                 self.message_label.setText("Esperando tu aprobacion.")
                 return
             if current_status in {"approved", "queued", "preparing_context", "running", "validating"}:
-                self.message_label.setText("Ya existe un diagnostico en curso.")
+                self.message_label.setText("Ya existe un diagnóstico en curso.")
                 self.run_button.setEnabled(True)
                 self.cancel_active_button.setEnabled(True)
                 return
@@ -2012,10 +2026,10 @@ class DiagnosticsTab(QWidget):
                 else:
                     self._current_execution_id = execution_id
                     self._current_execution_status = str(result.get("status") or "queued")
-                    self._set_running_state(False, "Ya existe un diagnostico en curso.")
+                    self._set_running_state(False, "Ya existe un diagnóstico en curso.")
                     self.run_button.setEnabled(True)
                     self.cancel_active_button.setEnabled(True)
-                    self.message_label.setText("Ya existe un diagnostico en curso.")
+                    self.message_label.setText("Ya existe un diagnóstico en curso.")
                 return
         logger.info(
             "ai_runtime_diagnostic.button_clicked provider=%s role=%s cache_policy=%s",
@@ -2029,7 +2043,7 @@ class DiagnosticsTab(QWidget):
         self._clear_result_fields()
         self.status_label.setText("queued")
         self._approval_running = False
-        self._set_running_state(True, "Preparando diagnóstico…")
+        self._set_running_state(True, "Preparando diagnóstico...")
         logger.info(
             "ai_runtime_diagnostic.request_built provider=%s role=%s cache_policy=%s",
             provider,
@@ -2133,7 +2147,7 @@ class DiagnosticsTab(QWidget):
             self._refresh_cancel_button()
             return
         if current_status in {"approved", "queued", "preparing_context", "running", "validating"}:
-            self.message_label.setText("Ya existe un diagnostico en curso.")
+            self.message_label.setText("Ya existe un diagnóstico en curso.")
             self._refresh_cancel_button()
             return
         self.run_button.setEnabled(True)

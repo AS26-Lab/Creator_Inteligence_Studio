@@ -75,6 +75,8 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertEqual(body["model"], "gpt-4.1-mini")
         self.assertEqual(body["temperature"], 0)
         self.assertEqual(body["response_format"], {"type": "json_object"})
+        self.assertEqual(body["max_completion_tokens"], 128)
+        self.assertNotIn("max_tokens", body)
         self.assertEqual(response.output_text, '{"status":"ok","logical_role":"cheap_structured_model","short_message":"ok"}')
         self.assertEqual(response.usage.input_tokens, 12)
         self.assertEqual(response.usage.cached_input_tokens, 2)
@@ -104,6 +106,7 @@ class OpenAIProviderTests(unittest.TestCase):
             (403, {"error": {"message": "billing disabled", "type": "billing"}}, "billing_error"),
             (429, {"error": {"message": "rate limit exceeded", "type": "rate_limit"}}, "rate_limit_error"),
             (404, {"error": {"message": "model does not exist", "type": "model_not_found"}}, "model_unavailable"),
+            (400, {"error": {"message": "Unsupported parameter: 'max_tokens' is not supported with this model.", "type": "unsupported_parameter", "param": "max_tokens"}}, "invalid_request"),
         ]
         for status, payload, expected_category in cases:
             with self.subTest(status=status):
@@ -124,6 +127,10 @@ class OpenAIProviderTests(unittest.TestCase):
                 self.assertIsNotNone(response.error)
                 self.assertEqual(response.error.category, expected_category)
                 self.assertNotIn("sk-test-secret", response.error.safe_message)
+                if status == 400:
+                    self.assertIn("actualiz", response.error.safe_message.lower())
+                    self.assertEqual(response.error.provider_code, "unsupported_parameter")
+                    self.assertIn("unsupported_parameter", (response.error.technical_reference or "").lower())
 
     def test_network_timeout_and_connection_errors_are_safe(self) -> None:
         with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=TimeoutError("socket timeout sk-openai-secret")):
@@ -151,6 +158,7 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertIsNone(response.error)
         self.assertEqual(response.usage.input_tokens, 0)
         self.assertEqual(response.usage.output_tokens, 0)
+        self.assertIn("usage_unavailable", response.warnings)
 
     def test_discover_models_normalizes_catalog_and_reports_errors(self) -> None:
         payload = {

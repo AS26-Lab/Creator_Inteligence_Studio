@@ -89,6 +89,8 @@ Status: ranking `deterministic`; rendering `implemented`
 
 - provider credential storage through the OS credential backend or explicit development fallback
 - provider diagnostics for OpenAI and Anthropic
+- centralized provider request profiles for OpenAI and Anthropic diagnostic contracts
+- gpt-5.6-luna diagnostics currently target OpenAI Chat Completions with max_completion_tokens
 - role-based model registry
 - versioned prompt template registry
 - budget policy checks

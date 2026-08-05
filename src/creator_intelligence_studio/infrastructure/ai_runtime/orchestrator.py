@@ -168,7 +168,7 @@ class AIOrchestrator:
             if created_at.year != now.year or created_at.month != now.month:
                 continue
             usage_records = self.repository.list_usage_records(execution.execution_uuid)
-            execution_cost = sum(record.calculated_cost for record in usage_records)
+            execution_cost = sum((record.calculated_cost or 0.0) for record in usage_records)
             current_month += execution_cost
             if execution.task_type == request.task_type and execution.operation == request.operation:
                 current_task += execution_cost
@@ -992,6 +992,7 @@ class AIOrchestrator:
             attempts,
             response.error.category if response.error is not None else "none",
         )
+        usage_available = "usage_unavailable" not in response.warnings
         if response.error is not None:
             error = response.error
             self.repository.persist_execution_failure(
@@ -1017,7 +1018,7 @@ class AIOrchestrator:
                 structured_output=response.structured_output,
                 validation=AIExecutionValidation(status="rejected", schema_name=request.task_type, issues=(error.safe_message,), warnings=()),
                 usage=response.usage,
-                cost=self._cost_summary(estimate, response.usage),
+                cost=self._cost_summary(estimate, response.usage, usage_available=usage_available),
                 latency=AIExecutionLatency(latency_ms=response.latency_ms, started_at=execution_record.started_at, completed_at=_utc_now(), attempts=attempts),
                 cache=AIExecutionCacheInfo(cache_status="active", cache_key=cache_key, hit_count=0, refresh_requested=request.cache_policy == "refresh"),
                 fallback={"used": False, "policy": request.fallback_policy, "attempts": attempts},
@@ -1054,13 +1055,13 @@ class AIOrchestrator:
                 cached_input_tokens=response.usage.cached_input_tokens,
                 reasoning_tokens=response.usage.reasoning_tokens,
                 provider_reported_cost=response.usage.provider_reported_cost,
-                calculated_cost=self._cost_summary(estimate, response.usage).calculated_cost or 0.0,
+                calculated_cost=self._cost_summary(estimate, response.usage, usage_available=usage_available).calculated_cost,
                 currency=estimate.currency,
                 pricing_version=estimate.pricing_version,
                 calculation_notes="Calculated locally from catalog pricing.",
             )
         )
-        cost = self._cost_summary(estimate, usage)
+        cost = self._cost_summary(estimate, usage, usage_available=usage_available)
         latency = AIExecutionLatency(latency_ms=response.latency_ms, started_at=execution_record.started_at, completed_at=_utc_now(), attempts=attempts)
         result = AIExecutionResult(
             execution_id=execution_uuid,
@@ -1265,7 +1266,17 @@ class AIOrchestrator:
         assert last_response is not None
         return last_response, attempts
 
-    def _cost_summary(self, estimate, usage: AIExecutionUsage) -> AICostSummary:
+    def _cost_summary(self, estimate, usage: AIExecutionUsage, *, usage_available: bool = True) -> AICostSummary:
+        if not usage_available:
+            return AICostSummary(
+                estimated_min_cost=estimate.minimum_cost,
+                estimated_max_cost=estimate.maximum_cost,
+                calculated_cost=None,
+                provider_reported_cost=None,
+                currency=estimate.currency,
+                pricing_version=estimate.pricing_version,
+                notes="Usage unavailable from provider.",
+            )
         return AICostSummary(
             estimated_min_cost=estimate.minimum_cost,
             estimated_max_cost=estimate.maximum_cost,

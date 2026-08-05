@@ -1179,8 +1179,8 @@ class AIRuntimeService:
                 if created.year == now.year and created.month == now.month:
                     for record in usage_records:
                         if record.execution_id == execution.execution_uuid:
-                            monthly_cost += record.calculated_cost
-                            provider_costs[record.provider] = provider_costs.get(record.provider, 0.0) + record.calculated_cost
+                            monthly_cost += record.calculated_cost or 0.0
+                            provider_costs[record.provider] = provider_costs.get(record.provider, 0.0) + (record.calculated_cost or 0.0)
             except Exception:
                 continue
         if policy is not None and policy.get("monthly_limit") is not None and monthly_cost > float(policy["monthly_limit"]):

@@ -164,7 +164,7 @@ class CostTracker:
         total_input = sum(item.input_tokens for item in records)
         total_output = sum(item.output_tokens for item in records)
         total_cached = sum(item.cached_input_tokens for item in records)
-        total_cost = sum(item.calculated_cost for item in records)
+        total_cost = sum((item.calculated_cost or 0.0) for item in records)
         return {
             "input_tokens": total_input,
             "output_tokens": total_output,

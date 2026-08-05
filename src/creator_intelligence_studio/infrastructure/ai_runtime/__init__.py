@@ -58,6 +58,21 @@ from .models import (
 from .orchestrator import AIOrchestrator
 from .policies import BudgetPolicy, CostEstimator, CostTracker, PrivacyPolicyEngine, AIResultValidator
 from .providers import AIProvider, AnthropicProvider, OpenAIProvider
+from .request_profiles import (
+    AI_REQUEST_CATALOG_VERSION,
+    AnthropicRequestCapabilities,
+    AnthropicRequestProfile,
+    OpenAIRequestCapabilities,
+    OpenAIRequestProfile,
+    ProviderRequestCapabilities,
+    ProviderRequestProfile,
+    build_openai_diagnostic_payload,
+    extract_openai_usage,
+    parse_openai_chat_completions_response,
+    resolve_anthropic_request_profile,
+    resolve_openai_request_profile,
+    resolve_provider_request_profile,
+)
 from .registry import ModelRegistry, PromptRegistry
 from .repository import AIExecutionRepository, SQLiteAIRuntimeRepository
 
@@ -98,6 +113,7 @@ __all__ = [
     "AIProviderModelSyncReport",
     "AIProviderName",
     "AIProviderResponse",
+    "AI_REQUEST_CATALOG_VERSION",
     "AIPromptTemplate",
     "AIPromptTemplateStatus",
     "AIRoleAssignment",
@@ -108,6 +124,8 @@ __all__ = [
     "AIFallbackPolicy",
     "AIQualityLevel",
     "AnthropicProvider",
+    "AnthropicRequestCapabilities",
+    "AnthropicRequestProfile",
     "BudgetPolicy",
     "CacheLookupResult",
     "CredentialBackend",
@@ -120,10 +138,20 @@ __all__ = [
     "InMemoryCredentialBackend",
     "ModelRegistry",
     "OpenAIProvider",
+    "OpenAIRequestCapabilities",
+    "OpenAIRequestProfile",
     "PrivacyPolicyEngine",
     "PromptRegistry",
+    "ProviderRequestCapabilities",
+    "ProviderRequestProfile",
     "SQLiteAIRuntimeRepository",
     "WindowsCredentialManagerBackend",
+    "build_openai_diagnostic_payload",
     "build_request_fingerprint",
     "canonical_json",
+    "extract_openai_usage",
+    "parse_openai_chat_completions_response",
+    "resolve_anthropic_request_profile",
+    "resolve_openai_request_profile",
+    "resolve_provider_request_profile",
 ]
