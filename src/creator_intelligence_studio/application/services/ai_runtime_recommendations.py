@@ -433,6 +433,27 @@ def classify_model_for_role(model: AIModelCatalogEntry, role: str) -> dict[str, 
             "is_visible_by_default": False,
         }
 
+    if _preview_like(model, tokens):
+        return {
+            "compatibility_state": "compatibility_unknown",
+            "availability_state": "available",
+            "evaluation_state": "unreviewed",
+            "recommendation_tag": "No evaluado",
+            "reason": "Variante preview o experimental.",
+            "warnings": ("Variante preview o experimental.",),
+            "is_visible_by_default": False,
+        }
+    if _snapshot_like(model, tokens):
+        return {
+            "compatibility_state": "compatibility_unknown",
+            "availability_state": "available",
+            "evaluation_state": "unreviewed",
+            "recommendation_tag": "No evaluado",
+            "reason": "Variante snapshot o tecnica sin matriz curada.",
+            "warnings": ("Variante snapshot o tecnica sin matriz curada.",),
+            "is_visible_by_default": False,
+        }
+
     if rule is not None:
         confidence = "compatible_verified_catalog" if rule.confidence == "approved" and model.status == "approved" else "compatible_by_verified_catalog"
         recommendation_tag = "Compatible verificado" if confidence == "compatible_verified_catalog" else "Compatible pendiente de benchmark"
@@ -485,27 +506,6 @@ def classify_model_for_role(model: AIModelCatalogEntry, role: str) -> dict[str, 
             "reason": "Modelo utilizable para tareas estructuradas.",
             "warnings": (),
             "is_visible_by_default": not _preview_like(model, tokens),
-        }
-
-    if _preview_like(model, tokens):
-        return {
-            "compatibility_state": "compatibility_unknown",
-            "availability_state": "available",
-            "evaluation_state": "unreviewed",
-            "recommendation_tag": "No evaluado",
-            "reason": "Variante preview o experimental.",
-            "warnings": ("Variante preview o experimental.",),
-            "is_visible_by_default": False,
-        }
-    if _snapshot_like(model, tokens):
-        return {
-            "compatibility_state": "compatibility_unknown",
-            "availability_state": "available",
-            "evaluation_state": "unreviewed",
-            "recommendation_tag": "No evaluado",
-            "reason": "Variante snapshot o tecnica sin matriz curada.",
-            "warnings": ("Variante snapshot o tecnica sin matriz curada.",),
-            "is_visible_by_default": False,
         }
 
     if model.status == "testing":

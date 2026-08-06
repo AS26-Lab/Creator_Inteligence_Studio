@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-import time
+import json
 import tempfile
+import time
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import HTTPError
+
+from creator_intelligence_studio.infrastructure.ai_runtime.request_profiles import (
+    describe_openai_request_payload,
+    resolve_openai_request_profile,
+    validate_openai_request,
+)
 
 from creator_intelligence_studio.application.services.ai_runtime_service import AIRuntimeService
 from creator_intelligence_studio.infrastructure.ai_runtime.credentials import CredentialStore, InMemoryCredentialBackend
@@ -176,6 +185,84 @@ class FakeProvider:
             usage=self.usage,
             latency_ms=self.latency_ms,
         )
+
+
+class StrictOpenAIContractFake:
+    def __init__(
+        self,
+        *,
+        model_id: str = "gpt-5.6-luna",
+        success_payload: dict[str, object] | None = None,
+        strict_endpoint: str = "chat/completions",
+    ) -> None:
+        self.model_id = model_id
+        self.success_payload = success_payload or {
+            "model": model_id,
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"status":"ok","logical_role":"cheap_structured_model","short_message":"Provider diagnostic completed successfully."}',
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 7,
+                "cached_tokens": 2,
+            },
+        }
+        self.strict_endpoint = strict_endpoint
+        self.calls = 0
+        self.request_summaries: list[dict[str, object]] = []
+
+    def __call__(self, request, timeout):
+        self.calls += 1
+        assert request.get_method() == "POST"
+        assert request.full_url.endswith(f"/{self.strict_endpoint}")
+        body = json.loads(request.data.decode("utf-8"))
+        profile = resolve_openai_request_profile(str(body.get("model") or self.model_id))
+        valid, error = validate_openai_request(body, profile)
+        summary = describe_openai_request_payload(endpoint=profile.endpoint, profile=profile, payload=body)
+        self.request_summaries.append(summary)
+        if not valid:
+            error_payload = {
+                "error": {
+                    "message": str(error.get("safe_message") or "Request rejected by strict fake."),
+                    "type": str(error.get("provider_code") or error.get("category") or "invalid_request_error"),
+                    "code": str(error.get("provider_code") or "invalid_request_error"),
+                    "param": self._parameter_from_reference(str(error.get("technical_reference") or "")),
+                }
+            }
+            encoded = json.dumps(error_payload).encode("utf-8")
+            raise HTTPError(request.full_url, 400, "bad request", hdrs=None, fp=BytesIO(encoded))
+        return self._response(self.success_payload)
+
+    @staticmethod
+    def _parameter_from_reference(reference: str) -> str | None:
+        if "field=temperature" in reference:
+            return "temperature"
+        if "max_completion_tokens" in reference:
+            return "max_completion_tokens"
+        return None
+
+    @staticmethod
+    def _response(payload: dict[str, object]):
+        class _Response:
+            def __init__(self, status: int, payload_bytes: bytes) -> None:
+                self.status = status
+                self._payload = payload_bytes
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        return _Response(200, json.dumps(payload).encode("utf-8"))
 
 
 @dataclass

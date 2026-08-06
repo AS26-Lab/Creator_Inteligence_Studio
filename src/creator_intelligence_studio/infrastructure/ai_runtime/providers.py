@@ -25,9 +25,11 @@ from .models import (
     AIProviderResponse,
 )
 from .request_profiles import (
+    describe_openai_request_payload,
     build_openai_diagnostic_payload,
     parse_openai_chat_completions_response,
     resolve_provider_request_profile,
+    validate_openai_request,
 )
 
 
@@ -137,7 +139,7 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
             text = str(error.get("message") or error.get("type") or text)
             provider_code = provider_code or error.get("code") or error.get("type")
     lowered = text.lower()
-    if category == "invalid_request" and ("unsupported_parameter" in lowered or "max_tokens" in lowered):
+    if category == "invalid_request" and ("unsupported_parameter" in lowered or "unsupported_value" in lowered or "max_tokens" in lowered or "temperature" in lowered):
         safe_message = "No se pudo completar la solicitud porque la configuracion de este modelo necesita actualizarse."
     else:
         safe_message = _safe_error_message(text)
@@ -160,7 +162,7 @@ def _sanitize_error(category: AIErrorCategory, status_code: int, payload: dict[s
         "cancelled_by_user": "No action required.",
         "internal_error": "Inspect local logs and repository state.",
     }.get(category, "Inspect the provider error.")
-    if category == "invalid_request" and ("unsupported_parameter" in lowered or "max_tokens" in lowered):
+    if category == "invalid_request" and ("unsupported_parameter" in lowered or "unsupported_value" in lowered or "max_tokens" in lowered or "temperature" in lowered):
         suggested_action = "Actualiza el perfil de solicitud para usar el parametro de salida compatible del modelo."
     retryable = category in {"timeout", "network_error", "rate_limit_error", "provider_error"}
     return AIExecutionError(
@@ -449,11 +451,39 @@ class OpenAIProvider:
         started = time.perf_counter()
         try:
             request_profile = resolve_provider_request_profile("openai", model_id)
+            payload = build_openai_diagnostic_payload(
+                profile=request_profile,
+                model_id=model_id,
+                prompt_text=prompt_text,
+                max_output_tokens=64,
+                include_structured_output=False,
+            )
+            valid, validation_error = validate_openai_request(payload, request_profile)
+            if not valid:
+                error = AIExecutionError(
+                    category=str(validation_error.get("category") or "invalid_request"),
+                    safe_message=str(validation_error.get("safe_message") or "No se pudo completar la solicitud."),
+                    provider_code=str(validation_error.get("provider_code") or "invalid_request_error"),
+                    retryable=False,
+                    suggested_action=str(validation_error.get("suggested_action") or "Review the request payload."),
+                    technical_reference=str(validation_error.get("technical_reference") or f"profile={request_profile.profile_id}"),
+                )
+                return AIProviderResponse(
+                    provider=self.provider_name,
+                    model_id=model_id,
+                    model_version=None,
+                    output_text="",
+                    structured_output=None,
+                    usage=AIExecutionUsage(),
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    error=error,
+                    warnings=("usage_unavailable",),
+                )
             status_code, payload, latency_ms = _http_json(
                 "POST",
                 f"{self.base_url}/{request_profile.endpoint}",
                 headers={"Authorization": f"Bearer {api_key}"},
-                payload=build_openai_diagnostic_payload(profile=request_profile, model_id=model_id, prompt_text=prompt_text),
+                payload=payload,
                 timeout=30.0,
             )
         except (ConnectionError, TimeoutError) as exc:

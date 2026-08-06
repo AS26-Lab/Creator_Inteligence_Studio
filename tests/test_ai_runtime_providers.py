@@ -7,7 +7,9 @@ from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 
 from creator_intelligence_studio.infrastructure.ai_runtime.models import AIExecutionRequest
+from creator_intelligence_studio.infrastructure.ai_runtime.request_profiles import describe_openai_request_payload, resolve_openai_request_profile, validate_openai_request
 from creator_intelligence_studio.infrastructure.ai_runtime.providers import AnthropicProvider, OpenAIProvider
+from tests.ai_runtime_test_support import StrictOpenAIContractFake
 
 
 class FakeHTTPResponse:
@@ -73,13 +75,35 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 30.0)
         body = json.loads(req.data.decode("utf-8"))
         self.assertEqual(body["model"], "gpt-4.1-mini")
-        self.assertEqual(body["temperature"], 0)
-        self.assertEqual(body["response_format"], {"type": "json_object"})
-        self.assertEqual(body["max_completion_tokens"], 128)
+        self.assertEqual(body["max_completion_tokens"], 64)
         self.assertNotIn("max_tokens", body)
+        self.assertNotIn("temperature", body)
+        self.assertNotIn("response_format", body)
+        profile = resolve_openai_request_profile("gpt-4.1-mini")
+        valid, error = validate_openai_request(body, profile)
+        self.assertTrue(valid, error)
+        summary = describe_openai_request_payload(endpoint=profile.endpoint, profile=profile, payload=body)
+        self.assertEqual(summary["fields"]["messages"], "redacted:list")
+        self.assertEqual(summary["fields"]["max_completion_tokens"], "integer")
         self.assertEqual(response.output_text, '{"status":"ok","logical_role":"cheap_structured_model","short_message":"ok"}')
         self.assertEqual(response.usage.input_tokens, 12)
         self.assertEqual(response.usage.cached_input_tokens, 2)
+
+    def test_execute_sends_contract_valid_payload_to_strict_fake(self) -> None:
+        fake = StrictOpenAIContractFake(model_id="gpt-5.6-luna")
+
+        with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=fake):
+            response = self.provider.execute(_request(), api_key="sk-openai-test", model_id="gpt-5.6-luna", prompt_text='{"status":"ok"}')
+
+        self.assertEqual(fake.calls, 1)
+        self.assertIsNone(response.error)
+        self.assertEqual(len(fake.request_summaries), 1)
+        summary = fake.request_summaries[0]
+        self.assertEqual(summary["endpoint"], "chat/completions")
+        self.assertEqual(summary["profile"], "openai.gpt-5.6.chat-completions")
+        self.assertNotIn("temperature", summary["fields"])
+        self.assertNotIn("response_format", summary["fields"])
+        self.assertEqual(summary["fields"]["max_completion_tokens"], "integer")
 
     def test_test_credentials_uses_expected_http_contract(self) -> None:
         captured = {}
@@ -107,6 +131,7 @@ class OpenAIProviderTests(unittest.TestCase):
             (429, {"error": {"message": "rate limit exceeded", "type": "rate_limit"}}, "rate_limit_error"),
             (404, {"error": {"message": "model does not exist", "type": "model_not_found"}}, "model_unavailable"),
             (400, {"error": {"message": "Unsupported parameter: 'max_tokens' is not supported with this model.", "type": "unsupported_parameter", "param": "max_tokens"}}, "invalid_request"),
+            (400, {"error": {"message": "Unsupported value: 'temperature' does not support 0 with this model.", "type": "unsupported_value", "param": "temperature"}}, "invalid_request"),
         ]
         for status, payload, expected_category in cases:
             with self.subTest(status=status):
@@ -129,8 +154,8 @@ class OpenAIProviderTests(unittest.TestCase):
                 self.assertNotIn("sk-test-secret", response.error.safe_message)
                 if status == 400:
                     self.assertIn("actualiz", response.error.safe_message.lower())
-                    self.assertEqual(response.error.provider_code, "unsupported_parameter")
-                    self.assertIn("unsupported_parameter", (response.error.technical_reference or "").lower())
+                    self.assertIn(response.error.provider_code, {"unsupported_parameter", "unsupported_value"})
+                    self.assertIn(response.error.provider_code, (response.error.technical_reference or "").lower())
 
     def test_network_timeout_and_connection_errors_are_safe(self) -> None:
         with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=TimeoutError("socket timeout sk-openai-secret")):

@@ -90,7 +90,8 @@ Status: ranking `deterministic`; rendering `implemented`
 - provider credential storage through the OS credential backend or explicit development fallback
 - provider diagnostics for OpenAI and Anthropic
 - centralized provider request profiles for OpenAI and Anthropic diagnostic contracts
-- gpt-5.6-luna diagnostics currently target OpenAI Chat Completions with max_completion_tokens
+- gpt-5.6-luna diagnostics currently target OpenAI Chat Completions with max_completion_tokens and omit temperature in the minimal connectivity payload
+- OpenAI request validation runs before HTTP so unsupported parameters are blocked locally
 - role-based model registry
 - versioned prompt template registry
 - budget policy checks
@@ -155,8 +156,6 @@ Status: `implemented`
 - many services are structural and database-backed;
 - creator memory, creator language, packaging, planning, briefs, and production prep are not yet semantic AI;
 - the current `AI_ML_ARCHITECTURE.md` in the repository was conceptual infrastructure, not a running AI stack;
-- the current codebase has no provider orchestrator;
-- the current codebase has no AI role catalog;
 - the current codebase has no semantic retrieval layer;
 - the current codebase has no feedback-learning loop for AI outputs;
 - the current codebase has no component manager for models and FFmpeg;
@@ -190,7 +189,6 @@ Status: `requires_ml`
 
 ## What Is Not Started
 
-- AI Runtime and Provider Orchestration Foundation
 - Component Manager and Local Transcription Foundation as a formal AI stage
 - Creator Corpus Foundation
 - Semantic Retrieval Foundation
@@ -208,6 +206,7 @@ Status: `not_started`
 | Existing deterministic infrastructure can be mistaken for AI. | `README.md`, older phase docs, service names, this Project Bible | Infrastructure stays infrastructure until models, retrieval, and feedback learning are added. | Prevents false claims about intelligence. | Keep statuses explicit in future docs. |
 | Older AI/ML doc is too generic. | `docs/AI_ML_ARCHITECTURE.md`, `docs/PROJECT_BIBLE.md` | Project Bible and catch-up decisions now govern the AI contract. | Old doc becomes subordinate. | Update future references to point to the new canon. |
 | Human-Guided Script Drafting was listed as next in an older doc. | `docs/SCRIPT_OUTLINE_AND_PRODUCTION_PREPARATION_FOUNDATION.md`, `docs/ROADMAP.md`, this roadmap | The next approved AI block is AI Runtime and Provider Orchestration Foundation, but it is not started. | Old phase ordering is superseded for the AI catch-up path. | Use the new roadmap only for AI work. |
+| AI Runtime was previously described as not started after the foundation existed. | This document, `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` | The AI Runtime foundation is implemented at v31 and the open OpenAI compatibility work is a closeout correction, not a new phase. | Prevents contradictory status reporting. | Keep future docs aligned with the implemented foundation and current contract audit. |
 
 ## Reuse Opportunities
 

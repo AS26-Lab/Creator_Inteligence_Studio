@@ -269,11 +269,13 @@ Current v31 rules:
 
 - OpenAI diagnostics use the Chat Completions endpoint for the approved v31 flow.
 - gpt-5.6-luna uses max_completion_tokens on Chat Completions and does not send max_tokens.
+- gpt-5.6-luna omits temperature in the minimal connectivity diagnostic; temperature is only sent when a profile explicitly permits it and the request truly needs it.
 - OpenAI structured output support is handled through the request profile, not through GUI conditionals.
 - Anthropic retains its own request profile and output-token parameter contract.
-- The catalog version for request-profile decisions is stored as v31-request-profiles-2026-08-05.
+- The catalog version for request-profile decisions is stored as v31-request-profiles-2026-08-06.
 
 The request-profile layer is intentionally central so that endpoint and parameter exceptions are not duplicated across GUI, service, and provider code.
+The provider adapter validates the final serialized OpenAI payload before HTTP, and the contract fake is strict about unsupported fields so the repository does not keep rediscovering the same parameter mismatch one call at a time.
 Execution identity is split into three distinct values:
 
 - `request_id` identifies one concrete attempt and is unique per run;
@@ -568,6 +570,8 @@ The foundation is covered by tests for:
 
 - provider normalization;
 - orchestrator policies;
+- request-profile resolution and validation;
+- strict OpenAI payload contracts;
 - credential storage;
 - cost tracking;
 - template immutability;

@@ -62,6 +62,7 @@ from .request_profiles import (
     AI_REQUEST_CATALOG_VERSION,
     AnthropicRequestCapabilities,
     AnthropicRequestProfile,
+    describe_openai_request_payload,
     OpenAIRequestCapabilities,
     OpenAIRequestProfile,
     ProviderRequestCapabilities,
@@ -72,6 +73,7 @@ from .request_profiles import (
     resolve_anthropic_request_profile,
     resolve_openai_request_profile,
     resolve_provider_request_profile,
+    validate_openai_request,
 )
 from .registry import ModelRegistry, PromptRegistry
 from .repository import AIExecutionRepository, SQLiteAIRuntimeRepository
@@ -149,9 +151,11 @@ __all__ = [
     "build_openai_diagnostic_payload",
     "build_request_fingerprint",
     "canonical_json",
+    "describe_openai_request_payload",
     "extract_openai_usage",
     "parse_openai_chat_completions_response",
     "resolve_anthropic_request_profile",
     "resolve_openai_request_profile",
     "resolve_provider_request_profile",
+    "validate_openai_request",
 ]
