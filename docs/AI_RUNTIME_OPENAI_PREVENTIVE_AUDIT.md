@@ -20,6 +20,31 @@ Authority is limited to official OpenAI documentation and the repository impleme
 | Responses API request contract | https://platform.openai.com/docs/api-reference/responses/create | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 | Structured Outputs guide | https://platform.openai.com/docs/guides/structured-outputs | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 
+## Closeout Validation Snapshot
+
+| Field | Value |
+|---|---|
+| execution_uuid | `a1c404db-dc52-48de-9500-a231d8b8a4f5` |
+| request_id | `provider_diagnostic:openai:cheap_structured_model:a3f3a340-cb13-419f-9c05-40a2de4f0f40` |
+| request_fingerprint | `10b5a1494a914402cd8c106c4eed0e584d26bd8459604495b7e1d02ad07c0d27` |
+| provider | `openai` |
+| model | `gpt-5.6-luna` |
+| endpoint | `responses` |
+| status | `completed` |
+| validation_status | `valid` |
+| approval_state | `approved` |
+| cache_policy | `bypass` |
+| latency_ms | `1990` |
+| input_tokens | `13` |
+| output_tokens | `5` |
+| visible_message | `Diagnostico completado.` |
+
+Safe evidence from logs and local state:
+
+- `logs/creator_intelligence_studio.log` records `approval_persisted`, `resume_started`, `provider_call_started`, `provider_call_completed`, `validation_started`, and `execution_completed` for the same execution UUID.
+- `data/workspace_ui_state.json` keeps the AI Provider Diagnostics task in `completed` state.
+- `data/creator_intelligence_studio.db` stores the same execution row and usage row without raw prompts or headers.
+
 ## Findings Table
 
 | Hallazgo | Evidencia | Severidad | Estado | Acción |
@@ -127,22 +152,22 @@ Passed:
 - `python -m unittest tests.test_ai_runtime_request_profiles`
 - `python -m unittest tests.test_ai_runtime_providers`
 - `python -m unittest tests.test_ai_runtime_foundation`
+- `python -m unittest -v tests.test_ai_runtime_orchestrator`
+- `python -m unittest -v tests.test_ai_runtime_gui` split into focused batches so the long GUI module could complete inside the workspace window
+- `python -m unittest -v tests.test_ai_runtime_gui.AIRuntimeGUIIntegrationTests.test_task_center_shows_ai_runtime_details_and_cancels_execution`
 - targeted GUI cases around diagnostics, approvals, provider errors, and double-click blocking
 - `python -m creator_intelligence_studio --diagnostic-json`
 
 Timed out in this workspace window:
 
-- `python -m unittest tests.test_ai_runtime_orchestrator`
-- `python -m unittest tests.test_ai_runtime_gui`
 - `python -m unittest discover -s tests -p "test_ai_runtime_*.py"`
-- the full orchestrator module also timed out on a longer 360s retry in this workspace
+- the full discover run reached `tests.test_ai_runtime_gui.AIRuntimeGUIIntegrationTests.test_task_center_shows_ai_runtime_details_and_cancels_execution` before the workspace time window ended at 793.6s
 
 ## Risks Still Pending
 
 | Hallazgo | Evidencia | Severidad | Estado | Acción |
 |---|---|---:|---|---|
-| Full discover run exceeds the shorter tool timeout in this workspace | `python -m unittest discover -s tests -p "test_ai_runtime_*.py"` timed out under the 120s window | media | risk_needs_real_test | Run the larger suite with a longer budget or split by file in CI. |
-| GUI and orchestrator files still need longer wall-clock time in this workspace | `python -m unittest tests.test_ai_runtime_orchestrator` and `python -m unittest tests.test_ai_runtime_gui` timed out under the 120s window | media | risk_needs_real_test | Keep those suites in CI with a longer budget. |
+| Full discover run exceeds the workspace command window | `python -m unittest discover -s tests -p "test_ai_runtime_*.py"` timed out after 793.6s even though the same GUI tests passed when split into batches and the Task Center case passed individually | media | risk_needs_real_test | Keep the discover job split or give it a longer CI budget. |
 | Structured-output certification remains separate from the connectivity diagnostic | The basic diagnostic now uses Responses API text-only mode and intentionally omits structured output; capability certification is opt-in and tested separately | media | future_improvement | Keep the connectivity diagnostic minimal and run structured-output certification as a separate gate. |
 
 ## Out Of Scope

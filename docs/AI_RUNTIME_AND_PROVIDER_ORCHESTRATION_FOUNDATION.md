@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented as v31 foundation. This document defines the canonical contract for the first AI execution layer in Creator Intelligence Studio.
+Implemented as v31 foundation and real-call validated on OpenAI Responses API. This document defines the canonical contract for the first AI execution layer in Creator Intelligence Studio.
 
 The foundation is intentionally narrow:
 
@@ -10,6 +10,27 @@ The foundation is intentionally narrow:
 - it does not implement creative script generation, corpus learning, embeddings, semantic retrieval, or AI-assisted video editing;
 - it keeps modules from calling OpenAI or Anthropic directly;
 - it preserves human control, privacy, cost control, and reproducibility.
+
+## Closeout Validation
+
+The v31 foundation is not just present in code; it was validated against the real provider path on 2026-08-06.
+
+- provider: OpenAI
+- model: `gpt-5.6-luna`
+- role: `cheap_structured_model`
+- endpoint: `responses`
+- execution_uuid: `a1c404db-dc52-48de-9500-a231d8b8a4f5`
+- status: `completed`
+- validation_status: `valid`
+- latency_ms: `1990`
+- input_tokens: `13`
+- output_tokens: `5`
+- visible message: `Diagnostico completado.`
+- same execution row reused through approval and execution
+- one provider call
+- no secret material persisted in the diagnostic payloads
+
+This closeout confirms the foundation behaves as implemented rather than theoretical.
 
 ## Scope
 

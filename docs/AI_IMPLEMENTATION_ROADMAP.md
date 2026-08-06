@@ -18,6 +18,17 @@ This roadmap fixes the mandatory order for AI work. It prevents the project from
 
 The collective server and predictive ML come later, once there are enough users and enough data.
 
+## Next Handoff
+
+Component Manager and Local Transcription Foundation is the next approved phase after the v31 AI Runtime closeout.
+
+- Objective: make local model/component installation and transcription onboarding explicit, guided, and reproducible.
+- Dependencies: stable AI Runtime foundation, clear local component inventory, and platform-specific download policy.
+- Current transcription state: local transcription already exists and remains implemented; it is not yet wrapped in a dedicated component-manager phase.
+- Risks: drift into automatic media management, permanent media retention, or hidden provider coupling.
+- Decisions pending: download source policy, model packaging policy, and the exact user-facing onboarding contract.
+- First contract to design: a guided component inventory and install/update flow that keeps non-technical users out of raw dependency details.
+
 ## Stage Gates
 
 Every stage must define:

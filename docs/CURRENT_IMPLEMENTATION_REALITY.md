@@ -91,6 +91,7 @@ Status: ranking `deterministic`; rendering `implemented`
 - provider diagnostics for OpenAI and Anthropic
 - centralized provider request profiles for OpenAI and Anthropic diagnostic contracts
 - gpt-5.6-luna diagnostics currently target OpenAI Responses API with max_output_tokens, reasoning.effort=none, and omit temperature in the minimal connectivity payload
+- real-call validation for OpenAI Responses API completed on 2026-08-06 with execution `a1c404db-dc52-48de-9500-a231d8b8a4f5`, status `completed`, input tokens `13`, output tokens `5`, latency `1990 ms`, and visible message `Diagnostico completado.`
 - OpenAI request validation runs before HTTP so unsupported parameters are blocked locally
 - OpenAI response handling now preserves textual connectivity responses separately from structured-output validation, instead of coercing all non-JSON text into provider failure
 - role-based model registry
@@ -101,7 +102,7 @@ Status: ranking `deterministic`; rendering `implemented`
 - exact-match cache entries
 - CLI exposure for providers, models, roles, budgets, diagnostics, and history
 
-Status: `implemented` for the foundation layer; only `provider_diagnostic` task support is enabled in v31.
+Status: `implemented` for the foundation layer; OpenAI has been real-call validated on Responses API; only `provider_diagnostic` task support is enabled in v31.
 
 ### Subtitles
 
