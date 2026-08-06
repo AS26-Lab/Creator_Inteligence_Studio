@@ -11,6 +11,7 @@ This document records what is actually implemented in the repository at the v30 
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
+- Component Manager and Local Transcription Foundation is not implemented yet; current transcription is still an integrated local stack built on `ffmpeg`, `faster-whisper`, and `CTranslate2`, with model and path management handled inside the existing transcription services.
 
 ## What Is Implemented
 
