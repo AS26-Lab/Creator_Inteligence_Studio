@@ -154,6 +154,12 @@ class TranscriptionService:
     def _load_transcription(self, video_id: str) -> Transcription | None:
         return self.transcription_repository.get_by_video_asset_id(video_id)
 
+    def _inspect_model_availability(self, model_name: str) -> TranscriptionModelInfo:
+        inspector = getattr(self.model_manager, "inspect_model_availability", None)
+        if callable(inspector):
+            return inspector(model_name)
+        return self.model_manager.get_model_status(model_name)
+
     def _controlled_export_root(self, video_id: str) -> Path:
         return self.paths.project_root / "cache" / "transcriptions" / video_id
 
@@ -472,16 +478,9 @@ class TranscriptionService:
             self._active_jobs[video.id] = cancellation_event
         backend = self.engine.verify_backend()
         model_name = normalize_model_name(options.model_name)
-        model_status = self.model_manager.get_model_status(model_name)
+        model_status = self._inspect_model_availability(model_name)
         if model_status.status != TranscriptionModelStatus.INSTALLED:
-            if progress_callback is not None:
-                progress_callback("Descargando modelo", 0.0)
-            model_status = self.model_manager.download_model(
-                model_name,
-                progress_callback=progress_callback,
-                cancellation_token=TranscriptionCancellationToken(is_cancelled=cancellation_event.is_set),
-            )
-        if model_status.status != TranscriptionModelStatus.INSTALLED:
+            friendly_message = "El modelo no esta instalado. Usa Componentes locales para instalarlo."
             failed = self._persist_status(
                 transcription_id=transcription_id,
                 video=video,
@@ -489,7 +488,7 @@ class TranscriptionService:
                 status=TranscriptionStatus.MODEL_UNAVAILABLE,
                 options=options,
                 error_code=model_status.error_code or "model_unavailable",
-                error_message=model_status.error_message or model_status.notes or "El modelo no esta disponible.",
+                error_message=friendly_message,
                 backend_version=backend.faster_whisper_version,
                 model_version=model_status.model_name,
             )
@@ -501,7 +500,9 @@ class TranscriptionService:
                 is_stale=False,
                 backend=backend,
                 model_status=model_status,
-                errors=(model_status.error_message or model_status.notes or "El modelo no esta disponible.",),
+                warnings=(model_status.notes,) if model_status.notes else (),
+                errors=(friendly_message,),
+                progress_message=friendly_message,
             )
         if not backend.available and normalize_device(options.device) == "cuda":
             raise TranscriptionBackendError(backend.fallback_reason or "CUDA no disponible.")

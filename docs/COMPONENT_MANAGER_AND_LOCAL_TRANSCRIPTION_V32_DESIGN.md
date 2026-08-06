@@ -439,3 +439,6 @@ The design must not silently decide:
 - do not persist original MP4 files permanently by default
 - do not hide component failures behind fallback
 
+## Implementation Note
+
+v32-A now exists in code as the read-only foundation layer: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, and hidden-download protection. The downloader, installer, relocation, onboarding, and benchmark phases remain intentionally out of scope for this subphase.

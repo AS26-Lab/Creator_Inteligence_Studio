@@ -195,6 +195,9 @@ class FakeModelManager:
             TranscriptionModelStatus.NOT_INSTALLED,
         )
 
+    def inspect_model_availability(self, model_name: str):
+        return self.get_model_status(model_name)
+
     def verify_model(self, model_name: str):
         return self.get_model_status(model_name)
 
@@ -404,6 +407,7 @@ class TranscriptionServiceTests(unittest.TestCase):
 
             fake_engine = FakeBackendEngine(backend_available=True)
             model_manager = FakeModelManager(paths.models_directory)
+            model_manager.installed_models.add("small")
             service = TranscriptionService(
                 settings=settings,
                 paths=paths,

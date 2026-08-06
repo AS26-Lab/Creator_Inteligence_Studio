@@ -122,6 +122,9 @@ from creator_intelligence_studio.application.services.transcription_service impo
     TranscriptionService,
     build_transcription_service,
 )
+from creator_intelligence_studio.application.services.component_manager_service import (
+    ComponentManagerService,
+)
 from creator_intelligence_studio.application.services.ai_runtime_service import (
     AIRuntimeService,
     build_ai_runtime_service,
@@ -142,6 +145,9 @@ from creator_intelligence_studio.infrastructure.logging.logging_setup import (
 )
 from creator_intelligence_studio.infrastructure.persistence.database import build_database
 from creator_intelligence_studio.infrastructure.persistence.migrations import run_migrations
+from creator_intelligence_studio.infrastructure.persistence.sqlite_component_manager_repository import (
+    SQLiteComponentManagerRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_prepared_audio_repository import (
     SQLitePreparedAudioRepository,
 )
@@ -277,6 +283,7 @@ class ServiceContext(BootstrapContext):
     model_service: PersonalizationTrainingService | None = None
     evaluation_service: OperationalEvaluationService | None = None
     ai_runtime_service: AIRuntimeService | None = None
+    component_manager_service: ComponentManagerService | None = None
 
 
 def _load_context() -> BootstrapContext:
@@ -349,6 +356,11 @@ def _load_service_context() -> ServiceContext:
         video_repository=video_repository,
         prepared_audio_repository=prepared_audio_repository,
         transcription_repository=transcription_repository,
+        logger=context.logger,
+    )
+    component_manager_service = ComponentManagerService(
+        paths=context.paths,
+        repository=SQLiteComponentManagerRepository(database),
         logger=context.logger,
     )
     acoustic_service = build_acoustic_analysis_service(
@@ -609,6 +621,7 @@ def _load_service_context() -> ServiceContext:
         media_service=media_service,
         audio_service=audio_service,
         transcription_service=transcription_service,
+        component_manager_service=component_manager_service,
         acoustic_service=acoustic_service,
         visual_service=visual_service,
         multimodal_service=multimodal_service,
@@ -721,6 +734,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             service=context.service,
             media_service=context.media_service,
             audio_service=context.audio_service,
+            component_manager_service=context.component_manager_service,
             transcription_service=context.transcription_service,
             acoustic_service=context.acoustic_service,
             visual_service=context.visual_service,

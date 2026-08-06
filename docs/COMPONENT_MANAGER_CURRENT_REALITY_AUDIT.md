@@ -173,3 +173,14 @@ The current transcription stack does not call AI Runtime provider modules direct
 - shared application bootstrap and shared persistence infrastructure
 
 There is no code path where AI Runtime request builders are reused for local transcription.
+
+## v32-A Foundation Outcome
+
+| Hallazgo | Evidencia | Estado | Acción |
+|---|---|---|---|
+| v32 migration added | `migration_32` creates catalog, installation, hardware, profile, runtime-check, and event tables. | corrected_now | Use the new foundation tables as the managed component baseline. |
+| Read-only component catalog exists | default catalog seeds FFmpeg, runtime, and current transcription model families. | already_covered | Keep the catalog versioned and reviewable. |
+| Hardware inventory is available | `HardwareCapabilityService` records CPU/RAM/GPU/CUDA/disks without benchmarking. | corrected_now | Keep readiness separate from detection. |
+| Capability resolver is deterministic | `TranscriptionCapabilityResolver` reports readiness, warnings, and actions without downloads. | corrected_now | Use this boundary before any future install flow. |
+| Hidden model download blocked | `TranscriptionService` now returns a friendly missing-model result instead of auto-downloading. | corrected_now | Keep download as an explicit future action only. |
+| Read-only CLI added | `components status` and `components capability` expose safe inspection JSON. | corrected_now | Use it for local diagnosis only. |

@@ -6,7 +6,12 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
+from uuid import uuid4
 
+from creator_intelligence_studio.domain.components.catalog import (
+    build_default_component_catalog,
+    build_default_transcription_profiles,
+)
 from creator_intelligence_studio.infrastructure.persistence.database import DatabaseError
 from creator_intelligence_studio.infrastructure.personalization_data.feature_extractor import (
     CREATOR_FEATURE_DEFINITIONS,
@@ -8488,6 +8493,326 @@ def migration_31(connection: sqlite3.Connection) -> None:
     create("CREATE INDEX IF NOT EXISTS idx_ai_runtime_settings_scope ON ai_runtime_settings(scope_type, scope_id)")
 
 
+def migration_32(connection: sqlite3.Connection) -> None:
+    def create(sql: str) -> None:
+        connection.execute(sql)
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS component_catalog (
+            id TEXT PRIMARY KEY,
+            component_id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            category TEXT NOT NULL CHECK (category IN (
+                'ffmpeg',
+                'transcription_runtime',
+                'transcription_model',
+                'optional_support'
+            )),
+            version TEXT,
+            revision TEXT,
+            platform TEXT,
+            architecture TEXT,
+            source_type TEXT NOT NULL,
+            source_identifier TEXT,
+            allowed_domains_json TEXT NOT NULL DEFAULT '[]',
+            expected_download_bytes INTEGER,
+            expected_installed_bytes INTEGER,
+            temporary_space_bytes INTEGER,
+            sha256 TEXT,
+            license_name TEXT,
+            license_url TEXT,
+            attribution TEXT,
+            dependencies_json TEXT NOT NULL DEFAULT '[]',
+            capabilities_enabled_json TEXT NOT NULL DEFAULT '[]',
+            minimum_requirements_json TEXT NOT NULL DEFAULT '{}',
+            recommended_requirements_json TEXT NOT NULL DEFAULT '{}',
+            install_strategy TEXT,
+            health_check TEXT,
+            rollback_supported INTEGER NOT NULL DEFAULT 0,
+            catalog_version INTEGER NOT NULL,
+            reviewed_at TEXT,
+            status TEXT NOT NULL CHECK (status IN ('verified', 'pending_verification', 'legacy', 'unsupported', 'unknown')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_component_catalog_component_version ON component_catalog(component_id, catalog_version)")
+    create("CREATE INDEX IF NOT EXISTS idx_component_catalog_component_id ON component_catalog(component_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_component_catalog_category_status ON component_catalog(category, status)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS component_installations (
+            id TEXT PRIMARY KEY,
+            component_id TEXT NOT NULL UNIQUE,
+            installation_status TEXT NOT NULL CHECK (installation_status IN (
+                'managed',
+                'externally_detected',
+                'missing',
+                'unknown',
+                'invalid',
+                'repair_required',
+                'incompatible',
+                'ready'
+            )),
+            installed_version TEXT,
+            revision TEXT,
+            install_type TEXT NOT NULL CHECK (install_type IN ('managed', 'externally_detected')),
+            location_path TEXT,
+            location_reference TEXT,
+            detected_at TEXT,
+            verified_at TEXT,
+            health_status TEXT NOT NULL CHECK (health_status IN ('not_checked', 'checking', 'ready', 'degraded', 'incompatible', 'failed')),
+            source TEXT,
+            managed INTEGER NOT NULL DEFAULT 0,
+            last_error_code TEXT,
+            last_error_message TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_component_installations_status ON component_installations(installation_status)")
+    create("CREATE INDEX IF NOT EXISTS idx_component_installations_health_status ON component_installations(health_status)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS hardware_profiles (
+            id TEXT PRIMARY KEY,
+            generated_at TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            architecture TEXT NOT NULL,
+            cpu_logical_count INTEGER,
+            cpu_summary TEXT,
+            ram_total_bytes INTEGER,
+            ram_available_bytes INTEGER,
+            gpu_vendor TEXT,
+            gpu_name TEXT,
+            gpu_driver_version TEXT,
+            gpu_vram_total_bytes INTEGER,
+            gpu_cuda_visible INTEGER NOT NULL DEFAULT 0,
+            gpu_cuda_runtime_reported TEXT,
+            gpu_ctranslate2_cuda_available INTEGER,
+            gpu_status TEXT NOT NULL CHECK (gpu_status IN ('detected', 'not_detected', 'unknown', 'reported_not_tested', 'degraded', 'incompatible')),
+            gpu_notes TEXT,
+            driver_summary TEXT,
+            cuda_reported TEXT,
+            ctranslate2_cuda_status TEXT NOT NULL CHECK (ctranslate2_cuda_status IN ('detected', 'not_detected', 'unknown', 'reported_not_tested', 'degraded', 'incompatible')),
+            disk_volumes_json TEXT NOT NULL DEFAULT '[]',
+            detection_source TEXT NOT NULL DEFAULT 'local',
+            status TEXT NOT NULL CHECK (status IN ('detected', 'not_detected', 'unknown', 'reported_not_tested', 'degraded', 'incompatible')),
+            warnings_json TEXT NOT NULL DEFAULT '[]',
+            errors_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_hardware_profiles_generated_at ON hardware_profiles(generated_at)")
+    create("CREATE INDEX IF NOT EXISTS idx_hardware_profiles_status ON hardware_profiles(status)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS transcription_profiles (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            model_component_id TEXT,
+            model_revision TEXT,
+            device_policy TEXT NOT NULL,
+            cpu_compute_type TEXT,
+            gpu_compute_type TEXT,
+            beam_size INTEGER,
+            vad_policy TEXT NOT NULL,
+            language_detection TEXT NOT NULL,
+            word_timestamps INTEGER,
+            segment_timestamps INTEGER,
+            batching_policy TEXT NOT NULL,
+            minimum_ram_gb REAL,
+            minimum_vram_gb REAL,
+            recommended_vram_gb REAL,
+            estimated_disk_bytes INTEGER,
+            status TEXT NOT NULL CHECK (status IN ('verified', 'provisional', 'legacy', 'unsupported', 'unknown')),
+            version INTEGER NOT NULL,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    create("CREATE UNIQUE INDEX IF NOT EXISTS uq_transcription_profiles_profile_version ON transcription_profiles(profile_id, version)")
+    create("CREATE INDEX IF NOT EXISTS idx_transcription_profiles_status ON transcription_profiles(status)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS transcription_runtime_checks (
+            id TEXT PRIMARY KEY,
+            component_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('not_checked', 'checking', 'ready', 'degraded', 'incompatible', 'failed')),
+            runtime_importable INTEGER,
+            runtime_version TEXT,
+            device_count INTEGER,
+            supported_compute_types_json TEXT NOT NULL DEFAULT '[]',
+            notes TEXT,
+            warning_message TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            checked_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (component_id) REFERENCES component_installations(component_id) ON DELETE CASCADE
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_transcription_runtime_checks_component_id ON transcription_runtime_checks(component_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_transcription_runtime_checks_status ON transcription_runtime_checks(status)")
+    create("CREATE INDEX IF NOT EXISTS idx_transcription_runtime_checks_checked_at ON transcription_runtime_checks(checked_at)")
+
+    create(
+        """
+        CREATE TABLE IF NOT EXISTS component_events (
+            id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL CHECK (event_type IN (
+                'catalog_loaded',
+                'component_detected',
+                'component_missing',
+                'component_health_check_started',
+                'component_health_check_completed',
+                'hardware_inventory_started',
+                'hardware_inventory_completed',
+                'transcription_capability_resolved',
+                'hidden_download_blocked'
+            )),
+            message_safe TEXT NOT NULL,
+            component_id TEXT,
+            installation_component_id TEXT,
+            hardware_profile_id TEXT,
+            profile_id TEXT,
+            severity TEXT NOT NULL DEFAULT 'info',
+            technical_reference TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (component_id) REFERENCES component_installations(component_id) ON DELETE SET NULL,
+            FOREIGN KEY (installation_component_id) REFERENCES component_installations(component_id) ON DELETE SET NULL,
+            FOREIGN KEY (hardware_profile_id) REFERENCES hardware_profiles(id) ON DELETE SET NULL
+        )
+        """
+    )
+    create("CREATE INDEX IF NOT EXISTS idx_component_events_event_type ON component_events(event_type)")
+    create("CREATE INDEX IF NOT EXISTS idx_component_events_component_id ON component_events(component_id)")
+    create("CREATE INDEX IF NOT EXISTS idx_component_events_created_at ON component_events(created_at)")
+
+    catalog = build_default_component_catalog()
+    for entry in catalog.entries:
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO component_catalog (
+                id, component_id, display_name, category, version, revision, platform,
+                architecture, source_type, source_identifier, allowed_domains_json,
+                expected_download_bytes, expected_installed_bytes, temporary_space_bytes,
+                sha256, license_name, license_url, attribution, dependencies_json,
+                capabilities_enabled_json, minimum_requirements_json,
+                recommended_requirements_json, install_strategy, health_check,
+                rollback_supported, catalog_version, reviewed_at, status,
+                created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?,
+                ?, ?
+            )
+            """,
+            (
+                str(uuid4()),
+                entry.component_id,
+                entry.display_name,
+                entry.category.value,
+                entry.version,
+                entry.revision,
+                entry.platform,
+                entry.architecture,
+                entry.source_type,
+                entry.source_identifier,
+                json.dumps(list(entry.allowed_domains), ensure_ascii=False),
+                entry.expected_download_bytes,
+                entry.expected_installed_bytes,
+                entry.temporary_space_bytes,
+                entry.sha256,
+                entry.license_name,
+                entry.license_url,
+                entry.attribution,
+                json.dumps(list(entry.dependencies), ensure_ascii=False),
+                json.dumps(list(entry.capabilities_enabled), ensure_ascii=False),
+                json.dumps(entry.minimum_requirements, ensure_ascii=False, sort_keys=True),
+                json.dumps(entry.recommended_requirements, ensure_ascii=False, sort_keys=True),
+                entry.install_strategy,
+                entry.health_check,
+                1 if entry.rollback_supported else 0,
+                entry.catalog_version,
+                entry.reviewed_at.isoformat() if entry.reviewed_at else _utc_now(),
+                entry.status.value,
+                entry.created_at.isoformat() if entry.created_at else _utc_now(),
+                entry.updated_at.isoformat() if entry.updated_at else _utc_now(),
+            ),
+        )
+
+    for profile in build_default_transcription_profiles():
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO transcription_profiles (
+                id, profile_id, display_name, description, model_component_id,
+                model_revision, device_policy, cpu_compute_type, gpu_compute_type,
+                beam_size, vad_policy, language_detection, word_timestamps,
+                segment_timestamps, batching_policy, minimum_ram_gb, minimum_vram_gb,
+                recommended_vram_gb, estimated_disk_bytes, status, version,
+                reviewed_at, created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?
+            )
+            """,
+            (
+                str(uuid4()),
+                profile.profile_id,
+                profile.display_name,
+                profile.description,
+                profile.model_component_id,
+                profile.model_revision,
+                profile.device_policy,
+                profile.cpu_compute_type,
+                profile.gpu_compute_type,
+                profile.beam_size,
+                profile.vad_policy,
+                profile.language_detection,
+                None if profile.word_timestamps is None else (1 if profile.word_timestamps else 0),
+                None if profile.segment_timestamps is None else (1 if profile.segment_timestamps else 0),
+                profile.batching_policy,
+                profile.minimum_ram_gb,
+                profile.minimum_vram_gb,
+                profile.recommended_vram_gb,
+                profile.estimated_disk_bytes,
+                profile.status.value,
+                profile.version,
+                profile.reviewed_at.isoformat() if profile.reviewed_at else _utc_now(),
+                profile.created_at.isoformat() if profile.created_at else _utc_now(),
+                profile.updated_at.isoformat() if profile.updated_at else _utc_now(),
+            ),
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="initial_schema"),
     Migration(version=2, name="video_inspections"),
@@ -8520,6 +8845,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=29, name="content_brief_and_pre_production_foundation"),
     Migration(version=30, name="script_outline_and_production_preparation_foundation"),
     Migration(version=31, name="ai_runtime_and_provider_orchestration_foundation"),
+    Migration(version=32, name="component_manager_and_local_transcription_foundation"),
 )
 
 
@@ -8631,6 +8957,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_30(connection)
                 elif migration.version == 31:
                     migration_31(connection)
+                elif migration.version == 32:
+                    migration_32(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

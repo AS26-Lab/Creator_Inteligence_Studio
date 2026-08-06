@@ -7,11 +7,11 @@ This document records what is actually implemented in the repository at the v30 
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v31`
+- current migration ceiling: `v32`
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
-- Component Manager and Local Transcription Foundation is not implemented yet; current transcription is still an integrated local stack built on `ffmpeg`, `faster-whisper`, and `CTranslate2`, with model and path management handled inside the existing transcription services.
+- Component Manager and Local Transcription Foundation v32-A is now implemented as a read-only foundation: component catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, and hidden-download protection. The existing transcription stack is still the runtime path for execution and is not replaced by the foundation layer.
 
 ## What Is Implemented
 
@@ -192,7 +192,7 @@ Status: `requires_ml`
 
 ## What Is Not Started
 
-- Component Manager and Local Transcription Foundation as a formal AI stage
+- Component Manager and Local Transcription Foundation as a formal AI stage beyond the v32-A foundation
 - Creator Corpus Foundation
 - Semantic Retrieval Foundation
 - Feedback Learning Foundation
@@ -201,6 +201,18 @@ Status: `requires_ml`
 - automatic video editing
 
 Status: `not_started`
+
+## Component Manager v32-A Foundation
+
+- migration `v32` is present and idempotent
+- the component catalog is versioned and seeded
+- installations, hardware profiles, runtime checks, and events have first-class tables
+- transcription profiles are versioned and seeded with `fast`, `balanced`, `maximum_quality`, and `custom`
+- the resolver is deterministic and read-only
+- `TranscriptionService` no longer auto-downloads a missing model implicitly
+- CLI read-only inspection is available through `components status` and `components capability`
+
+Status: `implemented`
 
 ## Known Discrepancies And Resolutions
 

@@ -57,10 +57,12 @@ class TranscriptionModelManager:
             infos.append(self.get_model_status(model_name))
         return tuple(infos)
 
-    def get_model_status(self, model_name: str) -> TranscriptionModelInfo:
+    def inspect_model_availability(self, model_name: str) -> TranscriptionModelInfo:
+        """Inspecciona la caché local sin intentar descargar ni verificar carga."""
+
         model_name = model_name.strip().lower()
         path = self.resolve_model_path(model_name)
-        status, notes, error_code, error_message = self._inspect_cache(path, model_name)
+        status, notes, error_code, error_message = self._inspect_cache(path, model_name, allow_verification=False)
         size_bytes = self._directory_size(path) if path.exists() else None
         profile = next((profile for profile, name in PROFILE_TO_MODEL.items() if name == model_name), model_name)
         return TranscriptionModelInfo(
@@ -74,6 +76,9 @@ class TranscriptionModelManager:
             error_code=error_code,
             error_message=error_message,
         )
+
+    def get_model_status(self, model_name: str) -> TranscriptionModelInfo:
+        return self.inspect_model_availability(model_name)
 
     def verify_model(self, model_name: str) -> TranscriptionModelInfo:
         """Verifica que el modelo pueda cargarse sin descargarlo de nuevo."""

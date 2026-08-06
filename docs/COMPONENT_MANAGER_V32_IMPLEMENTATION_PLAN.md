@@ -4,6 +4,10 @@
 
 This plan breaks v32 into small, verifiable subphases. It is intentionally conservative so the repository can gain a managed component layer without destabilizing the already working transcription flow.
 
+## Current Status
+
+v32-A is now implemented as a read-only foundation. The remaining subphases below stay valid and pending: download manager, installer, relocation, onboarding, benchmark, and deeper GUI work.
+
 ## Phase Order
 
 ### v32-A - Schema and Catalog Foundation
@@ -34,6 +38,10 @@ Non-scope:
 
 - actual component installation
 - transcription behavior changes
+
+Status:
+
+- implemented in this branch as a foundation-only slice
 
 ### v32-B - Hardware Capability Inventory
 
@@ -337,4 +345,3 @@ The first coding prompt should ask for:
 4. a fake-only test suite for catalog and resolver
 
 That is the smallest safe slice that creates the v32 contract without changing transcription behavior yet.
-

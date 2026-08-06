@@ -327,6 +327,9 @@ from creator_intelligence_studio.application.services.transcription_service impo
     TranscriptionReport,
     TranscriptionService,
 )
+from creator_intelligence_studio.application.services.component_manager_service import (
+    ComponentManagerService,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -647,6 +650,17 @@ def build_parser() -> argparse.ArgumentParser:
     audio_clear = audio_sub.add_parser("clear-cache", help="Limpiar caché de audio")
     audio_clear.add_argument("--video-id", required=True)
     audio_clear.add_argument("--json", action="store_true")
+
+    components_parser = subparsers.add_parser("components", help="Inspeccion tecnica de componentes locales")
+    components_sub = components_parser.add_subparsers(dest="action", required=True)
+    components_status = components_sub.add_parser("status", help="Mostrar catalogo, inventario y capacidad")
+    components_status.add_argument("--profile", default="balanced")
+    components_status.add_argument("--device", default="auto")
+    components_status.add_argument("--json", action="store_true")
+    components_capability = components_sub.add_parser("capability", help="Mostrar solo la capacidad de transcripcion")
+    components_capability.add_argument("--profile", default="balanced")
+    components_capability.add_argument("--device", default="auto")
+    components_capability.add_argument("--json", action="store_true")
 
     build_audience_parser(subparsers)
     build_instagram_parser(subparsers)
@@ -2380,6 +2394,40 @@ def _print_model_info(model_info, stream) -> None:
         print(f"Error: {model_info.error_message}", file=stream)
 
 
+def _print_component_installation(installation, stream) -> None:
+    print(f"Componente: {installation.component_id}", file=stream)
+    print(f"Estado: {installation.installation_status.value}", file=stream)
+    print(f"Tipo: {installation.install_type.value}", file=stream)
+    print(f"Version instalada: {installation.installed_version or 'no verificada'}", file=stream)
+    print(f"Ruta: {installation.location_path or 'no verificada'}", file=stream)
+    print(f"Salud: {installation.health_status.value}", file=stream)
+    print(f"Administrado: {'si' if installation.managed else 'no'}", file=stream)
+    if installation.last_error_message:
+        print(f"Error: {installation.last_error_message}", file=stream)
+
+
+def _print_component_manager_status(report, stream) -> None:
+    print("Componentes locales:", file=stream)
+    print(f"Catalogo: {report.catalog.catalog_version} ({len(report.catalog.entries)} entradas)", file=stream)
+    print(f"Hardware: {report.hardware.hardware_profile.status.value}", file=stream)
+    print(f"Capacidad: {report.capability.readiness}", file=stream)
+    print(f"Perfil solicitado: {report.capability.requested_profile}", file=stream)
+    print(f"Perfil recomendado: {report.capability.recommended_profile.profile_id if report.capability.recommended_profile else 'no verificado'}", file=stream)
+    print(f"Mensaje: {report.presentation.message}", file=stream)
+    if report.installations:
+        print("Instalaciones:", file=stream)
+        for installation in report.installations:
+            print(f"- {installation.component_id}: {installation.installation_status.value} / {installation.health_status.value}", file=stream)
+    if report.capability.blocking_reasons:
+        print("Bloqueos:", file=stream)
+        for reason in report.capability.blocking_reasons:
+            print(f"- {reason}", file=stream)
+    if report.capability.warnings:
+        print("Advertencias:", file=stream)
+        for warning in report.capability.warnings:
+            print(f"- {warning}", file=stream)
+
+
 def _print_acoustic_window(window: AcousticTimelineWindow, stream) -> None:
     print(
         f"[{window.window_index}] {window.start_seconds:.3f} -> {window.end_seconds:.3f} | "
@@ -2764,6 +2812,31 @@ def _handle_audio(args, service: AudioPreparationService, stdout) -> int:
             print(f"Archivos eliminados: {len(result.deleted_files)}", file=stdout)
         return 0
     raise ValueError("Accion de audio no reconocida.")
+
+
+def _handle_components(args, service: ComponentManagerService, stdout) -> int:
+    if args.action == "status":
+        report = service.status(profile=args.profile, preferred_device=args.device)
+        if args.json:
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+        else:
+            _print_component_manager_status(report, stdout)
+        return 0
+    if args.action == "capability":
+        report = service.resolve_transcription_capability(profile=args.profile, preferred_device=args.device)
+        presentation = service.describe_transcription_capability(profile=args.profile, preferred_device=args.device)
+        payload = {
+            "capability": report.to_dict(),
+            "presentation": presentation.to_dict(),
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Capacidad de transcripcion:", file=stdout)
+            print(f"Estado: {report.readiness}", file=stdout)
+            print(f"Mensaje: {presentation.message}", file=stdout)
+        return 0
+    raise ValueError("Accion de componentes no reconocida.")
 
 
 def _handle_transcription(args, service: TranscriptionService, stdout, stderr) -> int:
@@ -5354,6 +5427,7 @@ def dispatch(
     model_service: PersonalizationTrainingService | None = None,
     evaluation_service: OperationalEvaluationService | None = None,
     ai_runtime_service=None,
+    component_manager_service: ComponentManagerService | None = None,
 ) -> int:
     """Ejecuta el comando solicitado."""
 
@@ -5377,6 +5451,10 @@ def dispatch(
             return _handle_media(args, media_service, stdout)
         if args.entity == "audio":
             return _handle_audio(args, audio_service, stdout)
+        if args.entity == "components":
+            if component_manager_service is None:
+                raise DomainError("El servicio de componentes no esta disponible.")
+            return _handle_components(args, component_manager_service, stdout)
         if args.entity == "transcription":
             return _handle_transcription(args, transcription_service, stdout, stderr)
         if args.entity == "acoustic":
