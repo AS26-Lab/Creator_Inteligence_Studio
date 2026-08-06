@@ -271,6 +271,8 @@ Current v31 rules:
 - gpt-5.6-luna uses max_completion_tokens on Chat Completions and does not send max_tokens.
 - gpt-5.6-luna omits temperature in the minimal connectivity diagnostic; temperature is only sent when a profile explicitly permits it and the request truly needs it.
 - OpenAI structured output support is handled through the request profile, not through GUI conditionals.
+- OpenAI response metadata now preserves `content_shape`, `response_state`, and `finish_reason` so textual connectivity and structured validation stay separate.
+- The orchestrator no longer coerces non-JSON text into an empty object before validation; plain text follows the textual diagnostic validator path.
 - Anthropic retains its own request profile and output-token parameter contract.
 - The catalog version for request-profile decisions is stored as v31-request-profiles-2026-08-06.
 
@@ -619,6 +621,7 @@ This section records what was verified during the v31 closeout audit.
 - Provider credential validation followed by catalog synchronization into `ai_model_catalog`.
 - GUI model selection populated from synchronized provider models and role assignment persistence.
 - The OpenAI discovery path was corrected to avoid treating every normalized model as audio-capable or otherwise incompatible just because the provider metadata includes false boolean keys.
+- The OpenAI diagnostic path now accepts textual connectivity responses with measured usage and separates those from structured-output validation.
 - The v31 repair path now normalizes `ai_executions` so `request_fingerprint` is indexed but not globally unique, preserving historical rows while allowing repeated diagnostics.
 - The diagnostics button now launches a background `QThread`, disables the button immediately, shows `Preparando diagnÃ³sticoâ€¦`, and re-enables the UI when the run finishes.
 - Successful and failed diagnostics both refresh the visible execution fields and the history table without exposing secrets or raw provider payloads.

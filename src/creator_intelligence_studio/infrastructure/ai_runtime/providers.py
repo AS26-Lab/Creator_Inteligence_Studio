@@ -543,6 +543,10 @@ class OpenAIProvider:
         structured_output = None
         model_version = parsed["model_version"]
         raw_finish_reason = parsed["raw_finish_reason"]
+        response_state = parsed.get("response_state")
+        content_shape = parsed.get("content_shape")
+        content_length = parsed.get("content_length")
+        parser_profile = parsed.get("parser_profile")
         usage_payload = parsed["usage"]
         usage = AIExecutionUsage(
             input_tokens=int(usage_payload.get("input_tokens") or 0),
@@ -560,13 +564,13 @@ class OpenAIProvider:
             structured_output = json.loads(output_text)
         except Exception:
             structured_output = None
-        if not output_text:
+        if not output_text and content_shape == "missing" and response_state == "empty":
             error = AIExecutionError(
                 category="invalid_response",
-                safe_message="Provider response did not include JSON content.",
+                safe_message="OpenAI response did not include a usable content field.",
                 retryable=False,
-                suggested_action="Retry or adjust the prompt template.",
-                technical_reference="response",
+                suggested_action="Revisar el formato de respuesta o el perfil del modelo.",
+                technical_reference=f"response parser={parser_profile or 'chat_completions'}",
             )
             return AIProviderResponse(
                 provider=self.provider_name,
@@ -576,10 +580,17 @@ class OpenAIProvider:
                 structured_output=None,
                 usage=usage,
                 latency_ms=latency_ms,
+                content_shape=content_shape,
+                content_length=content_length,
                 raw_finish_reason=raw_finish_reason,
+                response_state=response_state,
+                parser_profile=parser_profile,
                 error=error,
                 warnings=("usage_unavailable",) if usage_missing else (),
             )
+        warnings: tuple[str, ...] = ()
+        if response_state and response_state != "content":
+            warnings = (f"response_state:{response_state}",)
         return AIProviderResponse(
             provider=self.provider_name,
             model_id=model_id,
@@ -588,8 +599,12 @@ class OpenAIProvider:
             structured_output=structured_output,
             usage=usage,
             latency_ms=latency_ms,
+            content_shape=content_shape,
+            content_length=content_length,
             raw_finish_reason=raw_finish_reason,
-            warnings=("usage_unavailable",) if usage_missing else (),
+            response_state=response_state,
+            parser_profile=parser_profile,
+            warnings=(("usage_unavailable",) if usage_missing else ()) + warnings,
         )
 
 

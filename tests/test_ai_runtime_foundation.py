@@ -297,8 +297,8 @@ class AIRuntimeFoundationTests(unittest.TestCase):
         )
 
         result = orchestrator.run(self._build_request(), provider="openai")
-        self.assertEqual(result.status, "completed_with_warnings")
-        self.assertEqual(result.validation.status, "rejected")
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.validation.status, "valid")
 
     def test_migration_v31_from_existing_v30_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

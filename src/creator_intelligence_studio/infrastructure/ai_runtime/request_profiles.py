@@ -374,20 +374,104 @@ def extract_openai_usage(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_chat_completion_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        candidate = value.get("value")
+        if candidate is None:
+            candidate = value.get("text")
+        if candidate is None:
+            candidate = value.get("content")
+        return _normalize_chat_completion_text(candidate)
+    if isinstance(value, list):
+        fragments: list[str] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "").lower()
+            if item_type not in {"text", "output_text"}:
+                continue
+            text_value = item.get("text")
+            if isinstance(text_value, dict):
+                fragment = text_value.get("value")
+                if fragment is None:
+                    fragment = text_value.get("text")
+            else:
+                fragment = text_value
+            if fragment is None:
+                fragment = item.get("value")
+            if fragment is None:
+                fragment = item.get("content")
+            if fragment is None:
+                continue
+            fragments.append(str(fragment))
+        return "\n".join(fragment.strip() for fragment in fragments if str(fragment).strip()).strip()
+    return str(value).strip()
+
+
+def _openai_chat_completion_response_state(*, content_text: str, refusal_text: str | None, finish_reason: str | None) -> str:
+    reason = (finish_reason or "").strip().lower()
+    if refusal_text:
+        return "refusal"
+    if reason == "content_filter":
+        return "content_filter"
+    if reason == "length":
+        return "truncated"
+    if content_text:
+        return "content"
+    return "empty"
+
+
 def parse_openai_chat_completions_response(payload: dict[str, Any]) -> dict[str, Any]:
     output_text = ""
     raw_finish_reason = None
+    refusal_text = None
+    content_shape = "missing"
+    message_shape = "missing"
     choices = payload.get("choices") or []
     if choices:
         choice = choices[0] or {}
         message = choice.get("message") or {}
-        output_text = str(message.get("content") or "")
+        message_shape = type(message).__name__
+        raw_content = message.get("content")
+        if isinstance(raw_content, str):
+            content_shape = "string"
+        elif isinstance(raw_content, list):
+            content_shape = "array"
+        elif raw_content is None:
+            content_shape = "missing"
+        else:
+            content_shape = type(raw_content).__name__
+        output_text = _normalize_chat_completion_text(raw_content)
+        refusal_value = message.get("refusal")
+        if refusal_value is None and isinstance(raw_content, list):
+            for item in raw_content:
+                if isinstance(item, dict) and str(item.get("type") or "").lower() == "refusal":
+                    refusal_value = item.get("refusal") or item.get("text") or item.get("content")
+                    if refusal_value is not None:
+                        break
+        refusal_text = _normalize_chat_completion_text(refusal_value) or None
         raw_finish_reason = choice.get("finish_reason")
     usage = extract_openai_usage(payload)
+    response_state = _openai_chat_completion_response_state(
+        content_text=output_text,
+        refusal_text=refusal_text,
+        finish_reason=raw_finish_reason,
+    )
     return {
         "output_text": output_text,
+        "content_text": output_text,
+        "content_shape": content_shape,
+        "message_shape": message_shape,
+        "content_length": len(output_text),
+        "refusal_text": refusal_text,
         "structured_output": None,
         "model_version": payload.get("model"),
         "raw_finish_reason": raw_finish_reason,
+        "response_state": response_state,
+        "parser_profile": "chat_completions",
         "usage": usage,
     }

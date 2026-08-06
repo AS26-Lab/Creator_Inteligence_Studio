@@ -1708,10 +1708,18 @@ class DiagnosticsTab(QWidget):
         self._refresh_approval_buttons()
         self._refresh_cancel_button()
 
-    def _friendly_diagnostic_message(self, status: str, error: dict[str, object]) -> str:
+    def _friendly_diagnostic_message(self, status: str, error: dict[str, object], validation: dict[str, object] | None = None) -> str:
         category = str(error.get("category") or "").lower()
         technical_reference = str(error.get("technical_reference") or "").lower()
         safe_message = str(error.get("safe_message") or "").lower()
+        validation_status = str((validation or {}).get("status") or "").lower()
+        validation_issues = (validation or {}).get("issues") or ()
+        if isinstance(validation_issues, (list, tuple)):
+            first_issue = str(validation_issues[0]) if validation_issues else ""
+        else:
+            first_issue = str(validation_issues)
+        if validation_status == "rejected" and not error:
+            return "OpenAI respondió, pero Creator Intelligence Studio no pudo validar la respuesta del diagnóstico."
         if status == "blocked_by_credentials" or category == "authentication_error":
             return "No hay una credencial configurada para este proveedor."
         if category == "authorization_error":
@@ -1722,6 +1730,12 @@ class DiagnosticsTab(QWidget):
             return "No se pudo contactar al proveedor. Reintenta en unos minutos."
         if category == "invalid_request" and ("unsupported_parameter" in technical_reference or "max_tokens" in safe_message):
             return "No se pudo completar la solicitud porque la configuración de este modelo necesita actualizarse."
+        if validation_status == "rejected":
+            if "truncated" in first_issue.lower():
+                return "OpenAI respondió, pero la salida quedó truncada y no se pudo validar."
+            if "refusal" in first_issue.lower() or "content filter" in first_issue.lower():
+                return "OpenAI respondió, pero la salida no se pudo validar."
+            return "OpenAI respondió, pero Creator Intelligence Studio no pudo validar la respuesta del diagnóstico."
         if status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or error:
             return "No se pudo completar el diagnóstico."
         return "Diagnóstico completado."
@@ -1853,7 +1867,8 @@ class DiagnosticsTab(QWidget):
         elif status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"} or payload_dict.get("error"):
             logger.info("ai_runtime_diagnostic.execution_failed status=%s", status)
         _refresh_enclosing_overview(self)
-        self.message_label.setText(self._friendly_diagnostic_message(status, error))
+        validation = payload_dict.get("validation") if isinstance(payload_dict.get("validation"), dict) else None
+        self.message_label.setText(self._friendly_diagnostic_message(status, error, validation))
 
     def _diagnostic_failed(self, message: str) -> None:
         logger.info("ai_runtime_diagnostic.execution_failed")

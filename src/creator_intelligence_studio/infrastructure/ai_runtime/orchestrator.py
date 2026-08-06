@@ -1037,13 +1037,23 @@ class AIOrchestrator:
                 expected_statuses=("running",),
                 input_summary_updates={"execution_state": "validating"},
             ) or execution_record
-        validation = self.result_validator.validate(request=request, payload=payload_object or {}, output_text=response.output_text)
+        validation = self.result_validator.validate(
+            request=request,
+            payload=payload_object if payload_object is not None else "",
+            output_text=response.output_text,
+            response_state=getattr(response, "response_state", None),
+        )
         if validation.status == "rejected":
             repaired = self.result_validator.repair(response.output_text)
             if repaired is not None:
                 repaired_object = self._safe_parse(repaired)
                 if repaired_object is not None:
-                    validation = self.result_validator.validate(request=request, payload=repaired_object, output_text=repaired)
+                    validation = self.result_validator.validate(
+                        request=request,
+                        payload=repaired_object,
+                        output_text=repaired,
+                        response_state=getattr(response, "response_state", None),
+                    )
                     if validation.status != "rejected":
                         response = replace(response, output_text=repaired, structured_output=repaired_object)
                         payload_object = repaired_object

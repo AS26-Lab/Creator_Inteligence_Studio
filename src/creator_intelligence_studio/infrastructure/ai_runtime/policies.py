@@ -173,33 +173,94 @@ class CostTracker:
         }
 
 
+def _normalize_textual_diagnostic_output(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    if stripped.startswith("```") and stripped.endswith("```"):
+        inner = stripped[3:-3].strip()
+        first_newline = inner.find("\n")
+        if first_newline >= 0:
+            inner = inner[first_newline + 1 :].strip()
+        stripped = inner
+    stripped = stripped.strip(" \t\r\n`")
+    while stripped and stripped[0] in "\"'":
+        stripped = stripped[1:].lstrip()
+    while stripped and stripped[-1] in "\"'":
+        stripped = stripped[:-1].rstrip()
+    while stripped and stripped[-1] in ".!?,":
+        stripped = stripped[:-1].rstrip()
+    return stripped
+
+
+def _expected_textual_diagnostic_tokens(request: AIExecutionRequest) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for source in (request.output_contract, request.metadata):
+        if not isinstance(source, dict):
+            continue
+        expected_text = source.get("expected_text")
+        if isinstance(expected_text, str) and expected_text.strip():
+            tokens.append(_normalize_textual_diagnostic_output(expected_text).lower())
+        accepted_texts = source.get("accepted_texts")
+        if isinstance(accepted_texts, list):
+            for item in accepted_texts:
+                if isinstance(item, str) and item.strip():
+                    tokens.append(_normalize_textual_diagnostic_output(item).lower())
+    return tuple(token for token in tokens if token)
+
+
 @dataclass(frozen=True, slots=True)
 class AIResultValidator:
     forbidden_terms: tuple[str, ...] = ("hack", "password", "secret", "token")
 
-    def validate(self, *, request: AIExecutionRequest, payload: Any, output_text: str | None = None) -> AIExecutionValidation:
+    def validate(
+        self,
+        *,
+        request: AIExecutionRequest,
+        payload: Any,
+        output_text: str | None = None,
+        response_state: str | None = None,
+    ) -> AIExecutionValidation:
         issues: list[str] = []
         warnings: list[str] = []
-        if not isinstance(payload, dict):
-            return AIExecutionValidation(status="rejected", schema_name=request.task_type, issues=("Output is not JSON.",), warnings=())
-        required = {"status", "logical_role", "short_message"}
-        missing = sorted(required - set(payload))
-        if missing:
-            issues.append(f"Missing keys: {', '.join(missing)}.")
-        if payload.get("status") != "ok":
-            warnings.append("Status is not ok.")
-        short_message = payload.get("short_message")
-        if not isinstance(short_message, str) or not short_message.strip():
-            issues.append("short_message must be a non-empty string.")
-        elif len(short_message.strip()) > 280:
-            issues.append("short_message is too long.")
-        text = output_text or ""
-        if not text and payload:
-            try:
-                text = json.dumps(payload, ensure_ascii=False)
-            except Exception:
-                text = ""
-        lowered = text.lower()
+        normalized_text = _normalize_textual_diagnostic_output(output_text or "")
+        lower_text = normalized_text.lower()
+        if response_state in {"refusal", "content_filter"}:
+            issues.append(f"Response state is {response_state}.")
+        elif response_state == "truncated":
+            issues.append("Response was truncated.")
+        elif response_state == "empty" and not normalized_text:
+            issues.append("Response text is empty.")
+
+        if isinstance(payload, dict):
+            required = {"status", "logical_role", "short_message"}
+            missing = sorted(required - set(payload))
+            if missing:
+                issues.append(f"Missing keys: {', '.join(missing)}.")
+            if payload.get("status") != "ok":
+                warnings.append("Status is not ok.")
+            short_message = payload.get("short_message")
+            if not isinstance(short_message, str) or not short_message.strip():
+                issues.append("short_message must be a non-empty string.")
+            elif len(short_message.strip()) > 280:
+                issues.append("short_message is too long.")
+            text = output_text or ""
+            if not text and payload:
+                try:
+                    text = json.dumps(payload, ensure_ascii=False)
+                except Exception:
+                    text = ""
+            lowered = text.lower()
+        else:
+            if not normalized_text:
+                issues.append("Output text is empty.")
+            expected_tokens = _expected_textual_diagnostic_tokens(request)
+            if expected_tokens:
+                normalized_candidate = lower_text
+                if normalized_candidate not in expected_tokens:
+                    issues.append("Output text does not match the expected diagnostic response.")
+            lowered = lower_text
+
         forbidden = [term for term in self.forbidden_terms if term in lowered]
         if forbidden:
             issues.append(f"Forbidden terms present: {', '.join(forbidden)}.")

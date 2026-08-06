@@ -92,6 +92,7 @@ Status: ranking `deterministic`; rendering `implemented`
 - centralized provider request profiles for OpenAI and Anthropic diagnostic contracts
 - gpt-5.6-luna diagnostics currently target OpenAI Chat Completions with max_completion_tokens and omit temperature in the minimal connectivity payload
 - OpenAI request validation runs before HTTP so unsupported parameters are blocked locally
+- OpenAI response handling now preserves textual connectivity responses separately from structured-output validation, instead of coercing all non-JSON text into provider failure
 - role-based model registry
 - versioned prompt template registry
 - budget policy checks

@@ -17,7 +17,26 @@ class OpenAIDiagnosticE2ETests(unittest.TestCase):
         self.addCleanup(self.fixture.cleanup)
 
     def test_diagnostic_waits_for_approval_then_completes_with_single_call(self) -> None:
-        fake = StrictOpenAIContractFake(model_id="gpt-5.6-luna")
+        fake = StrictOpenAIContractFake(
+            model_id="gpt-5.6-luna",
+            success_payload={
+                "model": "gpt-5.6-luna",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": " OK. \n",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 70,
+                    "completion_tokens": 64,
+                    "cached_tokens": 0,
+                },
+            },
+        )
 
         awaiting = self.fixture.service.diagnostic_run(provider="openai", role="cheap_structured_model")
         self.assertEqual(awaiting.status, "awaiting_approval")
@@ -34,8 +53,10 @@ class OpenAIDiagnosticE2ETests(unittest.TestCase):
         self.assertIsNotNone(execution)
         self.assertEqual(execution.status, "completed")
         self.assertEqual(completed.execution_id, awaiting.execution_id)
-        self.assertGreater(completed.usage.input_tokens, 0)
-        self.assertGreater(completed.usage.output_tokens, 0)
+        self.assertEqual(completed.usage.input_tokens, 70)
+        self.assertEqual(completed.usage.output_tokens, 64)
+        self.assertEqual(completed.validation.status, "valid")
+        self.assertEqual(completed.result.strip(), "OK.")
 
 
 if __name__ == "__main__":

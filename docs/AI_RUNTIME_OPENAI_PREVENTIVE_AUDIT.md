@@ -30,6 +30,7 @@ Authority is limited to official OpenAI documentation and the repository impleme
 | Request profiles are now centralized and versioned | New `ProviderRequestProfile` / `OpenAIRequestProfile` contract and validator | media | corrected_now | Route endpoint and output-token decisions through the profile layer. |
 | Minimal payload is now enforced before HTTP | `build_openai_diagnostic_payload` omits optional fields by default; `validate_openai_request` blocks unsupported fields locally | media | corrected_now | Validate the serialized payload before calling the provider. |
 | Structured output is conditional, not unconditional | `response_format` is only added when explicitly requested and profile-supported | media | already_covered | Keep connectivity diagnostics minimal unless structured output is required. |
+| Response parsing now distinguishes textual connectivity from structured validation | New parser metadata tracks `content_shape`, `response_state`, and `finish_reason`; the orchestrator no longer coerces text responses into JSON-only validation | media | corrected_now | Validate structured output separately from plain text connectivity. |
 | Usage can be absent or partial | Parser now preserves absence as unavailable rather than fabricating measured zeros | media | corrected_now | Keep `None`/unavailable semantics in cost and usage tracking. |
 | Error normalization must distinguish compatibility errors | Adapter and fake now surface unsupported_value / unsupported_parameter safely | media | corrected_now | Translate contract errors to a user-friendly Spanish message. |
 | Preview/snapshot models should not auto-promote to verified recommendations | `classify_model_for_role()` now short-circuits preview/snapshot variants before capability fallback | media | corrected_now | Keep previews in compatibility_unknown unless a verified rule exists. |
@@ -84,8 +85,10 @@ Safe diagnostic payload fields after serialization:
 ### Response Parsing
 
 - Chat Completions parsing uses `choices[0].message.content` as the text source.
+- Chat Completions parsing now accepts string content, content arrays, refusal states, and empty/truncated shapes without conflating them with HTTP transport failures.
 - Usage parsing prefers `prompt_tokens` / `completion_tokens` and compatible aliases when present.
 - When usage is missing, the runtime records unavailable usage instead of fabricating zeros.
+- The orchestrator passes text responses through a textual validator path instead of forcing an empty dict into structured-output validation.
 
 ### Error Normalization
 
@@ -112,12 +115,16 @@ Validated categories in the OpenAI adapter path:
 
 Passed:
 
+- `python -m unittest tests.test_openai_response_contracts`
+- `python -m unittest tests.test_openai_diagnostic_validation`
 - `python -m unittest tests.test_openai_request_contracts`
 - `python -m unittest tests.test_openai_error_contracts`
 - `python -m unittest tests.test_openai_diagnostic_e2e`
 - `python -m unittest tests.test_ai_runtime_recommended_model_contracts`
 - `python -m unittest tests.test_ai_runtime_request_profiles`
 - `python -m unittest tests.test_ai_runtime_providers`
+- `python -m unittest tests.test_ai_runtime_foundation`
+- targeted GUI cases around diagnostics, approvals, provider errors, and double-click blocking
 - `python -m creator_intelligence_studio --diagnostic-json`
 
 Timed out in this workspace window:
@@ -125,6 +132,7 @@ Timed out in this workspace window:
 - `python -m unittest tests.test_ai_runtime_orchestrator`
 - `python -m unittest tests.test_ai_runtime_gui`
 - `python -m unittest discover -s tests -p "test_ai_runtime_*.py"`
+- the full orchestrator module also timed out on a longer 360s retry in this workspace
 
 ## Risks Still Pending
 
