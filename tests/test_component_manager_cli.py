@@ -23,6 +23,12 @@ from creator_intelligence_studio.domain.components.entities import (
 )
 from creator_intelligence_studio.domain.hardware.entities import DiskVolumeSummary, GpuSummary, HardwareCapabilityState, HardwareProfile
 from creator_intelligence_studio.domain.components.catalog import build_default_transcription_profiles
+from creator_intelligence_studio.domain.transcription.benchmark import (
+    TranscriptionRuntimeBenchmarkPresentation,
+    TranscriptionRuntimeBenchmarkResult,
+    TranscriptionRuntimeBenchmarkReadiness,
+    TranscriptionRuntimeBenchmarkStatus,
+)
 from creator_intelligence_studio.presentation.cli.cli import build_parser, dispatch
 
 
@@ -76,6 +82,45 @@ class FakeComponentManagerService:
             evidence_references=("catalog_version=1",),
         )
         presentation = TranscriptionCapabilityPresentation(title="Listo", message="Tu computadora esta lista para transcribir con el perfil Equilibrado.")
+        benchmark = TranscriptionRuntimeBenchmarkResult(
+            benchmark_id="benchmark-1",
+            status=TranscriptionRuntimeBenchmarkStatus.COMPLETED,
+            requested_device="cpu",
+            actual_device="cpu",
+            runtime_status=RuntimeCheckStatus.READY,
+            model_status=ComponentInstallationStatus.READY,
+            inference_status="completed",
+            selected_model=catalog.get_entry("transcription-model.small"),
+            selected_compute_type="int8",
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            load_duration_ms=10,
+            inference_duration_ms=20,
+            total_duration_ms=30,
+            audio_duration_ms=2000,
+            real_time_factor=0.01,
+            approximate_ram_before=1024,
+            approximate_ram_peak=1024,
+            approximate_ram_after=1024,
+            approximate_vram_before=None,
+            approximate_vram_peak=None,
+            approximate_vram_after=None,
+            transcript_present=True,
+            segment_count=1,
+            detected_language="es",
+            warnings=(),
+            readiness=TranscriptionRuntimeBenchmarkReadiness.READY,
+            evidence=("benchmark_id=benchmark-1",),
+            benchmark_version=1,
+            fixture_id="synthetic_voice_v1",
+            requested_profile="balanced",
+            model_component_id="transcription-model.small",
+            compute_policy="int8",
+        )
+        benchmark_presentation = TranscriptionRuntimeBenchmarkPresentation(title="Listo", message="Tu computadora esta lista para transcribir.")
+        self._benchmark = benchmark
+        self._benchmark_presentation = benchmark_presentation
+        self.benchmark_service = SimpleNamespace(present=lambda report: benchmark_presentation)
         self._status = ComponentManagerStatus(
             catalog=catalog,
             installations=(
@@ -116,6 +161,15 @@ class FakeComponentManagerService:
 
     def describe_transcription_capability(self, *, profile: str = "balanced", preferred_device: str = "auto") -> TranscriptionCapabilityPresentation:
         return self._status.presentation
+
+    def run_transcription_benchmark(self, **kwargs):
+        return self._benchmark
+
+    def latest_transcription_benchmark(self):
+        return self._benchmark
+
+    def describe_transcription_benchmark(self):
+        return self._benchmark_presentation
 
 
 class ComponentManagerCliTests(unittest.TestCase):
@@ -170,6 +224,55 @@ class ComponentManagerCliTests(unittest.TestCase):
         capability = json.loads(stdout.getvalue())
         self.assertIn("capability", capability)
         self.assertIn("presentation", capability)
+        self.assertEqual(stderr.getvalue(), "")
+
+        args = parser.parse_args(["components", "benchmark", "status", "--json"])
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        code = dispatch(
+            args,
+            service=None,
+            media_service=None,
+            audio_service=None,
+            transcription_service=None,
+            acoustic_service=None,
+            visual_service=None,
+            multimodal_service=None,
+            clip_service=None,
+            diagnostic=diagnostic,
+            stdout=stdout,
+            stderr=stderr,
+            component_manager_service=service,
+        )
+        self.assertEqual(code, 0)
+        benchmark_status_payload = json.loads(stdout.getvalue())
+        self.assertIn("benchmark", benchmark_status_payload)
+        self.assertIn("presentation", benchmark_status_payload)
+        self.assertEqual(benchmark_status_payload["benchmark"]["status"], "completed")
+        self.assertEqual(stderr.getvalue(), "")
+
+        args = parser.parse_args(["components", "benchmark", "--profile", "balanced", "--device", "cpu", "--json"])
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        code = dispatch(
+            args,
+            service=None,
+            media_service=None,
+            audio_service=None,
+            transcription_service=None,
+            acoustic_service=None,
+            visual_service=None,
+            multimodal_service=None,
+            clip_service=None,
+            diagnostic=diagnostic,
+            stdout=stdout,
+            stderr=stderr,
+            component_manager_service=service,
+        )
+        self.assertEqual(code, 0)
+        benchmark_payload = json.loads(stdout.getvalue())
+        self.assertEqual(benchmark_payload["benchmark"]["requested_device"], "cpu")
+        self.assertEqual(benchmark_payload["benchmark"]["status"], "completed")
         self.assertEqual(stderr.getvalue(), "")
 
 

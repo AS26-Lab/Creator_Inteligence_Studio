@@ -20,14 +20,14 @@ The collective server and predictive ML come later, once there are enough users 
 
 ## Next Handoff
 
-Component Manager and Local Transcription Foundation is the next approved phase after the v31 AI Runtime closeout.
+Component Manager and Local Transcription Foundation is the next approved phase after the v31 AI Runtime closeout. v32-A and v32-B are already implemented as foundation slices; the next active coding slice is v32-C.
 
 - Objective: make local model/component installation and transcription onboarding explicit, guided, and reproducible.
 - Dependencies: stable AI Runtime foundation, clear local component inventory, and platform-specific download policy.
-- Current transcription state: local transcription already exists and remains implemented; it is not yet wrapped in a dedicated component-manager phase.
+- Current transcription state: local transcription already exists and remains implemented; it is now wrapped by a read-only component foundation plus a local benchmark foundation.
 - Risks: drift into automatic media management, permanent media retention, or hidden provider coupling.
 - Decisions pending: download source policy, model packaging policy, and the exact user-facing onboarding contract.
-- First contract to design: a guided component inventory and install/update flow that keeps non-technical users out of raw dependency details.
+- First contract to design: a guided FFmpeg component boundary that keeps non-technical users out of raw dependency details.
 
 ## Stage Gates
 

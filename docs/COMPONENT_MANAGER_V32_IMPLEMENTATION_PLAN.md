@@ -6,7 +6,7 @@ This plan breaks v32 into small, verifiable subphases. It is intentionally conse
 
 ## Current Status
 
-v32-A is now implemented as a read-only foundation. The remaining subphases below stay valid and pending: download manager, installer, relocation, onboarding, benchmark, and deeper GUI work.
+v32-A is implemented as a read-only foundation and v32-B is implemented as the local hardware/runtime benchmark foundation. The remaining subphases below stay valid and pending: FFmpeg management, download manager, installer, relocation, onboarding, and deeper GUI work.
 
 ## Phase Order
 
@@ -70,6 +70,10 @@ Non-scope:
 
 - auto-install
 - CUDA toolkit installation
+
+Status:
+
+- implemented in this branch as a small local benchmark foundation that certifies already-installed components without downloads
 
 ### v32-C - FFmpeg Managed Component
 

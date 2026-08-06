@@ -61,7 +61,7 @@ This audit records the actual repository state before any v32 implementation wor
 | GUI | implemented | There is a dedicated `TranscriptionView` plus task center and settings. | `main_window.py`, `transcription_view.py`, `task_center_view.py` | UI is functional but not a future onboarding flow. |
 | CLI | implemented | CLI routes transcription commands through the same service layer. | `presentation/cli/cli.py` | No component manager CLI yet. |
 | Tests | implemented | Focused tests cover service, audio prep, GUI launch, and workspace. | `tests/test_transcription_service.py`, `tests/test_audio_preparation_service.py` | No strict component catalog tests exist yet. |
-| Benchmark | not_started | No runtime benchmark gate exists for local transcription. | repo search | Hardware claims are not benchmarked. |
+| Benchmark | implemented | `TranscriptionRuntimeBenchmarkService` runs a small local CPU/GPU benchmark on an already installed model, persists the result, and feeds the resolver. | `TranscriptionRuntimeBenchmarkService`, `ComponentManagerService`, `TranscriptionCapabilityResolver` | Opt-in and local only; no downloads or installers. |
 | Confidence / suspicious segments | partially_implemented | Backend and model verification return notes/errors, but confidence is not a capability contract. | `TranscriptionBackendInfo`, `TranscriptionModelInfo` | No formal certification status. |
 
 ## Real Flow
@@ -184,3 +184,4 @@ There is no code path where AI Runtime request builders are reused for local tra
 | Capability resolver is deterministic | `TranscriptionCapabilityResolver` reports readiness, warnings, and actions without downloads. | corrected_now | Use this boundary before any future install flow. |
 | Hidden model download blocked | `TranscriptionService` now returns a friendly missing-model result instead of auto-downloading. | corrected_now | Keep download as an explicit future action only. |
 | Read-only CLI added | `components status` and `components capability` expose safe inspection JSON. | corrected_now | Use it for local diagnosis only. |
+| Local benchmark foundation added | `components benchmark` runs an explicit local runtime benchmark and persists readiness evidence. | corrected_now | Keep functional proof separate from advisory hardware detection. |

@@ -22,6 +22,7 @@ from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import Medi
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
+from .transcription_runtime_benchmark_service import TranscriptionRuntimeBenchmarkService
 from .hardware_capability_service import HardwareCapabilityReport, HardwareCapabilityService
 from .transcription_capability_resolver import TranscriptionCapabilityPresentation, TranscriptionCapabilityReport, TranscriptionCapabilityResolver
 
@@ -71,6 +72,14 @@ class ComponentManagerService:
             model_manager=self.model_manager,
             logger=self.logger,
             tool_locator=self.tool_locator,
+        )
+        self.benchmark_service = TranscriptionRuntimeBenchmarkService(
+            paths=paths,
+            repository=repository,
+            model_manager=self.model_manager,
+            resolver=self.resolver,
+            hardware_service=self.hardware_service,
+            logger=self.logger,
         )
 
     def catalog(self) -> ComponentCatalog:
@@ -225,6 +234,33 @@ class ComponentManagerService:
         preferred_device: str = "auto",
     ) -> TranscriptionCapabilityPresentation:
         return self.resolver.present(self.resolve_transcription_capability(profile=profile, preferred_device=preferred_device))
+
+    def run_transcription_benchmark(
+        self,
+        *,
+        profile: str = "balanced",
+        preferred_device: str = "auto",
+        model_component_id: str | None = None,
+        timeout_seconds: float = 30.0,
+        fixture_id: str = "synthetic_voice_v1",
+        persist_result: bool = True,
+        force_refresh: bool = False,
+    ):
+        return self.benchmark_service.run_benchmark(
+            requested_profile=profile,
+            requested_device=preferred_device,
+            model_component_id=model_component_id,
+            timeout_seconds=timeout_seconds,
+            fixture_id=fixture_id,
+            persist_result=persist_result,
+            force_refresh=force_refresh,
+        )
+
+    def latest_transcription_benchmark(self):
+        return self.benchmark_service.latest_benchmark()
+
+    def describe_transcription_benchmark(self):
+        return self.benchmark_service.present(self.latest_transcription_benchmark())
 
     def status(self, *, profile: str = "balanced", preferred_device: str = "auto") -> ComponentManagerStatus:
         catalog = self.catalog()

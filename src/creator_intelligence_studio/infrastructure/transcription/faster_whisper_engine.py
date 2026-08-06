@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,15 @@ class FasterWhisperEngine:
     def release_model(self) -> None:
         self._model = None
         self._loaded_key = None
+        self._runtime_locations = None
+        while self._handles:
+            handle = self._handles.pop()
+            try:
+                close = getattr(handle, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                continue
 
     def _import_backend(self, *, device: str):
         self._ensure_versions()
@@ -101,6 +111,11 @@ class FasterWhisperEngine:
         except Exception as exc:  # pragma: no cover - depende de entorno
             raise TranscriptionBackendError(f"No se pudo importar faster-whisper: {exc}") from exc
         return WhisperModel
+
+    def load_model(self, *, model_name: str, device: str, compute_type: str) -> Any:
+        """Carga y reutiliza un modelo sin ejecutar inferencia."""
+
+        return self._load_model(model_name=model_name, device=device, compute_type=compute_type)
 
     def verify_backend(self) -> TranscriptionBackendInfo:
         errors: list[str] = []
@@ -136,6 +151,15 @@ class FasterWhisperEngine:
             faster_whisper_version = version("faster-whisper")
         except Exception:
             faster_whisper_version = None
+        finally:
+            while handles:
+                handle = handles.pop()
+                try:
+                    close = getattr(handle, "close", None)
+                    if callable(close):
+                        close()
+                except Exception:
+                    continue
         return TranscriptionBackendInfo(
             available=backend == "cuda" and not errors,
             device_count=device_count,
@@ -293,3 +317,5 @@ class FasterWhisperEngine:
             return result
         except Exception as exc:
             raise TranscriptionBackendError(str(exc)) from exc
+        finally:
+            gc.collect()

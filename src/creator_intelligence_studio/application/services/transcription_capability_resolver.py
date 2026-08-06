@@ -14,6 +14,7 @@ from creator_intelligence_studio.domain.components.entities import (
     ComponentInstallation,
     ComponentInstallationStatus,
     ComponentInstallKind,
+    RuntimeCheckRecord,
     RuntimeCheckStatus,
 )
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
@@ -127,6 +128,22 @@ class TranscriptionCapabilityResolver:
     def _installation_map(self) -> dict[str, ComponentInstallation]:
         return {installation.component_id: installation for installation in self.repository.list_installations()}
 
+    def _latest_benchmark_record(self, component_id: str | None) -> RuntimeCheckRecord | None:
+        if component_id is None:
+            return None
+        normalized = component_id.strip().lower()
+        benchmark_records = [
+            record
+            for record in self.repository.list_runtime_checks()
+            if record.component_id.strip().lower() == normalized and str((record.metadata or {}).get("check_kind") or "").strip().lower() == "transcription_runtime_benchmark"
+        ]
+        if not benchmark_records:
+            return None
+        return max(
+            benchmark_records,
+            key=lambda record: record.checked_at or record.updated_at or record.created_at or _utc_now(),
+        )
+
     def _model_component_id(self, model_name: str | None) -> str:
         normalized = (model_name or "small").strip().lower()
         return f"transcription-model.{normalized}"
@@ -222,6 +239,21 @@ class TranscriptionCapabilityResolver:
 
         runtime_state = runtime_installation.health_status
         gpu_status = hardware_profile.gpu.status if hardware_profile is not None else HardwareCapabilityState.UNKNOWN
+        benchmark_record = self._latest_benchmark_record(target_profile.model_component_id if target_profile else None)
+        benchmark_device = None
+        benchmark_status = None
+        benchmark_evidence: list[str] = []
+        if benchmark_record is not None:
+            metadata = dict(benchmark_record.metadata or {})
+            benchmark_device = str(metadata.get("actual_device") or metadata.get("requested_device") or "").strip().lower() or None
+            benchmark_status = str(metadata.get("status") or benchmark_record.status.value).strip().lower() or None
+            benchmark_evidence.append(f"benchmark_status={benchmark_status}")
+            if metadata.get("benchmark_id"):
+                benchmark_evidence.append(f"benchmark_id={metadata['benchmark_id']}")
+            if metadata.get("selected_compute_type"):
+                benchmark_evidence.append(f"benchmark_compute_type={metadata['selected_compute_type']}")
+            if benchmark_device in {"gpu", "cuda"} and benchmark_status in {"completed", "completed_with_warnings"}:
+                gpu_status = HardwareCapabilityState.DETECTED
         if hardware_profile is not None and hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED:
             warnings.append("Se detecto una GPU NVIDIA, pero falta ejecutar una prueba de transcripcion para confirmarla.")
         available_disk = available_disk_bytes
@@ -233,6 +265,11 @@ class TranscriptionCapabilityResolver:
             actions.append("Libera espacio o cambia la carpeta de modelos.")
             missing.append("disk_space")
 
+        selected_device = preferred_device.strip().lower() if preferred_device else "auto"
+        if selected_device not in {"auto", "cpu", "gpu"}:
+            selected_device = "auto"
+        compute_type = selected_profile.cpu_compute_type if selected_device == "cpu" else selected_profile.gpu_compute_type if selected_profile and selected_device == "gpu" else selected_profile.cpu_compute_type if selected_profile else None
+
         if blocking:
             readiness = "missing_components"
             if hardware_profile is not None and hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED:
@@ -241,19 +278,22 @@ class TranscriptionCapabilityResolver:
             readiness = "ready_with_warnings"
         else:
             readiness = "ready"
-
-        selected_device = preferred_device.strip().lower() if preferred_device else "auto"
-        if selected_device not in {"auto", "cpu", "gpu"}:
-            selected_device = "auto"
-        compute_type = selected_profile.cpu_compute_type if selected_device == "cpu" else selected_profile.gpu_compute_type if selected_profile and selected_device == "gpu" else selected_profile.cpu_compute_type if selected_profile else None
         if hardware_profile is not None and hardware_profile.gpu.status != HardwareCapabilityState.REPORTED_NOT_TESTED:
             if selected_device == "gpu" and hardware_profile.gpu.status not in {HardwareCapabilityState.DETECTED, HardwareCapabilityState.REPORTED_NOT_TESTED}:
                 selected_device = "cpu"
                 compute_type = selected_profile.cpu_compute_type if selected_profile else None
-        if hardware_profile is not None and hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED and selected_device == "gpu":
+        if hardware_profile is not None and hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED and selected_device == "gpu" and not (
+            benchmark_record is not None and benchmark_device in {"gpu", "cuda"} and benchmark_status in {"completed", "completed_with_warnings"}
+        ):
             selected_device = "cpu"
             compute_type = selected_profile.cpu_compute_type if selected_profile else None
             warnings.append("Se detecto una GPU, pero el perfil todavia no puede certificarla; se usara CPU por seguridad.")
+        if benchmark_record is not None and benchmark_device in {"gpu", "cuda"} and benchmark_status in {"completed", "completed_with_warnings"} and selected_device in {"auto", "gpu"}:
+            selected_device = "gpu"
+            compute_type = str((benchmark_record.metadata or {}).get("selected_compute_type") or compute_type or selected_profile.gpu_compute_type or selected_profile.cpu_compute_type or "int8_float16")
+            warnings = [warning for warning in warnings if "GPU NVIDIA" not in warning]
+        if not blocking:
+            readiness = "ready_with_warnings" if warnings else "ready"
 
         if not blocking and selected_profile and selected_profile.profile_id == "fast":
             actions.append("El perfil Rapido esta listo para usarse con CPU.")
@@ -264,6 +304,7 @@ class TranscriptionCapabilityResolver:
             f"runtime_status={runtime_state.value}",
             f"gpu_status={gpu_status.value}",
         ]
+        evidence.extend(benchmark_evidence)
         return TranscriptionCapabilityReport(
             readiness=readiness,
             requested_profile=requested_key,

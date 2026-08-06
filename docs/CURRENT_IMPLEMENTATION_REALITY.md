@@ -212,6 +212,16 @@ Status: `not_started`
 - `TranscriptionService` no longer auto-downloads a missing model implicitly
 - CLI read-only inspection is available through `components status` and `components capability`
 
+## Component Manager v32-B Hardware Benchmark Foundation
+
+- explicit local benchmark service exists for CPU and opt-in GPU checks
+- benchmark execution uses only already installed local models and a safe local fixture
+- runtime, model loading, inference, resource release, and readiness classification are recorded
+- benchmark results persist into the existing component-manager SQLite tables
+- the capability resolver can read the latest successful benchmark evidence without mutating state
+- the benchmark path does not download, install, relocate, or update anything automatically
+- CLI read-only benchmark inspection is available through `components benchmark` and `components benchmark status`
+
 Status: `implemented`
 
 ## Known Discrepancies And Resolutions

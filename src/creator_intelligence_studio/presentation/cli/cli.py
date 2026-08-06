@@ -661,6 +661,18 @@ def build_parser() -> argparse.ArgumentParser:
     components_capability.add_argument("--profile", default="balanced")
     components_capability.add_argument("--device", default="auto")
     components_capability.add_argument("--json", action="store_true")
+    components_benchmark = components_sub.add_parser("benchmark", help="Ejecutar o revisar el benchmark funcional de transcripcion")
+    components_benchmark.add_argument("--profile", default="balanced")
+    components_benchmark.add_argument("--device", default="auto")
+    components_benchmark.add_argument("--model-component")
+    components_benchmark.add_argument("--fixture-id", default="synthetic_voice_v1")
+    components_benchmark.add_argument("--timeout-seconds", type=float, default=30.0)
+    components_benchmark.add_argument("--persist-result", action="store_true")
+    components_benchmark.add_argument("--force-refresh", action="store_true")
+    components_benchmark.add_argument("--json", action="store_true")
+    components_benchmark_sub = components_benchmark.add_subparsers(dest="benchmark_action")
+    components_benchmark_status = components_benchmark_sub.add_parser("status", help="Mostrar el ultimo benchmark funcional persistido")
+    components_benchmark_status.add_argument("--json", action="store_true")
 
     build_audience_parser(subparsers)
     build_instagram_parser(subparsers)
@@ -2836,6 +2848,40 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
             print(f"Estado: {report.readiness}", file=stdout)
             print(f"Mensaje: {presentation.message}", file=stdout)
         return 0
+    if args.action == "benchmark":
+        if getattr(args, "benchmark_action", None) == "status":
+            report = service.latest_transcription_benchmark()
+            presentation = service.describe_transcription_benchmark()
+            payload = {
+                "benchmark": report.to_dict() if report else None,
+                "presentation": presentation.to_dict(),
+            }
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print(f"Benchmark: {presentation.title}", file=stdout)
+                print(f"Mensaje: {presentation.message}", file=stdout)
+            return 0
+        report = service.run_transcription_benchmark(
+            profile=args.profile,
+            preferred_device=args.device,
+            model_component_id=args.model_component,
+            timeout_seconds=args.timeout_seconds,
+            fixture_id=args.fixture_id,
+            persist_result=args.persist_result,
+            force_refresh=args.force_refresh,
+        )
+        presentation = service.benchmark_service.present(report)
+        payload = {
+            "benchmark": report.to_dict(),
+            "presentation": presentation.to_dict(),
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print(f"Benchmark: {presentation.title}", file=stdout)
+            print(f"Mensaje: {presentation.message}", file=stdout)
+        return 0 if report.status.value in {"completed", "completed_with_warnings"} else 1
     raise ValueError("Accion de componentes no reconocida.")
 
 

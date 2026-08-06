@@ -38,3 +38,11 @@ from .value_objects import (
     TranscriptionWordData,
     TranscriptionVerificationResult,
 )
+from .benchmark import (
+    TranscriptionRuntimeBenchmarkErrorCode,
+    TranscriptionRuntimeBenchmarkPresentation,
+    TranscriptionRuntimeBenchmarkReadiness,
+    TranscriptionRuntimeBenchmarkRequest,
+    TranscriptionRuntimeBenchmarkResult,
+    TranscriptionRuntimeBenchmarkStatus,
+)

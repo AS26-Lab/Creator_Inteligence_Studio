@@ -95,6 +95,19 @@ It never downloads and never mutates state.
 
 `TranscriptionService` now uses explicit model inspection for missing models and returns a friendly blocked result instead of starting a hidden download.
 
+### v32-B Benchmark Foundation
+
+The foundation now also includes an explicit local transcription benchmark slice:
+
+- CPU benchmark on a safe local fixture
+- opt-in GPU benchmark using the same local fixture
+- runtime import verification
+- local model loading only
+- short inference measurement
+- resource release and persistence
+
+The benchmark does not install, download, or relocate anything. It only certifies readiness against local components that already exist.
+
 ## CLI
 
 Read-only inspection is available through:
@@ -129,4 +142,4 @@ The longer AI Runtime suites were attempted separately; the combined discovery r
 
 ## Next Subphase
 
-v32-B should add the hardware benchmark and download/install boundaries, using this foundation as the contract layer.
+v32-C should wrap FFmpeg as a managed local component boundary, using this foundation and the benchmark slice as the contract layer.
