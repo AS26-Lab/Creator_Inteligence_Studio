@@ -16,7 +16,7 @@ Authority is limited to official OpenAI documentation and the repository impleme
 | GPT-5.6 model guidance and parameter recommendations | https://developers.openai.com/api/docs/guides/latest-model | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 | Model compare page for GPT-5.6 family endpoint confirmation | https://developers.openai.com/api/docs/models/compare | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 | OpenAI model object reference for catalog discovery | https://platform.openai.com/docs/api-reference/models/object?lang=curl | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
-| Chat Completions request contract | https://platform.openai.com/docs/api-reference/chat/create | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
+| Chat Completions request contract (legacy families) | https://platform.openai.com/docs/api-reference/chat/create | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 | Responses API request contract | https://platform.openai.com/docs/api-reference/responses/create | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 | Structured Outputs guide | https://platform.openai.com/docs/guides/structured-outputs | 2026-08-06 | 2026-08-06 | high | v31-request-profiles-2026-08-06 |
 
@@ -26,7 +26,7 @@ Authority is limited to official OpenAI documentation and the repository impleme
 |---|---|---:|---|---|
 | gpt-5.6-luna sent max_tokens in an earlier request path | Reproduced provider 400; corrected by switching the output token parameter to `max_completion_tokens` | alta | corrected_now | Keep `max_tokens` out of OpenAI Chat Completions for GPT-5.6. |
 | gpt-5.6-luna also sent temperature=0 in the previous payload | Reproduced by strict contract validation; corrected by omitting temperature in the minimal GPT-5.6 payload | alta | corrected_now | Omit temperature for GPT-5.6 Luna diagnostics. |
-| Endpoint remains Chat Completions for the current v31 flow | GPT-5.6 Luna model page and compare page list `v1/chat/completions` | media | already_covered | Keep the current endpoint for v31 diagnostics. |
+| GPT-5.6 Luna diagnostic now uses Responses API | GPT-5.6 Luna model page and model guidance recommend Responses API for reasoning workflows; local contract tests now validate `v1/responses` with `reasoning.effort=none` | alta | corrected_now | Keep GPT-5.6 diagnostics on Responses API and leave Chat Completions for legacy families only. |
 | Request profiles are now centralized and versioned | New `ProviderRequestProfile` / `OpenAIRequestProfile` contract and validator | media | corrected_now | Route endpoint and output-token decisions through the profile layer. |
 | Minimal payload is now enforced before HTTP | `build_openai_diagnostic_payload` omits optional fields by default; `validate_openai_request` blocks unsupported fields locally | media | corrected_now | Validate the serialized payload before calling the provider. |
 | Structured output is conditional, not unconditional | `response_format` is only added when explicitly requested and profile-supported | media | already_covered | Keep connectivity diagnostics minimal unless structured output is required. |
@@ -43,52 +43,55 @@ Authority is limited to official OpenAI documentation and the repository impleme
 
 | Campo | Quién lo agrega | Valor/default | Endpoint | Perfil/familia | Compatibilidad | Acción |
 |---|---|---|---|---|---|---|
-| model | request builder | model_id exacto | chat/completions | gpt-5.6 family | confirmed_supported | include |
-| messages | request builder | prompt mínimo con system+user | chat/completions | gpt-5.6 family | confirmed_supported | include |
-| max_tokens | legacy compatibility path | no se envía | chat/completions | gpt-5.6 family | confirmed_unsupported | omit |
-| max_completion_tokens | request builder | 64 en diagnóstico | chat/completions | gpt-5.6 family | confirmed_supported | include |
-| max_output_tokens | no usado en Chat Completions | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| temperature | request profile only when configurable | omit en gpt-5.6 | chat/completions | gpt-5.6 family | conditional / omitted | omit |
-| top_p | no usado en diagnóstico | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| seed | no usado en diagnóstico | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| response_format | structured diagnostic only | omitido por defecto | chat/completions | conditional | conditional | validate |
-| reasoning / reasoning_effort | no usado por el diagnóstico mínimo | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| verbosity | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| tools | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| tool_choice | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| modalities | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| audio | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| image input | capability only | not part of the minimal payload | chat/completions | gpt-5.6 family | confirmed_supported at model level | report_only |
-| stream | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| stop | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| n | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
-| logprobs | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
+| model | request builder | model_id exacto | responses | gpt-5.6 family | confirmed_supported | include |
+| input | request builder | prompt corto y textual | responses | gpt-5.6 family | confirmed_supported | include |
+| max_tokens | legacy compatibility path | no se envía | responses | gpt-5.6 family | confirmed_unsupported | omit |
+| max_completion_tokens | chat compatibility only | no se envía | responses | gpt-5.6 family | confirmed_unsupported | omit |
+| max_output_tokens | request builder | 256 en diagnósticos de conectividad | responses | gpt-5.6 family | confirmed_supported | include |
+| reasoning | request builder | `{"effort":"none"}` | responses | gpt-5.6 family | confirmed_supported | include |
+| temperature | request profile only when configurable | omit en gpt-5.6 | responses | gpt-5.6 family | confirmed_unsupported | omit |
+| top_p | no usado en diagnóstico | omitido | responses | gpt-5.6 family | not_used | omit |
+| seed | no usado en diagnóstico | omitido | responses | gpt-5.6 family | not_used | omit |
+| response_format | structured diagnostic only | omitido por defecto | responses | gpt-5.6 family | not_used | omit |
+| text.format | structured-output capability only | omitido | responses | gpt-5.6 family | not_used | omit |
+| json_schema | structured-output capability only | omitido | responses | gpt-5.6 family | not_used | omit |
+| reasoning / reasoning_effort | no usado por el diagnóstico básico | reasoning.effort only | responses | gpt-5.6 family | confirmed_supported | omit |
+| verbosity | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| tools | no usado | omitido | responses | gpt-5.6 family | confirmed_supported at model level | omit |
+| tool_choice | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| modalities | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| audio | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| image input | capability only | not part of the minimal payload | responses | gpt-5.6 family | confirmed_supported at model level | report_only |
+| stream | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| stop | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| n | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
+| logprobs | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
 | timeout | HTTP adapter layer | 30s execute / 20s credential and model sync | provider adapter | both providers | confirmed_supported | validate |
-| metadata | no usado | omitido | chat/completions | gpt-5.6 family | not_used | omit |
+| metadata | no usado | omitido | responses | gpt-5.6 family | not_used | omit |
 
 ## Contract Notes
 
 ### Endpoint
 
-- Current endpoint: `chat/completions`.
-- GPT-5.6 Luna remains on Chat Completions for the current v31 diagnostic flow.
+- Current endpoint for GPT-5.6 Luna connectivity diagnostics: `responses`.
+- Chat Completions remains available for legacy OpenAI families that still use it.
 
 ### Payload
 
 Safe diagnostic payload fields after serialization:
 
-`model`, `messages`, `max_completion_tokens`
+`model`, `input`, `max_output_tokens`, `reasoning`
 
-`temperature` and `response_format` are omitted from the minimal connectivity diagnostic.
-`response_format` is only added in the separate structured-output diagnostic path.
+`temperature`, `top_p`, `tools`, `response_format`, and structured-output schema fields are omitted from the minimal connectivity diagnostic.
+`reasoning.effort` is set to `none` for GPT-5.6 Luna connectivity.
 
 ### Response Parsing
 
-- Chat Completions parsing uses `choices[0].message.content` as the text source.
-- Chat Completions parsing now accepts string content, content arrays, refusal states, and empty/truncated shapes without conflating them with HTTP transport failures.
-- Usage parsing prefers `prompt_tokens` / `completion_tokens` and compatible aliases when present.
+- Responses API parsing uses `status`, `output`, `output_text`, and `incomplete_details.reason` as the primary response signals.
+- Chat Completions parsing remains in place for legacy models and still accepts string content, content arrays, refusal states, and empty/truncated shapes without conflating them with HTTP transport failures.
+- Usage parsing prefers `input_tokens` / `output_tokens` and compatible aliases when present, while preserving `reasoning_tokens` when the provider reports them.
 - When usage is missing, the runtime records unavailable usage instead of fabricating zeros.
-- The orchestrator passes text responses through a textual validator path instead of forcing an empty dict into structured-output validation.
+- The orchestrator passes textual connectivity responses through a textual validator path instead of forcing an empty dict into structured-output validation.
 
 ### Error Normalization
 
@@ -140,7 +143,7 @@ Timed out in this workspace window:
 |---|---|---:|---|---|
 | Full discover run exceeds the shorter tool timeout in this workspace | `python -m unittest discover -s tests -p "test_ai_runtime_*.py"` timed out under the 120s window | media | risk_needs_real_test | Run the larger suite with a longer budget or split by file in CI. |
 | GUI and orchestrator files still need longer wall-clock time in this workspace | `python -m unittest tests.test_ai_runtime_orchestrator` and `python -m unittest tests.test_ai_runtime_gui` timed out under the 120s window | media | risk_needs_real_test | Keep those suites in CI with a longer budget. |
-| Responses API migration is still out of scope for v31 | No code path or test was added for a full Responses API migration | media | out_of_scope | Keep the current Chat Completions contract for v31. |
+| Structured-output certification remains separate from the connectivity diagnostic | The basic diagnostic now uses Responses API text-only mode and intentionally omits structured output; capability certification is opt-in and tested separately | media | future_improvement | Keep the connectivity diagnostic minimal and run structured-output certification as a separate gate. |
 
 ## Out Of Scope
 

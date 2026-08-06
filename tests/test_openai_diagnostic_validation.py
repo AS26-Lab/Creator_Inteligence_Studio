@@ -52,7 +52,7 @@ class OpenAIDiagnosticValidationTests(unittest.TestCase):
         ]
         for text, state, expected_issue in cases:
             with self.subTest(state=state):
-                validation = self.validator.validate(request=_request(), payload="", output_text=text, response_state=state)
+                validation = self.validator.validate(request=_request(), payload="", output_text=text, response_state=state, response_status="completed" if state != "truncated" else "incomplete")
                 self.assertEqual(validation.status, "rejected")
                 self.assertIn(expected_issue, validation.issues)
 
@@ -60,6 +60,20 @@ class OpenAIDiagnosticValidationTests(unittest.TestCase):
         payload = {"status": "ok", "logical_role": "cheap_structured_model", "short_message": "Provider diagnostic completed successfully."}
         validation = self.validator.validate(request=_request(), payload=payload, output_text='{"status":"ok"}', response_state="content")
         self.assertEqual(validation.status, "valid")
+
+    def test_incomplete_responses_require_completion_even_with_text_metadata(self) -> None:
+        validation = self.validator.validate(
+            request=_request(metadata={"expected_text": "OK"}),
+            payload="",
+            output_text="",
+            response_state="truncated",
+            response_status="incomplete",
+            incomplete_reason="max_output_tokens",
+            output_token_limit=256,
+        )
+        self.assertEqual(validation.status, "rejected")
+        self.assertIn("Response was truncated.", validation.issues)
+        self.assertIn("Output text is empty.", validation.issues)
 
     def test_structured_output_missing_keys_is_rejected(self) -> None:
         payload = {"status": "ok"}
@@ -74,7 +88,7 @@ class OpenAIDiagnosticValidationTests(unittest.TestCase):
             {},
             {"status": "rejected", "issues": ["Output text is empty."]},
         )
-        self.assertIn("no pudo validar", message.lower())
+        self.assertIn("no produjo una respuesta completa", message.lower())
 
 
 if __name__ == "__main__":

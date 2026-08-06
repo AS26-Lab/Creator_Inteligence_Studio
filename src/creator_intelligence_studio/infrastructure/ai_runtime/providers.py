@@ -28,6 +28,7 @@ from .request_profiles import (
     describe_openai_request_payload,
     build_openai_diagnostic_payload,
     parse_openai_chat_completions_response,
+    parse_openai_responses_response,
     resolve_provider_request_profile,
     validate_openai_request,
 )
@@ -451,11 +452,12 @@ class OpenAIProvider:
         started = time.perf_counter()
         try:
             request_profile = resolve_provider_request_profile("openai", model_id)
+            output_token_limit = 256 if request_profile.endpoint == "responses" else 64
             payload = build_openai_diagnostic_payload(
                 profile=request_profile,
                 model_id=model_id,
                 prompt_text=prompt_text,
-                max_output_tokens=64,
+                max_output_tokens=output_token_limit,
                 include_structured_output=False,
             )
             valid, validation_error = validate_openai_request(payload, request_profile)
@@ -538,12 +540,17 @@ class OpenAIProvider:
                 error=error,
                 warnings=("usage_unavailable",),
             )
-        parsed = parse_openai_chat_completions_response(payload)
+        if request_profile.endpoint == "responses":
+            parsed = parse_openai_responses_response(payload)
+        else:
+            parsed = parse_openai_chat_completions_response(payload)
         output_text = parsed["output_text"]
         structured_output = None
         model_version = parsed["model_version"]
         raw_finish_reason = parsed["raw_finish_reason"]
         response_state = parsed.get("response_state")
+        response_status = parsed.get("response_status")
+        incomplete_reason = parsed.get("incomplete_reason")
         content_shape = parsed.get("content_shape")
         content_length = parsed.get("content_length")
         parser_profile = parsed.get("parser_profile")
@@ -564,7 +571,8 @@ class OpenAIProvider:
             structured_output = json.loads(output_text)
         except Exception:
             structured_output = None
-        if not output_text and content_shape == "missing" and response_state == "empty":
+        parser_failure = response_state == "parser_failure"
+        if parser_failure:
             error = AIExecutionError(
                 category="invalid_response",
                 safe_message="OpenAI response did not include a usable content field.",
@@ -583,14 +591,25 @@ class OpenAIProvider:
                 content_shape=content_shape,
                 content_length=content_length,
                 raw_finish_reason=raw_finish_reason,
+                response_status=response_status,
+                incomplete_reason=incomplete_reason,
                 response_state=response_state,
                 parser_profile=parser_profile,
+                output_token_limit=output_token_limit,
                 error=error,
                 warnings=("usage_unavailable",) if usage_missing else (),
             )
         warnings: tuple[str, ...] = ()
-        if response_state and response_state != "content":
-            warnings = (f"response_state:{response_state}",)
+        warning_items: list[str] = []
+        if response_status and response_status != "completed":
+            warning_items.append(f"response_status:{response_status}")
+        if response_state and response_state not in {"content", "empty"}:
+            warning_items.append(f"response_state:{response_state}")
+        elif response_state == "empty":
+            warning_items.append("response_state:empty")
+        if incomplete_reason:
+            warning_items.append(f"incomplete_reason:{incomplete_reason}")
+        warnings = tuple(warning_items)
         return AIProviderResponse(
             provider=self.provider_name,
             model_id=model_id,
@@ -602,8 +621,11 @@ class OpenAIProvider:
             content_shape=content_shape,
             content_length=content_length,
             raw_finish_reason=raw_finish_reason,
+            response_status=response_status,
+            incomplete_reason=incomplete_reason,
             response_state=response_state,
             parser_profile=parser_profile,
+            output_token_limit=output_token_limit,
             warnings=(("usage_unavailable",) if usage_missing else ()) + warnings,
         )
 

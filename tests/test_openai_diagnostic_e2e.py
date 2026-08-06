@@ -20,20 +20,32 @@ class OpenAIDiagnosticE2ETests(unittest.TestCase):
         fake = StrictOpenAIContractFake(
             model_id="gpt-5.6-luna",
             success_payload={
+                "id": "resp_diag_success",
+                "object": "response",
+                "status": "completed",
+                "completed_at": 1740855870,
+                "error": None,
+                "incomplete_details": None,
                 "model": "gpt-5.6-luna",
-                "choices": [
+                "output": [
                     {
-                        "message": {
-                            "role": "assistant",
-                            "content": " OK. \n",
-                        },
-                        "finish_reason": "stop",
+                        "id": "msg_diag_success",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": " OK. ", "annotations": []},
+                        ],
                     }
                 ],
+                "output_text": " OK. ",
+                "reasoning_effort": {"effort": "none"},
+                "truncation": "disabled",
                 "usage": {
-                    "prompt_tokens": 70,
-                    "completion_tokens": 64,
-                    "cached_tokens": 0,
+                    "input_tokens": 70,
+                    "output_tokens": 64,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                    "total_tokens": 134,
                 },
             },
         )
@@ -47,6 +59,10 @@ class OpenAIDiagnosticE2ETests(unittest.TestCase):
 
         self.assertEqual(completed.status, "completed")
         self.assertEqual(fake.calls, 1)
+        self.assertEqual(fake.request_summaries[0]["endpoint"], "responses")
+        self.assertEqual(fake.request_summaries[0]["fields"]["input"], "redacted:string")
+        self.assertEqual(fake.request_summaries[0]["fields"]["max_output_tokens"], "integer")
+        self.assertEqual(fake.request_summaries[0]["fields"]["reasoning"], "object")
         self.assertEqual(len(self.fixture.repository.list_executions()), 1)
         self.assertEqual(len(self.fixture.repository.list_usage_records()), 1)
         execution = self.fixture.repository.get_execution_by_uuid(awaiting.execution_id)
@@ -57,6 +73,7 @@ class OpenAIDiagnosticE2ETests(unittest.TestCase):
         self.assertEqual(completed.usage.output_tokens, 64)
         self.assertEqual(completed.validation.status, "valid")
         self.assertEqual(completed.result.strip(), "OK.")
+        self.assertEqual(completed.latency.attempts, 1)
 
 
 if __name__ == "__main__":

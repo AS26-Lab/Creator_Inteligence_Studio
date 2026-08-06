@@ -11,26 +11,31 @@ from creator_intelligence_studio.infrastructure.ai_runtime.request_profiles impo
 
 
 class OpenAIRequestContractTests(unittest.TestCase):
-    def test_gpt_5_6_luna_minimal_payload_omits_incompatible_defaults(self) -> None:
+    def test_gpt_5_6_luna_minimal_payload_uses_responses_contract(self) -> None:
         profile = resolve_openai_request_profile("gpt-5.6-luna")
         payload = build_openai_diagnostic_payload(
             profile=profile,
             model_id="gpt-5.6-luna",
-            prompt_text='{"status":"ok"}',
+            prompt_text="Reply with the single word OK.",
         )
 
         self.assertEqual(payload["model"], "gpt-5.6-luna")
-        self.assertEqual(payload["max_completion_tokens"], 64)
+        self.assertEqual(profile.endpoint, "responses")
+        self.assertEqual(profile.output_token_parameter, "max_output_tokens")
+        self.assertEqual(payload["input"], "Reply with the single word OK.")
+        self.assertEqual(payload["max_output_tokens"], 256)
+        self.assertEqual(payload["reasoning"], {"effort": "none"})
         self.assertNotIn("temperature", payload)
-        self.assertNotIn("response_format", payload)
+        self.assertNotIn("messages", payload)
         self.assertNotIn("max_tokens", payload)
-        self.assertNotIn("max_output_tokens", payload)
+        self.assertNotIn("max_completion_tokens", payload)
         valid, error = validate_openai_request(payload, profile)
         self.assertTrue(valid, error)
 
         summary = describe_openai_request_payload(endpoint=profile.endpoint, profile=profile, payload=payload)
-        self.assertEqual(summary["fields"]["messages"], "redacted:list")
-        self.assertEqual(summary["fields"]["max_completion_tokens"], "integer")
+        self.assertEqual(summary["fields"]["input"], "redacted:string")
+        self.assertEqual(summary["fields"]["max_output_tokens"], "integer")
+        self.assertEqual(summary["fields"]["reasoning"], "object")
         self.assertNotIn("temperature", summary["fields"])
 
     def test_configurable_openai_profile_allows_explicit_temperature_and_structured_output(self) -> None:
@@ -67,15 +72,33 @@ class OpenAIRequestContractTests(unittest.TestCase):
         payload = build_openai_diagnostic_payload(
             profile=profile,
             model_id="gpt-5.6-luna",
-            prompt_text='{"status":"ok"}',
+            prompt_text="Reply with the single word OK.",
         )
         payload["temperature"] = 0
 
         valid, error = validate_openai_request(payload, profile)
         self.assertFalse(valid)
         self.assertIsNotNone(error)
-        self.assertEqual(error["provider_code"], "unsupported_value")
+        self.assertEqual(error["provider_code"], "unsupported_parameter")
         self.assertIn("temperature", str(error["technical_reference"]))
+
+    def test_openai_request_validation_rejects_reasoning_and_endpoint_mismatch(self) -> None:
+        profile = resolve_openai_request_profile("gpt-5.6-luna")
+        payload = build_openai_diagnostic_payload(
+            profile=profile,
+            model_id="gpt-5.6-luna",
+            prompt_text="Reply with the single word OK.",
+        )
+
+        payload_without_reasoning = {key: value for key, value in payload.items() if key != "reasoning"}
+        valid, error = validate_openai_request(payload_without_reasoning, profile)
+        self.assertFalse(valid)
+        self.assertEqual(error["provider_code"], "unsupported_value")
+
+        payload_with_messages = {**payload, "messages": [{"role": "user", "content": "bad"}]}
+        valid, error = validate_openai_request(payload_with_messages, profile)
+        self.assertFalse(valid)
+        self.assertEqual(error["provider_code"], "unsupported_parameter")
 
 
 if __name__ == "__main__":

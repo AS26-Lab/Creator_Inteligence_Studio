@@ -79,8 +79,12 @@ class AIRuntimeRecommendedModelContractTests(unittest.TestCase):
                 payload = build_openai_diagnostic_payload(profile=profile, model_id=model_id, prompt_text='{"status":"ok"}')
                 valid, error = validate_openai_request(payload, profile)
                 self.assertTrue(valid, error)
-                self.assertEqual(profile.endpoint, "chat/completions")
-                self.assertEqual(profile.output_token_parameter, "max_completion_tokens")
+                if profile.endpoint == "responses":
+                    self.assertEqual(profile.output_token_parameter, "max_output_tokens")
+                    self.assertEqual(payload["reasoning"], {"effort": "none"})
+                    self.assertEqual(payload["max_output_tokens"], 256)
+                else:
+                    self.assertEqual(profile.output_token_parameter, "max_completion_tokens")
                 self.assertIn(profile.temperature_policy, {"omit", "configurable"})
 
     def test_unknown_openai_model_does_not_become_auto_recommendation(self) -> None:

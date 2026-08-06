@@ -267,12 +267,12 @@ Provider request compatibility is resolved centrally through versioned request p
 
 Current v31 rules:
 
-- OpenAI diagnostics use the Chat Completions endpoint for the approved v31 flow.
-- gpt-5.6-luna uses max_completion_tokens on Chat Completions and does not send max_tokens.
-- gpt-5.6-luna omits temperature in the minimal connectivity diagnostic; temperature is only sent when a profile explicitly permits it and the request truly needs it.
+- OpenAI diagnostics use a versioned request-profile layer, and GPT-5.6 Luna now uses the Responses API for the minimal connectivity diagnostic.
+- GPT-5.6 Luna uses `max_output_tokens` plus `reasoning.effort=none` in the minimal connectivity payload and does not send `max_tokens`, `temperature`, or structured-output fields.
+- Chat Completions remains available for the other OpenAI families that still use it.
 - OpenAI structured output support is handled through the request profile, not through GUI conditionals.
-- OpenAI response metadata now preserves `content_shape`, `response_state`, and `finish_reason` so textual connectivity and structured validation stay separate.
-- The orchestrator no longer coerces non-JSON text into an empty object before validation; plain text follows the textual diagnostic validator path.
+- OpenAI response metadata now preserves `content_shape`, `response_state`, `response_status`, `incomplete_reason`, and `finish_reason` so textual connectivity, truncation, and structured validation stay separate.
+- The orchestrator no longer coerces non-JSON text into an empty object before validation; plain text follows the textual diagnostic validator path and the Responses API path validates visible text plus usage.
 - Anthropic retains its own request profile and output-token parameter contract.
 - The catalog version for request-profile decisions is stored as v31-request-profiles-2026-08-06.
 

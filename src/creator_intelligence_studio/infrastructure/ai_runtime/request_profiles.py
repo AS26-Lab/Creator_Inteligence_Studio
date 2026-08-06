@@ -95,14 +95,83 @@ def resolve_openai_request_profile(model_id: str) -> OpenAIRequestProfile:
     model_family, matcher, status, source_identifier = _openai_family(model_id)
     lowered = model_id.lower()
     supports_image_input = model_family in {"gpt-5.6", "gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o"}
+    if model_family == "gpt-5.6":
+        supported_fields = (
+            "model",
+            "input",
+            "max_output_tokens",
+            "reasoning",
+        )
+        forbidden_fields = (
+            "messages",
+            "max_tokens",
+            "max_completion_tokens",
+            "temperature",
+            "top_p",
+            "seed",
+            "n",
+            "stop",
+            "stream",
+            "response_format",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "modalities",
+            "audio",
+            "metadata",
+            "user",
+            "store",
+            "service_tier",
+            "logprobs",
+            "top_logprobs",
+            "presence_penalty",
+            "frequency_penalty",
+            "reasoning_effort",
+            "verbosity",
+            "text.format",
+            "json_schema",
+        )
+        capabilities = OpenAIRequestCapabilities(
+            supports_temperature=False,
+            supports_reasoning_parameters=True,
+            supports_structured_output=True,
+            supports_image_input=supports_image_input,
+            supports_audio_input=False,
+            supports_tools=True,
+        )
+        return OpenAIRequestProfile(
+            profile_id=f"openai.{model_family}.responses",
+            version=AI_REQUEST_CATALOG_VERSION,
+            provider="openai",
+            endpoint="responses",
+            model_family=model_family,
+            model_family_matcher=matcher,
+            model_id=model_id,
+            output_token_parameter="max_output_tokens",
+            temperature_policy="omit",
+            top_p_policy="omit",
+            structured_output_policy="opt_in",
+            reasoning_policy="fixed_none",
+            tools_policy="opt_in",
+            supported_fields=supported_fields,
+            forbidden_fields=forbidden_fields,
+            response_parser_profile="responses",
+            usage_parser_profile="responses",
+            status=status,
+            stability="approved" if status == "verified" else "provisional",
+            catalog_version=AI_REQUEST_CATALOG_VERSION,
+            effective_at="2026-08-06",
+            reviewed_at="2026-08-06",
+            source_identifier=source_identifier,
+            capabilities=capabilities,
+            notes=(
+                "GPT-5.6 Luna uses the Responses API for the diagnostic connectivity path.",
+                "The basic diagnostic omits structured output and validates only visible text plus usage.",
+            ),
+        )
     supports_structured_output = supports_image_input or lowered.startswith("gpt-5.6-")
-    temperature_policy = "omit" if model_family == "gpt-5.6" else "configurable"
+    temperature_policy = "configurable"
     supported_fields = (
-        "model",
-        "messages",
-        "max_completion_tokens",
-        "response_format",
-    ) if model_family == "gpt-5.6" else (
         "model",
         "messages",
         "max_completion_tokens",
@@ -138,7 +207,7 @@ def resolve_openai_request_profile(model_id: str) -> OpenAIRequestProfile:
         "json_schema",
     )
     capabilities = OpenAIRequestCapabilities(
-        supports_temperature=model_family != "gpt-5.6",
+        supports_temperature=True,
         supports_reasoning_parameters=True,
         supports_structured_output=supports_structured_output,
         supports_image_input=supports_image_input,
@@ -172,9 +241,8 @@ def resolve_openai_request_profile(model_id: str) -> OpenAIRequestProfile:
         capabilities=capabilities,
         notes=(
             "Chat Completions remains the v31 diagnostic endpoint for OpenAI.",
-            "GPT-5.6 Luna omits temperature entirely in the connectivity payload.",
         )
-        if model_family == "gpt-5.6"
+        if model_family != "gpt-5.6"
         else (),
     )
 
@@ -241,22 +309,47 @@ def build_openai_diagnostic_payload(
     profile: OpenAIRequestProfile,
     model_id: str,
     prompt_text: str,
-    max_output_tokens: int = 64,
+    max_output_tokens: int | None = None,
     include_structured_output: bool = False,
     temperature: float | None = None,
 ) -> dict[str, Any]:
+    output_limit = max_output_tokens if max_output_tokens is not None else (256 if profile.endpoint == "responses" else 64)
+    if profile.endpoint == "responses":
+        return build_openai_responses_diagnostic_payload(
+            profile=profile,
+            model_id=model_id,
+            prompt_text=prompt_text,
+            max_output_tokens=output_limit,
+        )
     payload: dict[str, Any] = {
         "model": model_id,
         "messages": [
             {"role": "system", "content": "Return only the requested JSON object."},
             {"role": "user", "content": prompt_text},
         ],
-        profile.output_token_parameter: max_output_tokens,
+        profile.output_token_parameter: output_limit,
     }
     if temperature is not None and profile.temperature_policy == "configurable":
         payload["temperature"] = temperature
     if include_structured_output and profile.structured_output_policy == "conditional" and profile.capabilities.supports_structured_output:
         payload["response_format"] = {"type": "json_object"}
+    return payload
+
+
+def build_openai_responses_diagnostic_payload(
+    *,
+    profile: OpenAIRequestProfile,
+    model_id: str,
+    prompt_text: str,
+    max_output_tokens: int = 256,
+    reasoning_effort: str = "none",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model_id,
+        "input": prompt_text,
+        "max_output_tokens": max_output_tokens,
+        "reasoning": {"effort": reasoning_effort},
+    }
     return payload
 
 
@@ -280,14 +373,6 @@ def validate_openai_request(payload: dict[str, Any], profile: OpenAIRequestProfi
             "suggested_action": "Usar el parametro de salida compatible del perfil.",
             "technical_reference": f"profile={profile.profile_id}",
         }
-    if profile.temperature_policy == "omit" and "temperature" in payload:
-        return False, {
-            "category": "invalid_request",
-            "provider_code": "unsupported_value",
-            "safe_message": "No se pudo completar la solicitud porque la configuracion de este modelo necesita actualizarse.",
-            "suggested_action": "Omitir temperature para este modelo.",
-            "technical_reference": f"profile={profile.profile_id} field=temperature",
-        }
     unexpected = [field for field in present_fields if field not in allowed_fields]
     if unexpected:
         return False, {
@@ -297,23 +382,63 @@ def validate_openai_request(payload: dict[str, Any], profile: OpenAIRequestProfi
             "suggested_action": "Eliminar los campos no soportados y reintentar.",
             "technical_reference": f"profile={profile.profile_id} fields={','.join(sorted(unexpected))}",
         }
-    if not isinstance(payload.get("messages"), list) or not payload["messages"]:
-        return False, {
-            "category": "invalid_request",
-            "provider_code": "invalid_request_error",
-            "safe_message": "No se pudo completar la solicitud porque el formato de mensajes no es valido.",
-            "suggested_action": "Corregir el formato de mensajes antes de volver a intentar.",
-            "technical_reference": f"profile={profile.profile_id}",
-        }
+    if profile.endpoint == "responses":
+        input_value = payload.get("input")
+        if not isinstance(input_value, (str, list)) or (isinstance(input_value, str) and not input_value.strip()) or (isinstance(input_value, list) and not input_value):
+            return False, {
+                "category": "invalid_request",
+                "provider_code": "invalid_request_error",
+                "safe_message": "No se pudo completar la solicitud porque el formato de entrada no es valido.",
+                "suggested_action": "Corregir el formato de entrada antes de volver a intentar.",
+                "technical_reference": f"profile={profile.profile_id}",
+            }
+        reasoning = payload.get("reasoning")
+        if not isinstance(reasoning, dict) or str(reasoning.get("effort") or "").strip().lower() != "none":
+            return False, {
+                "category": "invalid_request",
+                "provider_code": "unsupported_value",
+                "safe_message": "No se pudo completar la solicitud porque la configuracion de razonamiento necesita actualizarse.",
+                "suggested_action": "Enviar reasoning.effort=none para este perfil.",
+                "technical_reference": f"profile={profile.profile_id} field=reasoning.effort",
+            }
+        if "temperature" in payload:
+            return False, {
+                "category": "invalid_request",
+                "provider_code": "unsupported_parameter",
+                "safe_message": "No se pudo completar la solicitud porque contiene campos no soportados por este perfil.",
+                "suggested_action": "Eliminar temperature del payload.",
+                "technical_reference": f"profile={profile.profile_id} fields=temperature",
+            }
+    else:
+        if profile.temperature_policy == "omit" and "temperature" in payload:
+            return False, {
+                "category": "invalid_request",
+                "provider_code": "unsupported_value",
+                "safe_message": "No se pudo completar la solicitud porque la configuracion de este modelo necesita actualizarse.",
+                "suggested_action": "Omitir temperature para este modelo.",
+                "technical_reference": f"profile={profile.profile_id} field=temperature",
+            }
+        if not isinstance(payload.get("messages"), list) or not payload["messages"]:
+            return False, {
+                "category": "invalid_request",
+                "provider_code": "invalid_request_error",
+                "safe_message": "No se pudo completar la solicitud porque el formato de mensajes no es valido.",
+                "suggested_action": "Corregir el formato de mensajes antes de volver a intentar.",
+                "technical_reference": f"profile={profile.profile_id}",
+            }
     return True, None
 
 
 def describe_openai_request_payload(*, endpoint: str, profile: OpenAIRequestProfile, payload: dict[str, Any]) -> dict[str, Any]:
     fields: dict[str, str] = {}
     for key, value in payload.items():
-        if key == "messages" and isinstance(value, list):
+        if key in {"messages", "input"} and isinstance(value, list):
             fields[key] = "redacted:list"
+        elif key == "input" and isinstance(value, str):
+            fields[key] = "redacted:string"
         elif key == "response_format" and isinstance(value, dict):
+            fields[key] = "object"
+        elif key == "reasoning" and isinstance(value, dict):
             fields[key] = "object"
         elif isinstance(value, bool):
             fields[key] = "bool"
@@ -423,6 +548,179 @@ def _openai_chat_completion_response_state(*, content_text: str, refusal_text: s
     if content_text:
         return "content"
     return "empty"
+
+
+def _normalize_openai_responses_output_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        candidate = value.get("text")
+        if candidate is None:
+            candidate = value.get("content")
+        if candidate is None:
+            candidate = value.get("value")
+        return _normalize_openai_responses_output_text(candidate)
+    if isinstance(value, list):
+        fragments: list[str] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "").lower()
+            if item_type in {"output_text", "text"}:
+                candidate = item.get("text")
+                if candidate is None:
+                    candidate = item.get("content")
+                if candidate is None:
+                    candidate = item.get("value")
+                fragment = _normalize_openai_responses_output_text(candidate)
+                if fragment:
+                    fragments.append(fragment)
+                continue
+            if item_type == "message":
+                candidate = item.get("content")
+                fragment = _normalize_openai_responses_output_text(candidate)
+                if fragment:
+                    fragments.append(fragment)
+                continue
+            if item_type == "refusal":
+                refusal_text = item.get("refusal")
+                if refusal_text is None:
+                    refusal_text = item.get("text")
+                if refusal_text is None:
+                    refusal_text = item.get("content")
+                fragment = _normalize_openai_responses_output_text(refusal_text)
+                if fragment:
+                    fragments.append(fragment)
+        return "\n".join(fragment.strip() for fragment in fragments if fragment.strip()).strip()
+    return str(value).strip()
+
+
+def _openai_responses_response_state(
+    *,
+    response_status: str | None,
+    output_text: str,
+    refusal_text: str | None,
+    incomplete_reason: str | None,
+) -> str:
+    status = (response_status or "").strip().lower()
+    reason = (incomplete_reason or "").strip().lower()
+    if refusal_text:
+        return "refusal"
+    if status == "failed":
+        return "failed"
+    if status == "incomplete":
+        if reason in {"max_tokens", "max_output_tokens", "length", "truncated"}:
+            return "truncated"
+        if reason in {"content_filter", "safety"}:
+            return "content_filter"
+        return "incomplete"
+    if output_text:
+        return "content"
+    return "empty"
+
+
+def parse_openai_responses_response(payload: dict[str, Any]) -> dict[str, Any]:
+    response_status = payload.get("status")
+    incomplete_details = payload.get("incomplete_details") if isinstance(payload.get("incomplete_details"), dict) else {}
+    incomplete_reason = None
+    if isinstance(incomplete_details, dict):
+        incomplete_reason = incomplete_details.get("reason")
+    output_text = ""
+    content_shape = "missing"
+    refusal_text = None
+    raw_output = payload.get("output")
+    top_level_output_text = payload.get("output_text")
+    if isinstance(top_level_output_text, str) and top_level_output_text.strip():
+        output_text = top_level_output_text.strip()
+        content_shape = "string"
+    elif isinstance(raw_output, list):
+        content_shape = "array"
+        fragments: list[str] = []
+        for item in raw_output:
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "").lower()
+            if item_type == "message":
+                content = item.get("content")
+                if isinstance(content, list):
+                    for content_item in content:
+                        if not isinstance(content_item, dict):
+                            continue
+                        content_type = str(content_item.get("type") or "").lower()
+                        if content_type in {"output_text", "text"}:
+                            fragment = _normalize_openai_responses_output_text(content_item.get("text"))
+                            if not fragment:
+                                fragment = _normalize_openai_responses_output_text(content_item.get("content"))
+                            if not fragment:
+                                fragment = _normalize_openai_responses_output_text(content_item.get("value"))
+                            if fragment:
+                                fragments.append(fragment)
+                        elif content_type == "refusal":
+                            refusal_candidate = content_item.get("refusal")
+                            if refusal_candidate is None:
+                                refusal_candidate = content_item.get("text")
+                            if refusal_candidate is None:
+                                refusal_candidate = content_item.get("content")
+                            fragment = _normalize_openai_responses_output_text(refusal_candidate)
+                            if fragment:
+                                refusal_text = fragment
+                elif isinstance(content, str):
+                    fragment = _normalize_openai_responses_output_text(content)
+                    if fragment:
+                        fragments.append(fragment)
+            elif item_type in {"output_text", "text"}:
+                fragment = _normalize_openai_responses_output_text(item.get("text"))
+                if not fragment:
+                    fragment = _normalize_openai_responses_output_text(item.get("content"))
+                if not fragment:
+                    fragment = _normalize_openai_responses_output_text(item.get("value"))
+                if fragment:
+                    fragments.append(fragment)
+            elif item_type == "refusal":
+                refusal_candidate = item.get("refusal")
+                if refusal_candidate is None:
+                    refusal_candidate = item.get("text")
+                if refusal_candidate is None:
+                    refusal_candidate = item.get("content")
+                fragment = _normalize_openai_responses_output_text(refusal_candidate)
+                if fragment:
+                    refusal_text = fragment
+        output_text = "\n".join(fragment.strip() for fragment in fragments if fragment.strip()).strip()
+    elif raw_output is None:
+        content_shape = "missing"
+    else:
+        content_shape = type(raw_output).__name__
+        output_text = _normalize_openai_responses_output_text(raw_output)
+    if refusal_text is None:
+        refusal_value = payload.get("refusal")
+        if refusal_value is not None:
+            refusal_text = _normalize_openai_responses_output_text(refusal_value) or None
+    raw_finish_reason = incomplete_reason
+    usage = extract_openai_usage(payload)
+    response_state = _openai_responses_response_state(
+        response_status=str(response_status) if response_status is not None else None,
+        output_text=output_text,
+        refusal_text=refusal_text,
+        incomplete_reason=incomplete_reason if isinstance(incomplete_reason, str) else None,
+    )
+    parser_failure = response_status is None and content_shape == "missing" and not output_text and not refusal_text
+    return {
+        "output_text": output_text,
+        "content_text": output_text,
+        "content_shape": content_shape,
+        "content_length": len(output_text),
+        "refusal_text": refusal_text,
+        "structured_output": None,
+        "model_version": payload.get("model"),
+        "raw_finish_reason": raw_finish_reason,
+        "response_status": response_status,
+        "incomplete_reason": incomplete_reason,
+        "response_state": "parser_failure" if parser_failure else response_state,
+        "parser_profile": "responses",
+        "usage": usage,
+    }
 
 
 def parse_openai_chat_completions_response(payload: dict[str, Any]) -> dict[str, Any]:

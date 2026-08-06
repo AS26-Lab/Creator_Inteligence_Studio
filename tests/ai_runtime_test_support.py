@@ -193,11 +193,58 @@ class StrictOpenAIContractFake:
         *,
         model_id: str = "gpt-5.6-luna",
         success_payload: dict[str, object] | None = None,
-        strict_endpoint: str = "chat/completions",
+        strict_endpoint: str = "responses",
     ) -> None:
         self.model_id = model_id
-        self.success_payload = success_payload or {
-            "model": model_id,
+        self.strict_endpoint = strict_endpoint
+        self.success_payload = success_payload or self._default_success_payload()
+        self.calls = 0
+        self.request_summaries: list[dict[str, object]] = []
+
+    def _default_success_payload(self) -> dict[str, object]:
+        if self.strict_endpoint == "responses":
+            return {
+                "id": "resp_diag_success",
+                "object": "response",
+                "status": "completed",
+                "completed_at": 1740855870,
+                "error": None,
+                "incomplete_details": None,
+                "instructions": None,
+                "max_output_tokens": 256,
+                "model": self.model_id,
+                "output": [
+                    {
+                        "id": "msg_diag_success",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "OK",
+                                "annotations": [],
+                            }
+                        ],
+                    }
+                ],
+                "output_text": "OK",
+                "previous_response_id": None,
+                "reasoning_effort": {"effort": "none"},
+                "store": False,
+                "text": {"format": {"type": "text"}},
+                "tools": [],
+                "truncation": "disabled",
+                "usage": {
+                    "input_tokens": 18,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 4,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                    "total_tokens": 22,
+                },
+                "metadata": {},
+            }
+        return {
+            "model": self.model_id,
             "choices": [
                 {
                     "message": {
@@ -212,9 +259,6 @@ class StrictOpenAIContractFake:
                 "cached_tokens": 2,
             },
         }
-        self.strict_endpoint = strict_endpoint
-        self.calls = 0
-        self.request_summaries: list[dict[str, object]] = []
 
     def __call__(self, request, timeout):
         self.calls += 1
@@ -222,6 +266,7 @@ class StrictOpenAIContractFake:
         assert request.full_url.endswith(f"/{self.strict_endpoint}")
         body = json.loads(request.data.decode("utf-8"))
         profile = resolve_openai_request_profile(str(body.get("model") or self.model_id))
+        assert profile.endpoint == self.strict_endpoint
         valid, error = validate_openai_request(body, profile)
         summary = describe_openai_request_payload(endpoint=profile.endpoint, profile=profile, payload=body)
         self.request_summaries.append(summary)
@@ -242,8 +287,14 @@ class StrictOpenAIContractFake:
     def _parameter_from_reference(reference: str) -> str | None:
         if "field=temperature" in reference:
             return "temperature"
+        if "fields=temperature" in reference:
+            return "temperature"
         if "max_completion_tokens" in reference:
             return "max_completion_tokens"
+        if "max_output_tokens" in reference:
+            return "max_output_tokens"
+        if "field=reasoning.effort" in reference:
+            return "reasoning"
         return None
 
     @staticmethod

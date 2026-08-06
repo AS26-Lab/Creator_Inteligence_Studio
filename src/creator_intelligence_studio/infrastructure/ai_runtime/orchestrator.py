@@ -36,6 +36,7 @@ from .policies import AIResultValidator, BudgetPolicy, CostEstimator, CostTracke
 from .providers import AIProvider
 from .registry import ModelRegistry, PromptRegistry
 from .repository import SQLiteAIRuntimeRepository
+from .request_profiles import resolve_provider_request_profile
 
 
 def _utc_now() -> str:
@@ -587,6 +588,8 @@ class AIOrchestrator:
         privacy_class: str = "selected_text_allowed",
         metadata: dict[str, object] | None = None,
     ) -> AIExecutionResult:
+        merged_metadata = {**(metadata or {})}
+        merged_metadata.setdefault("expected_text", "OK")
         request = AIExecutionRequest(
             request_id=request_id or f"provider_diagnostic:{provider or 'any'}:{role or 'cheap_structured_model'}:{uuid4()}",
             task_type="provider_diagnostic",
@@ -603,7 +606,7 @@ class AIOrchestrator:
             cache_policy=cache_policy,
             fallback_policy=fallback_policy,
             approval_policy=approval_policy,
-            metadata=metadata or {},
+            metadata=merged_metadata,
         )
         logger.info(
             "ai_runtime_diagnostic.execution_created request_id=%s provider=%s role=%s cache_policy=%s",
@@ -691,6 +694,7 @@ class AIOrchestrator:
 
         assignment, model_entry = resolved
         provider_name = assignment.provider
+        request_profile = resolve_provider_request_profile(provider_name, model_entry.model_id)
         if not self._provider_enabled(provider_name):
             error = AIExecutionError(
                 category="provider_error",
@@ -815,7 +819,7 @@ class AIOrchestrator:
                 context_fingerprint=context_fingerprint,
             )
 
-        prompt_text = self._render_prompt(prompt_template, request)
+        prompt_text = self._render_prompt(prompt_template, request, request_profile=request_profile)
         cache_key = self._cache_key(
             provider_name=provider_name,
             model_entry=model_entry,
@@ -823,6 +827,7 @@ class AIOrchestrator:
             request=request,
             request_fingerprint=request_hash,
             context_fingerprint=context_fingerprint,
+            request_profile=request_profile,
         )
         if request.cache_policy == "use":
             lookup = self.cache.get(cache_key)
@@ -1042,6 +1047,9 @@ class AIOrchestrator:
             payload=payload_object if payload_object is not None else "",
             output_text=response.output_text,
             response_state=getattr(response, "response_state", None),
+            response_status=getattr(response, "response_status", None),
+            incomplete_reason=getattr(response, "incomplete_reason", None),
+            output_token_limit=getattr(response, "output_token_limit", None),
         )
         if validation.status == "rejected":
             repaired = self.result_validator.repair(response.output_text)
@@ -1053,6 +1061,9 @@ class AIOrchestrator:
                         payload=repaired_object,
                         output_text=repaired,
                         response_state=getattr(response, "response_state", None),
+                        response_status=getattr(response, "response_status", None),
+                        incomplete_reason=getattr(response, "incomplete_reason", None),
+                        output_token_limit=getattr(response, "output_token_limit", None),
                     )
                     if validation.status != "rejected":
                         response = replace(response, output_text=repaired, structured_output=repaired_object)
@@ -1217,6 +1228,7 @@ class AIOrchestrator:
         request: AIExecutionRequest,
         request_fingerprint: str,
         context_fingerprint: str | None,
+        request_profile: Any | None = None,
     ) -> str:
         template_key = template.template_key if template else "provider_diagnostic"
         template_version = template.version if template else None
@@ -1239,11 +1251,21 @@ class AIOrchestrator:
                 "approval_policy": request.approval_policy,
                 "budget": request.budget,
                 "metadata": request.metadata,
+                "request_profile": {
+                    "profile_id": getattr(request_profile, "profile_id", None),
+                    "version": getattr(request_profile, "version", None),
+                    "endpoint": getattr(request_profile, "endpoint", None),
+                    "output_token_parameter": getattr(request_profile, "output_token_parameter", None),
+                    "response_parser_profile": getattr(request_profile, "response_parser_profile", None),
+                    "usage_parser_profile": getattr(request_profile, "usage_parser_profile", None),
+                },
             }
         )
         return f"ai:{provider_name}:{model_entry.model_id}:{template_key}:{template_version or 'none'}:{model_version or 'none'}:{fingerprint}"
 
-    def _render_prompt(self, template: AIPromptTemplate | None, request: AIExecutionRequest) -> str:
+    def _render_prompt(self, template: AIPromptTemplate | None, request: AIExecutionRequest, *, request_profile: Any | None = None) -> str:
+        if getattr(request_profile, "endpoint", None) == "responses":
+            return "Reply with the single word OK."
         payload = {
             "status": "ok",
             "logical_role": request.model_role or "cheap_structured_model",

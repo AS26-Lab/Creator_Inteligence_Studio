@@ -55,13 +55,14 @@ class OpenAIErrorContractTests(unittest.TestCase):
     def test_strict_fake_rejects_temperature_before_http(self) -> None:
         fake = StrictOpenAIContractFake(model_id="gpt-5.6-luna")
         request = Request(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.openai.com/v1/responses",
             data=json.dumps(
                 {
                     "model": "gpt-5.6-luna",
-                    "messages": [{"role": "user", "content": "{\"status\":\"ok\"}"}],
-                    "max_completion_tokens": 64,
+                    "input": "Reply with the single word OK.",
+                    "max_output_tokens": 256,
                     "temperature": 0,
+                    "reasoning": {"effort": "none"},
                 }
             ).encode("utf-8"),
             headers={"Content-Type": "application/json"},
@@ -75,6 +76,27 @@ class OpenAIErrorContractTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 400)
         self.assertIn("temperature", context.exception.read().decode("utf-8"))
 
+    def test_strict_fake_rejects_missing_reasoning_on_responses_contract(self) -> None:
+        fake = StrictOpenAIContractFake(model_id="gpt-5.6-luna")
+        request = Request(
+            "https://api.openai.com/v1/responses",
+            data=json.dumps(
+                {
+                    "model": "gpt-5.6-luna",
+                    "input": "Reply with the single word OK.",
+                    "max_output_tokens": 256,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with self.assertRaises(HTTPError) as context:
+            fake(request, timeout=30.0)
+
+        self.assertEqual(context.exception.code, 400)
+        self.assertIn("reasoning", context.exception.read().decode("utf-8"))
+
     def test_http_error_mapping_covers_representative_openai_failures(self) -> None:
         cases = [
             (401, {"error": {"message": "invalid api key sk-secret", "type": "invalid_api_key"}}, "authentication_error", "invalid_api_key"),
@@ -86,7 +108,7 @@ class OpenAIErrorContractTests(unittest.TestCase):
         for status, payload, expected_category, expected_code in cases:
             with self.subTest(status=status):
                 error = HTTPError(
-                    "https://api.openai.com/v1/chat/completions",
+                    "https://api.openai.com/v1/responses",
                     status,
                     "error",
                     hdrs=None,
@@ -107,13 +129,18 @@ class OpenAIErrorContractTests(unittest.TestCase):
         self.assertEqual(response.error.category, "invalid_response")
 
         empty_payload = {
+            "id": "resp-empty",
+            "object": "response",
+            "status": "completed",
             "model": "gpt-5.6-luna",
-            "choices": [],
-            "usage": {},
+            "output": [],
+            "usage": {"input_tokens": 70, "output_tokens": 64},
         }
         with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", return_value=FakeHTTPResponse(200, json.dumps(empty_payload).encode("utf-8"))):
-            response = self.provider.execute(_request(), api_key="sk-openai-test", model_id="gpt-5.6-luna", prompt_text='{"status":"ok"}')
-        self.assertEqual(response.error.category, "invalid_response")
+            response = self.provider.execute(_request(), api_key="sk-openai-test", model_id="gpt-5.6-luna", prompt_text="Reply with the single word OK.")
+        self.assertIsNone(response.error)
+        self.assertEqual(response.response_status, "completed")
+        self.assertEqual(response.response_state, "empty")
 
 
 if __name__ == "__main__":

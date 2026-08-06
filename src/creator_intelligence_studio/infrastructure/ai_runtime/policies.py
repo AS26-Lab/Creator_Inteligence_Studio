@@ -220,17 +220,28 @@ class AIResultValidator:
         payload: Any,
         output_text: str | None = None,
         response_state: str | None = None,
+        response_status: str | None = None,
+        incomplete_reason: str | None = None,
+        output_token_limit: int | None = None,
     ) -> AIExecutionValidation:
         issues: list[str] = []
         warnings: list[str] = []
         normalized_text = _normalize_textual_diagnostic_output(output_text or "")
         lower_text = normalized_text.lower()
+        normalized_status = (response_status or "").strip().lower()
+        normalized_reason = (incomplete_reason or "").strip().lower()
+        if normalized_status == "incomplete" or response_state == "truncated":
+            issues.append("Response was truncated.")
+            if output_token_limit is not None:
+                warnings.append(f"output_token_limit:{output_token_limit}")
+            if normalized_reason:
+                warnings.append(f"incomplete_reason:{normalized_reason}")
         if response_state in {"refusal", "content_filter"}:
             issues.append(f"Response state is {response_state}.")
-        elif response_state == "truncated":
-            issues.append("Response was truncated.")
         elif response_state == "empty" and not normalized_text:
             issues.append("Response text is empty.")
+        if normalized_status == "completed" and not normalized_text:
+            issues.append("Output text is empty.")
 
         if isinstance(payload, dict):
             required = {"status", "logical_role", "short_message"}

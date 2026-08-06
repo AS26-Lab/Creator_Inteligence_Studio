@@ -93,17 +93,22 @@ class OpenAIProviderTests(unittest.TestCase):
         fake = StrictOpenAIContractFake(model_id="gpt-5.6-luna")
 
         with patch("creator_intelligence_studio.infrastructure.ai_runtime.providers.urlopen", side_effect=fake):
-            response = self.provider.execute(_request(), api_key="sk-openai-test", model_id="gpt-5.6-luna", prompt_text='{"status":"ok"}')
+            response = self.provider.execute(_request(), api_key="sk-openai-test", model_id="gpt-5.6-luna", prompt_text="Reply with the single word OK.")
 
         self.assertEqual(fake.calls, 1)
         self.assertIsNone(response.error)
         self.assertEqual(len(fake.request_summaries), 1)
         summary = fake.request_summaries[0]
-        self.assertEqual(summary["endpoint"], "chat/completions")
-        self.assertEqual(summary["profile"], "openai.gpt-5.6.chat-completions")
+        self.assertEqual(summary["endpoint"], "responses")
+        self.assertEqual(summary["profile"], "openai.gpt-5.6.responses")
+        self.assertEqual(summary["fields"]["input"], "redacted:string")
         self.assertNotIn("temperature", summary["fields"])
         self.assertNotIn("response_format", summary["fields"])
-        self.assertEqual(summary["fields"]["max_completion_tokens"], "integer")
+        self.assertEqual(summary["fields"]["max_output_tokens"], "integer")
+        self.assertEqual(summary["fields"]["reasoning"], "object")
+        self.assertEqual(response.output_text, "OK")
+        self.assertEqual(response.response_status, "completed")
+        self.assertEqual(response.response_state, "content")
 
     def test_test_credentials_uses_expected_http_contract(self) -> None:
         captured = {}

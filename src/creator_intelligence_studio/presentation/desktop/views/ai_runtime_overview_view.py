@@ -1719,6 +1719,8 @@ class DiagnosticsTab(QWidget):
         else:
             first_issue = str(validation_issues)
         if validation_status == "rejected" and not error:
+            if any(token in first_issue.lower() for token in ("truncated", "empty", "incomplete")):
+                return "OpenAI respondió, pero no produjo una respuesta completa."
             return "OpenAI respondió, pero Creator Intelligence Studio no pudo validar la respuesta del diagnóstico."
         if status == "blocked_by_credentials" or category == "authentication_error":
             return "No hay una credencial configurada para este proveedor."
@@ -1730,9 +1732,11 @@ class DiagnosticsTab(QWidget):
             return "No se pudo contactar al proveedor. Reintenta en unos minutos."
         if category == "invalid_request" and ("unsupported_parameter" in technical_reference or "max_tokens" in safe_message):
             return "No se pudo completar la solicitud porque la configuración de este modelo necesita actualizarse."
+        if error and status in {"failed", "blocked_by_budget", "blocked_by_privacy", "blocked_by_provider", "blocked_by_model"}:
+            return "No se pudo completar el diagnóstico."
         if validation_status == "rejected":
-            if "truncated" in first_issue.lower():
-                return "OpenAI respondió, pero la salida quedó truncada y no se pudo validar."
+            if any(token in first_issue.lower() for token in ("truncated", "empty", "incomplete")):
+                return "OpenAI respondió, pero no produjo una respuesta completa."
             if "refusal" in first_issue.lower() or "content filter" in first_issue.lower():
                 return "OpenAI respondió, pero la salida no se pudo validar."
             return "OpenAI respondió, pero Creator Intelligence Studio no pudo validar la respuesta del diagnóstico."

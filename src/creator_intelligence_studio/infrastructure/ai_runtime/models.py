@@ -546,8 +546,11 @@ class AIProviderResponse:
     content_shape: str | None = None
     content_length: int | None = None
     raw_finish_reason: str | None = None
+    response_status: str | None = None
+    incomplete_reason: str | None = None
     response_state: str | None = None
     parser_profile: str | None = None
+    output_token_limit: int | None = None
     warnings: tuple[str, ...] = ()
     error: AIExecutionError | None = None
 
