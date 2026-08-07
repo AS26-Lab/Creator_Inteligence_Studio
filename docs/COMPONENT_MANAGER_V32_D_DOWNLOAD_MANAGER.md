@@ -12,6 +12,7 @@ v32-D adds a resumable, persistent download boundary for managed components. The
 - the manager does not install, activate, or repair components automatically
 - the current implementation allows local/test sources only; no product download sources are enabled yet
 - the FFmpeg installer can consume a verified local artifact contractually
+- the transcription runtime and model installers can also consume verified artifacts contractually
 
 ## Core Contract
 
@@ -22,6 +23,7 @@ Flow:
 `catalog entry -> explicit download request -> queued -> downloading -> verifying -> completed_verified -> verified artifact`
 
 After that, a later installer phase may consume the artifact and perform health checks and activation.
+The installer is responsible for activation; the downloader only produces the verified artifact.
 
 ## State Machine
 
@@ -60,4 +62,3 @@ Tracked states:
 - disk-space preflight
 - Range handling
 - ETag/Last-Modified tracking
-

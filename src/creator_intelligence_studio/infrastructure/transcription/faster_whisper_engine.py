@@ -199,6 +199,9 @@ class FasterWhisperEngine:
 
     def _load_model(self, *, model_name: str, device: str, compute_type: str) -> Any:
         WhisperModel = self._import_backend(device=device)
+        model_status = self.model_manager.inspect_model_availability(model_name)
+        if not model_status.installed:
+            raise TranscriptionBackendError("El modelo local solicitado no esta instalado o no puede verificarse.")
         cache_root = self.model_manager.download_root(model_name)
         key = (model_name, device, compute_type, cache_root)
         if self._model is not None and self._loaded_key == key:

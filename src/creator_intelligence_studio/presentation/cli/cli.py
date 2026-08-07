@@ -711,6 +711,60 @@ def build_parser() -> argparse.ArgumentParser:
     components_download_cancel.add_argument("download_id")
     components_download_cancel.add_argument("--json", action="store_true")
 
+    components_runtime = components_sub.add_parser("runtime", help="Gestion explicita del runtime de transcripcion")
+    components_runtime_sub = components_runtime.add_subparsers(dest="runtime_action", required=True)
+    components_runtime_status = components_runtime_sub.add_parser("status", help="Mostrar el estado del runtime")
+    components_runtime_status.add_argument("component_id")
+    components_runtime_status.add_argument("--json", action="store_true")
+    components_runtime_verify = components_runtime_sub.add_parser("verify", help="Verificar el runtime administrado")
+    components_runtime_verify.add_argument("component_id")
+    components_runtime_verify.add_argument("--json", action="store_true")
+    components_runtime_install = components_runtime_sub.add_parser("install-local", help="Instalar runtime desde una fuente local")
+    components_runtime_install.add_argument("component_id")
+    components_runtime_install.add_argument("source_path")
+    components_runtime_install.add_argument("--revision", default="1")
+    components_runtime_install.add_argument("--json", action="store_true")
+    components_runtime_install_artifact = components_runtime_sub.add_parser("install-artifact", help="Instalar runtime desde un artefacto verificado")
+    components_runtime_install_artifact.add_argument("component_id")
+    components_runtime_install_artifact.add_argument("download_id")
+    components_runtime_install_artifact.add_argument("--revision", default="1")
+    components_runtime_install_artifact.add_argument("--json", action="store_true")
+    components_runtime_repair = components_runtime_sub.add_parser("repair-local", help="Reparar runtime desde una fuente local")
+    components_runtime_repair.add_argument("component_id")
+    components_runtime_repair.add_argument("source_path")
+    components_runtime_repair.add_argument("--revision", default="1")
+    components_runtime_repair.add_argument("--json", action="store_true")
+    components_runtime_remove = components_runtime_sub.add_parser("remove", help="Eliminar el runtime administrado")
+    components_runtime_remove.add_argument("component_id")
+    components_runtime_remove.add_argument("--json", action="store_true")
+
+    components_model = components_sub.add_parser("model", help="Gestion explicita de modelos de transcripcion")
+    components_model_sub = components_model.add_subparsers(dest="model_action", required=True)
+    components_model_status = components_model_sub.add_parser("status", help="Mostrar el estado del modelo")
+    components_model_status.add_argument("component_id")
+    components_model_status.add_argument("--json", action="store_true")
+    components_model_verify = components_model_sub.add_parser("verify", help="Verificar el modelo administrado")
+    components_model_verify.add_argument("component_id")
+    components_model_verify.add_argument("--json", action="store_true")
+    components_model_install = components_model_sub.add_parser("install-local", help="Instalar modelo desde una fuente local")
+    components_model_install.add_argument("component_id")
+    components_model_install.add_argument("source_path")
+    components_model_install.add_argument("--revision", required=True)
+    components_model_install.add_argument("--json", action="store_true")
+    components_model_install_artifact = components_model_sub.add_parser("install-artifact", help="Instalar modelo desde un artefacto verificado")
+    components_model_install_artifact.add_argument("component_id")
+    components_model_install_artifact.add_argument("download_id")
+    components_model_install_artifact.add_argument("--revision", required=True)
+    components_model_install_artifact.add_argument("--json", action="store_true")
+    components_model_repair = components_model_sub.add_parser("repair-local", help="Reparar modelo desde una fuente local")
+    components_model_repair.add_argument("component_id")
+    components_model_repair.add_argument("source_path")
+    components_model_repair.add_argument("--revision", required=True)
+    components_model_repair.add_argument("--json", action="store_true")
+    components_model_remove = components_model_sub.add_parser("remove", help="Eliminar el modelo administrado")
+    components_model_remove.add_argument("component_id")
+    components_model_remove.add_argument("--json", action="store_true")
+
     components_ffmpeg = components_sub.add_parser("ffmpeg", help="Gestion explicita del boundary de FFmpeg")
     components_ffmpeg_sub = components_ffmpeg.add_subparsers(dest="ffmpeg_action", required=True)
     components_ffmpeg_status = components_ffmpeg_sub.add_parser("status", help="Mostrar el estado de FFmpeg")
@@ -3020,6 +3074,125 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
                 if result.fallback is not None:
                     print(f"Fallback: {result.fallback.source} / {result.fallback.state}", file=stdout)
             return 0 if result.state in {"removed", "fallback_selected"} else 1
+    if args.action == "runtime":
+        component_id = args.component_id
+        if args.runtime_action == "status":
+            report = service.repository.get_installation(component_id) or service.inspect_installations()
+            installation = service.repository.get_installation(component_id)
+            payload = installation.to_dict() if installation is not None else {"component_id": component_id, "installation_status": "missing"}
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Estado del runtime:", file=stdout)
+                print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+            return 0
+        if args.runtime_action == "verify":
+            installation = service.repository.get_installation(component_id)
+            if installation is None:
+                print("Runtime no encontrado.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Runtime verificado:", file=stdout)
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if installation.installation_status.value == "ready" else 1
+        if args.runtime_action == "install-local":
+            result = service.transcription_runtime_install_local(component_id, args.source_path, revision=args.revision)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Instalacion de runtime local:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.runtime_action == "install-artifact":
+            artifact = service.download_service.verified_artifact(args.download_id)
+            if artifact is None:
+                print("Artefacto verificado no encontrado.", file=stdout)
+                return 1
+            result = service.transcription_runtime_install_local(component_id, artifact.verified_artifact_path, revision=args.revision, artifact=artifact)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Instalacion de runtime desde artefacto:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.runtime_action == "repair-local":
+            result = service.transcription_runtime_install_local(component_id, args.source_path, revision=args.revision)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Reparacion de runtime local:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.runtime_action == "remove":
+            installation = service.repository.get_installation(component_id)
+            removed = service.repository.get_installation(component_id)
+            if installation is None:
+                print("Runtime no encontrado.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Runtime administrado eliminado solo si estaba activo.", file=stdout)
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0
+    if args.action == "model":
+        component_id = args.component_id
+        model_name = component_id.split(".", 1)[-1]
+        if args.model_action == "status":
+            model = service.transcription_service.get_model_status(model_name)
+            if args.json:
+                print(json.dumps(model.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_model_info(model, stdout)
+            return 0
+        if args.model_action == "verify":
+            model = service.transcription_service.verify_model(model_name)
+            if args.json:
+                print(json.dumps(model.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_model_info(model, stdout)
+            return 0 if model.installed else 1
+        if args.model_action == "install-local":
+            result = service.transcription_model_install_local(component_id, args.source_path, revision=args.revision)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Instalacion de modelo local:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.model_action == "install-artifact":
+            artifact = service.download_service.verified_artifact(args.download_id)
+            if artifact is None:
+                print("Artefacto verificado no encontrado.", file=stdout)
+                return 1
+            result = service.transcription_model_install_local(component_id, artifact.verified_artifact_path, revision=args.revision, artifact=artifact)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Instalacion de modelo desde artefacto:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.model_action == "repair-local":
+            result = service.transcription_model_install_local(component_id, args.source_path, revision=args.revision)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Reparacion de modelo local:", file=stdout)
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0 if result.state == "ready" else 1
+        if args.model_action == "remove":
+            installation = service.repository.get_installation(component_id)
+            if installation is None:
+                print("Modelo no encontrado.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Modelo administrado removido solo si estaba activo.", file=stdout)
+                print(json.dumps(installation.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            return 0
     if args.action == "download":
         if args.download_action == "status":
             report = service.download_status(args.download_id)

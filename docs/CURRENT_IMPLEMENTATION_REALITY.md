@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository at the v30 cut-off. It is not a wish list.
+This document records what is actually implemented in the repository through the current v32-E slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -11,7 +11,7 @@ This document records what is actually implemented in the repository at the v30 
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
-- Component Manager and Local Transcription Foundation v32-A is now implemented as a read-only foundation: component catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, and hidden-download protection. The existing transcription stack is still the runtime path for execution and is not replaced by the foundation layer.
+- Component Manager and Local Transcription Foundation now spans v32-A through v32-E: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, and explicit runtime/model installers. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 
 ## What Is Implemented
 
@@ -161,7 +161,7 @@ Status: `implemented`
 - the current `AI_ML_ARCHITECTURE.md` in the repository was conceptual infrastructure, not a running AI stack;
 - the current codebase has no semantic retrieval layer;
 - the current codebase has no feedback-learning loop for AI outputs;
-- the current codebase has no component manager for models and FFmpeg;
+- the current codebase does not expose product download sources for transcription runtime or models;
 - the current codebase has no collective intelligence sharing pipeline;
 - the current codebase has no automatic video editing pipeline.
 - acoustic, visual, multimodal, and clip ranking pipelines are deterministic signal-processing and scoring layers, not semantic AI.
@@ -209,6 +209,20 @@ Status: `not_started`
 - the manager does not install or activate components automatically
 - local/test sources are allowed only with explicit test/developer approval; no product download sources are enabled yet
 - the FFmpeg installer can consume a verified artifact contractually, but the pipeline is not connected automatically
+
+Status: `implemented`
+
+## Component Manager v32-E Managed Transcription Runtime And Model Installers
+
+- explicit local-only runtime installation exists for transcription bundles
+- explicit local-only model installation exists for faster-whisper / CTranslate2 model bundles
+- verified artifacts from v32-D can be consumed contractually by the installers
+- staging, validation, atomic activation, and persistence are implemented
+- managed installs and legacy cache detection are separated
+- the model manager no longer relies on implicit hidden downloads in the normal path
+- the capability resolver and transcription engine now resolve explicit installed paths instead of assuming download-on-demand behavior
+- no product download sources for runtime or models are enabled
+- no pip-based runtime installation is used
 
 Status: `implemented`
 

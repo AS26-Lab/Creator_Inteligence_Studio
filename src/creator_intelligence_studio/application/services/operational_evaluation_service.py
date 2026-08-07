@@ -684,9 +684,9 @@ class OperationalEvaluationService:
                 if stage_name == "ensure_transcription_model":
                     def _ensure_model():
                         model_status = self.transcription_service.get_model_status("small")
-                        if model_status.status.value != "installed":
-                            model_status = self.transcription_service.download_model("small")
-                        return model_status
+                        if model_status.status.value not in {"installed", "legacy_cache"}:
+                            return model_status
+                        return self.transcription_service.verify_model("small")
                     stage, m, a, art, w, e, result = self._stage(
                         run_id=run.id,
                         stage_index=index,

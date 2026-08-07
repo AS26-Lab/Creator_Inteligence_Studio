@@ -245,11 +245,20 @@ class TranscriptionCapabilityResolver:
             actions.append("Instala el runtime de transcripcion antes de continuar.")
         if model_installation.installation_status not in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}:
             missing.append(model_component_id)
-            blocking.append("Falta instalar el modelo de transcripcion solicitado.")
-            if selected_profile and selected_profile.profile_id != requested_key:
-                actions.append(f"Usa el perfil {selected_profile.display_name} mientras instalas el perfil solicitado.")
+            if model_installation.installation_status in {ComponentInstallationStatus.INVALID, ComponentInstallationStatus.REPAIR_REQUIRED}:
+                blocking.append("El modelo de transcripcion administrado necesita reparacion antes de poder usarse.")
+                actions.append("Repara o reinstala el modelo administrado desde una fuente local aprobada.")
+            elif model_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+                blocking.append("El modelo de transcripcion es incompatible con este entorno.")
+                actions.append("Usa un modelo compatible o reinstala una revision valida.")
             else:
-                actions.append("Usa Componentes locales para instalar el modelo solicitado.")
+                blocking.append("Falta instalar el modelo de transcripcion solicitado.")
+                if selected_profile and selected_profile.profile_id != requested_key:
+                    actions.append(f"Usa el perfil {selected_profile.display_name} mientras instalas el perfil solicitado.")
+                else:
+                    actions.append("Instala el modelo solicitado desde una fuente local aprobada.")
+        elif (model_installation.metadata or {}).get("installation_type") == "legacy_cache" or model_installation.source == "legacy_cache":
+            warnings.append("Se esta usando un modelo local existente no administrado.")
 
         runtime_state = runtime_installation.health_status
         gpu_status = hardware_profile.gpu.status if hardware_profile is not None else HardwareCapabilityState.UNKNOWN

@@ -151,3 +151,5 @@ v32-C is wired into:
 - no migration_33
 
 v32-D later introduces a separate resumable download-manager foundation. That manager can hand a verified local artifact to the installer, but it still does not auto-install or auto-activate FFmpeg.
+
+v32-E adds the transcription runtime/model installer boundary and reuses the same local-only verified-artifact contract. That boundary stays separate from FFmpeg and does not change the FFmpeg no-download rule.

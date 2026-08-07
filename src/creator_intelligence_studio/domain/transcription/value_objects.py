@@ -21,6 +21,7 @@ class TranscriptionModelStatus(str, Enum):
     NOT_INSTALLED = "not_installed"
     DOWNLOADING = "downloading"
     INSTALLED = "installed"
+    LEGACY_CACHE = "legacy_cache"
     INCOMPLETE = "incomplete"
     CORRUPT = "corrupt"
     INCOMPATIBLE = "incompatible"
@@ -114,6 +115,11 @@ class TranscriptionModelInfo:
     status: TranscriptionModelStatus = TranscriptionModelStatus.NOT_INSTALLED
     error_code: str | None = None
     error_message: str | None = None
+    installation_type: str | None = None
+    managed: bool | None = None
+    revision: str | None = None
+    source: str | None = None
+    component_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -126,6 +132,11 @@ class TranscriptionModelInfo:
             "status": self.status.value,
             "error_code": self.error_code,
             "error_message": self.error_message,
+            "installation_type": self.installation_type,
+            "managed": self.managed,
+            "revision": self.revision,
+            "source": self.source,
+            "component_id": self.component_id,
         }
 
 
@@ -289,4 +300,3 @@ class TranscriptionVerificationResult:
             "model_statuses": [item.to_dict() for item in self.model_statuses],
             "notes": list(self.notes),
         }
-

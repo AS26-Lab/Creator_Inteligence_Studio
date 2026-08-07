@@ -22,6 +22,11 @@ from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
 from creator_intelligence_studio.infrastructure.downloads.repository import FileSystemComponentDownloadRepository
+from creator_intelligence_studio.application.services.transcription_installation_service import (
+    ManagedTranscriptionModelInstaller,
+    ManagedTranscriptionRuntimeInstaller,
+    TranscriptionInstallResult,
+)
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -81,6 +86,8 @@ class ComponentManagerService:
             component_repository=repository,
             logger=self.logger,
         )
+        self.transcription_runtime_installer = ManagedTranscriptionRuntimeInstaller(paths=paths, repository=repository, logger=self.logger)
+        self.transcription_model_installer = ManagedTranscriptionModelInstaller(paths=paths, repository=repository, model_manager=self.model_manager, logger=self.logger)
         self.tool_locator = MediaToolLocator(project_root=paths.project_root)
         self.hardware_service = HardwareCapabilityService(paths=paths, repository=repository, logger=self.logger)
         self.resolver = TranscriptionCapabilityResolver(
@@ -134,6 +141,12 @@ class ComponentManagerService:
 
     def list_downloads(self):
         return self.download_service.list_downloads()
+
+    def transcription_runtime_install_local(self, component_id: str, source_path: str | Path, *, revision: str = "1", artifact=None) -> TranscriptionInstallResult:
+        return self.transcription_runtime_installer.install_local(component_id, source_path, revision=revision, artifact=artifact)
+
+    def transcription_model_install_local(self, component_id: str, source_path: str | Path, *, revision: str, artifact=None) -> TranscriptionInstallResult:
+        return self.transcription_model_installer.install_local(component_id, source_path, revision=revision, artifact=artifact)
 
     def catalog(self) -> ComponentCatalog:
         catalog = self.repository.get_catalog()
@@ -200,6 +213,10 @@ class ComponentManagerService:
                 )
                 continue
             if entry.category == ComponentCategory.TRANSCRIPTION_RUNTIME:
+                installation = self.repository.get_installation(entry.component_id)
+                if installation is not None:
+                    installations.append(installation)
+                    continue
                 module_name = "faster_whisper" if entry.component_id.endswith("faster-whisper") else "ctranslate2"
                 try:
                     module = importlib.import_module(module_name)
@@ -242,10 +259,15 @@ class ComponentManagerService:
                     )
                 continue
             if entry.category == ComponentCategory.TRANSCRIPTION_MODEL:
+                installation = self.repository.get_installation(entry.component_id)
+                if installation is not None:
+                    installations.append(installation)
+                    continue
                 model_name = entry.component_id.split(".", 1)[-1]
                 model_info = self.model_manager.inspect_model_availability(model_name)
                 status_map = {
                     TranscriptionModelStatus.INSTALLED: ComponentInstallationStatus.READY,
+                    TranscriptionModelStatus.LEGACY_CACHE: ComponentInstallationStatus.READY,
                     TranscriptionModelStatus.NOT_INSTALLED: ComponentInstallationStatus.MISSING,
                     TranscriptionModelStatus.DOWNLOADING: ComponentInstallationStatus.UNKNOWN,
                     TranscriptionModelStatus.INCOMPLETE: ComponentInstallationStatus.INVALID,
@@ -259,17 +281,23 @@ class ComponentManagerService:
                         installation_status=status_map.get(model_info.status, ComponentInstallationStatus.UNKNOWN),
                         installed_version=model_info.model_name if model_info.installed else None,
                         revision=entry.revision,
-                        install_type=ComponentInstallKind.EXTERNALLY_DETECTED,
+                        install_type=ComponentInstallKind.MANAGED if model_info.managed else ComponentInstallKind.EXTERNALLY_DETECTED,
                         location_path=model_info.path,
-                        location_reference="cache" if model_info.path else None,
+                        location_reference="managed_root" if model_info.managed else ("legacy_cache" if model_info.status == TranscriptionModelStatus.LEGACY_CACHE else ("cache" if model_info.path else None)),
                         detected_at=None,
                         verified_at=None,
                         health_status=RuntimeCheckStatus.READY if model_info.installed else RuntimeCheckStatus.NOT_CHECKED,
-                        source="model_manager.inspect_model_availability",
-                        managed=False,
+                        source=model_info.source or "model_manager.inspect_model_availability",
+                        managed=bool(model_info.managed),
                         last_error_code=model_info.error_code,
                         last_error_message=model_info.error_message,
-                        metadata={"profile": model_info.profile, "notes": model_info.notes or ""},
+                        metadata={
+                            "profile": model_info.profile,
+                            "notes": model_info.notes or "",
+                            "installation_type": model_info.installation_type,
+                            "revision": model_info.revision,
+                            "source": model_info.source,
+                        },
                     )
                 )
                 continue

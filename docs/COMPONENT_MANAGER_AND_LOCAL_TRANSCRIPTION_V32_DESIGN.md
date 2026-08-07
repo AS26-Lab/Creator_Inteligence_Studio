@@ -217,6 +217,18 @@ Valid states:
 - no fallback to a different provider
 - no silent model substitution
 
+## v32-E Boundary
+
+v32-E makes runtime and model installation explicit:
+
+- local source or verified artifact only
+- staging before activation
+- structural validation before health check
+- activation only after verification succeeds
+- legacy cache can be reused without automatic migration
+
+The download manager remains a separate boundary and does not activate installs by itself.
+
 ## Proposed Download Manager Contract
 
 ### `ComponentDownloadManager`
@@ -258,6 +270,10 @@ Recommended metadata:
 - `updated_at`
 
 ### Important Rules
+
+- download != install
+- do not auto-activate a verified artifact
+- keep runtime/model installers separate from the download manager
 
 - if Range is unsupported, restart only if policy allows
 - if ETag changes, invalidate and restart

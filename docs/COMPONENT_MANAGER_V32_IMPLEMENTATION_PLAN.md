@@ -6,7 +6,7 @@ This plan breaks v32 into small, verifiable subphases. It is intentionally conse
 
 ## Current Status
 
-v32-A is implemented as a read-only foundation, v32-B is implemented as the local hardware/runtime benchmark foundation, v32-C is implemented as the managed FFmpeg boundary, and v32-D is implemented as the resumable download-manager foundation. The remaining subphases below stay valid and pending: runtime/model installer, relocation expansion, onboarding, and deeper GUI work.
+v32-A is implemented as a read-only foundation, v32-B is implemented as the local hardware/runtime benchmark foundation, v32-C is implemented as the managed FFmpeg boundary, v32-D is implemented as the resumable download-manager foundation, and v32-E is implemented as the managed transcription runtime/model installer boundary. The remaining subphases below stay valid and pending: relocation expansion, onboarding, and deeper GUI work.
 
 ## Phase Order
 
@@ -169,6 +169,10 @@ Gate:
 Non-scope:
 
 - advanced diarization
+
+Status:
+
+- implemented
 
 ### v32-F - Transcription Capability Resolver
 

@@ -24,6 +24,12 @@ Required behavior:
 - built-in FFmpeg distribution with reviewed version and license;
 - large models downloaded from inside the application.
 
+v32-D and v32-E split that idea into explicit boundaries:
+
+- v32-D downloads verified artifacts only;
+- v32-E installs runtime and model bundles only from local sources or verified artifacts;
+- neither phase installs automatically as a side effect of detection.
+
 ## Onboarding
 
 The base app must not pretend to be fully configured.
@@ -86,5 +92,4 @@ The benchmark must use real CUDA performance, not only `nvidia-smi`.
 
 ## Existing Implementation Reality
 
-The repository already includes transcription commands, model status, download, verification, export, and delete flows. That is an operational foundation, but not yet the AI catch-up layer.
-
+The repository already includes transcription commands, model status, download, verification, export, and delete flows. The component manager now adds explicit runtime and model installers, managed-versus-legacy cache detection, and artifact handoff without hidden downloads. That is an operational foundation, but not yet the AI catch-up layer.

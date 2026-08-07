@@ -39,6 +39,7 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-08-07 | FFmpeg must be resolved through a central media-tool policy that prefers managed local installations over read-only external detections | approved | keep a single source of truth for audio and media tooling without forcing PATH dependence or modifying user-owned installations | `docs/COMPONENT_MANAGER_V32_C_MANAGED_FFMPEG.md`, `docs/COMPONENT_MANAGER_AND_LOCAL_TRANSCRIPTION_V32_DESIGN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | ad hoc PATH-first discovery and split resolver behavior |
 | 2026-08-07 | Managed FFmpeg installation, repair, and removal are local-only operations with staging and health verification, and no HTTP downloader is included in v32-C | approved | satisfy the component boundary without introducing network download logic or arbitrary installer execution | `docs/COMPONENT_MANAGER_V32_C_MANAGED_FFMPEG.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | remote download assumptions, PATH-global changes, and unsafe installer execution |
 | 2026-08-07 | Resumable component downloads are filesystem-backed, artifact-first, and separate from installation | approved | preserve restartable download state without a new SQLite migration and keep download != install as a hard boundary | `docs/COMPONENT_MANAGER_V32_D_DOWNLOAD_MANAGER.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | automatic installation after download, migration_33, and hidden network coupling |
+| 2026-08-07 | Transcription runtime and model installers are local-only, artifact-aware, and activation-safe | approved | keep runtime/model installation explicit, local, and verifiable without reintroducing hidden downloads or pip-based setup | `docs/COMPONENT_MANAGER_V32_E_RUNTIME_AND_MODEL_INSTALLERS.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | implicit model downloads, automatic activation, pip-based runtime setup, and migration_33 |
 
 ## Replaced Or Limited Decisions
 
@@ -55,6 +56,7 @@ This register keeps the canonical decisions, their status, and what they replace
 - embedding model winner and vector-store backend selection;
 - component manager packaging and download policy details;
 - component manager packaging and download policy details remain limited to local sources for v32-C;
+- transcription runtime/model installer policy and model packaging policy are now fixed for local-only sources and verified artifacts;
 - future collective intelligence server rules once enough data exists.
 - whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.
 - runtime/model installer download and activation policy for v32-E and beyond.

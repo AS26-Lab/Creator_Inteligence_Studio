@@ -15,6 +15,7 @@ Implemented behavior:
 - persistence of benchmark results into the existing v32 tables
 - resolver integration so the latest functional benchmark can influence capability decisions
 - read-only CLI inspection and explicit benchmark execution
+- benchmark evidence now feeds the transcription capability resolver while installers remain separate
 
 This subphase does not implement:
 
