@@ -355,6 +355,10 @@ Gate:
 - which benchmarks count as ready vs degraded
 - whether relocation is allowed across all supported drives
 
+## v32-G Follow-up
+
+After the resolver closure, the next approved slice is the guided local-components UI. It should consume the canonical result and present the state, recommended profile, component cards, and structured actions without adding new readiness logic.
+
 ## First Implementation Prompt Recommendation
 
 The first coding prompt should ask for:

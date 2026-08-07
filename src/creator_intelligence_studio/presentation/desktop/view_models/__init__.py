@@ -13,6 +13,7 @@ from .models import (
     VideoRowViewModel,
 )
 from .workspace import WorkspaceViewModel
+from .local_components import LocalComponentsViewModel
 
 __all__ = [
     "ActivityEntryViewModel",
@@ -23,5 +24,6 @@ __all__ = [
     "SystemItemViewModel",
     "VideoFiltersViewModel",
     "VideoRowViewModel",
+    "LocalComponentsViewModel",
     "WorkspaceViewModel",
 ]

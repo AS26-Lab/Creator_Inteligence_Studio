@@ -41,6 +41,7 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-08-07 | Resumable component downloads are filesystem-backed, artifact-first, and separate from installation | approved | preserve restartable download state without a new SQLite migration and keep download != install as a hard boundary | `docs/COMPONENT_MANAGER_V32_D_DOWNLOAD_MANAGER.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | automatic installation after download, migration_33, and hidden network coupling |
 | 2026-08-07 | Transcription runtime and model installers are local-only, artifact-aware, and activation-safe | approved | keep runtime/model installation explicit, local, and verifiable without reintroducing hidden downloads or pip-based setup | `docs/COMPONENT_MANAGER_V32_E_RUNTIME_AND_MODEL_INSTALLERS.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | implicit model downloads, automatic activation, pip-based runtime setup, and migration_33 |
 | 2026-08-07 | TranscriptionCapabilityResolver is the canonical readiness authority for local transcription | approved | collapse readiness decisions into one deterministic read-only resolver and keep transcription service, GUI, and component services from diverging | `docs/COMPONENT_MANAGER_V32_F_TRANSCRIPTION_READINESS.md`, `docs/COMPONENT_MANAGER_AND_LOCAL_TRANSCRIPTION_V32_DESIGN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | split readiness logic, silent fallback drift, and hidden execution-path policy |
+| 2026-08-07 | Guided local components UI consumes resolver output without duplicating readiness policy | approved | introduce the first guided onboarding and local components screen while keeping the resolver as the only readiness authority | `docs/COMPONENT_MANAGER_V32_G_GUIDED_UI.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | GUI readiness drift, automatic benchmark startup, automatic install on open, and technical jargon in the primary view |
 
 ## Replaced Or Limited Decisions
 
@@ -61,4 +62,4 @@ This register keeps the canonical decisions, their status, and what they replace
 - future collective intelligence server rules once enough data exists.
 - whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.
 - runtime/model installer download and activation policy for v32-E and beyond.
-- v32-F readiness closure is implemented; v32-G onboarding can now consume the structured capability result.
+- v32-F readiness closure is implemented; v32-G guided UI can now consume the structured capability result.

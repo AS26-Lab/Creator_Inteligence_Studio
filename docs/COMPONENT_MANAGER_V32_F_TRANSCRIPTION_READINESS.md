@@ -249,8 +249,7 @@ It does not:
 ## Limitations
 
 - GPU readiness still depends on benchmark evidence
-- onboarding is not built yet
+- onboarding is now represented by the v32-G guided UI shell
 - no production download sources are enabled
 - no migration_33 exists
 - no automatic component installation is enabled
-

@@ -56,6 +56,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
         apply_theme(app)
 
         _boot_trace("GUI_BOOT_05 before_main_window", stderr=stderr)
+        component_manager_service = getattr(context, "component_manager_service", None)
         workspace = WorkspaceViewModel(
             service=context.service,
             media_service=context.media_service,
@@ -75,7 +76,8 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
             planning_service=context.planning_service,
             brief_service=context.brief_service,
             production_service=context.production_service,
-            download_service=context.component_manager_service.download_service if context.component_manager_service is not None else None,
+            download_service=component_manager_service.download_service if component_manager_service is not None else None,
+            component_manager_service=component_manager_service,
             creator_memory_service=context.creator_memory_service,
             creator_language_service=context.creator_language_service,
             creative_packaging_service=context.creative_packaging_service,

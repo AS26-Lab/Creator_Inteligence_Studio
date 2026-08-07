@@ -76,3 +76,22 @@ The following stay paused until approved by a later contract:
 - `docs/LOCAL_COMPONENTS_AND_TRANSCRIPTION.md` defines local component onboarding.
 - `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` defines data sharing and privacy.
 - `docs/CURRENT_IMPLEMENTATION_REALITY.md` records the actual state before AI work starts.
+
+## v32-G
+
+Guided local components UI is the next visible layer after the canonical resolver closure.
+
+It should expose:
+
+- local readiness summary
+- recommended profile
+- component cards
+- structured actions
+- onboarding shell
+
+It should not introduce:
+
+- productive downloads
+- automatic installs
+- automatic benchmark startup
+- duplicated readiness logic

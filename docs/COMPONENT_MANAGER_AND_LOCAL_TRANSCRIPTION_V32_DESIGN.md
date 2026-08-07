@@ -491,3 +491,5 @@ The design must not silently decide:
 ## Implementation Note
 
 v32-A now exists in code as the read-only foundation layer: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, and hidden-download protection. v32-B now adds the small local benchmark foundation on top of that baseline. The downloader, installer, relocation, and onboarding phases remain intentionally out of scope for this subphase.
+
+v32-G later consumes the canonical readiness result for a guided local-components UI without changing the policy itself.

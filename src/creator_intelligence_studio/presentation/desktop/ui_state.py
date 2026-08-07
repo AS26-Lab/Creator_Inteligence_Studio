@@ -79,7 +79,11 @@ class WorkspaceUiState:
     active_project_id: str | None = None
     last_page: str = "home"
     onboarding_seen: bool = False
+    onboarding_completed: bool = False
+    onboarding_skipped: bool = False
+    onboarding_last_status: str = "not_started"
     show_technical_details: bool = True
+    local_components_show_advanced_details: bool = False
     preferred_transcription_device: str = "auto"
     transcription_profile: str = "balanced"
     ranking_profile: str = "balanced"
@@ -106,7 +110,11 @@ class WorkspaceUiState:
             "active_project_id": self.active_project_id,
             "last_page": self.last_page,
             "onboarding_seen": self.onboarding_seen,
+            "onboarding_completed": self.onboarding_completed,
+            "onboarding_skipped": self.onboarding_skipped,
+            "onboarding_last_status": self.onboarding_last_status,
             "show_technical_details": self.show_technical_details,
+            "local_components_show_advanced_details": self.local_components_show_advanced_details,
             "preferred_transcription_device": self.preferred_transcription_device,
             "transcription_profile": self.transcription_profile,
             "ranking_profile": self.ranking_profile,
@@ -136,7 +144,11 @@ class WorkspaceUiState:
             active_project_id=payload.get("active_project_id"),
             last_page=str(payload.get("last_page") or "home"),
             onboarding_seen=bool(payload.get("onboarding_seen", False)),
+            onboarding_completed=bool(payload.get("onboarding_completed", False)),
+            onboarding_skipped=bool(payload.get("onboarding_skipped", False)),
+            onboarding_last_status=str(payload.get("onboarding_last_status") or "not_started"),
             show_technical_details=bool(payload.get("show_technical_details", True)),
+            local_components_show_advanced_details=bool(payload.get("local_components_show_advanced_details", False)),
             preferred_transcription_device=str(payload.get("preferred_transcription_device") or "auto"),
             transcription_profile=str(payload.get("transcription_profile") or "balanced"),
             ranking_profile=str(payload.get("ranking_profile") or "balanced"),

@@ -21,6 +21,10 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     VideoInspectionReport,
 )
 from creator_intelligence_studio.application.services.download_manager_service import ComponentDownloadManagerService
+from creator_intelligence_studio.application.services.component_manager_service import (
+    ComponentManagerService,
+    ComponentManagerStatus,
+)
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionExportResult,
     TranscriptionReport,
@@ -346,6 +350,7 @@ class WorkspaceViewModel:
         brief_service: ContentBriefService | None = None,
         production_service: ProductionPreparationService | None = None,
         download_service: ComponentDownloadManagerService | None = None,
+        component_manager_service: ComponentManagerService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -486,6 +491,7 @@ class WorkspaceViewModel:
         self.brief_service = brief_service
         self.production_service = production_service
         self.download_service = download_service
+        self.component_manager_service = component_manager_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -631,6 +637,22 @@ class WorkspaceViewModel:
 
     def set_technical_details_visible(self, visible: bool) -> None:
         self.ui_state = self.ui_state_store.update(self.ui_state, show_technical_details=visible)
+
+    def set_local_components_advanced_details_visible(self, visible: bool) -> None:
+        self.ui_state = self.ui_state_store.update(self.ui_state, local_components_show_advanced_details=visible)
+
+    def set_onboarding_state(self, *, seen: bool | None = None, completed: bool | None = None, skipped: bool | None = None, last_status: str | None = None) -> None:
+        changes: dict[str, object] = {}
+        if seen is not None:
+            changes["onboarding_seen"] = seen
+        if completed is not None:
+            changes["onboarding_completed"] = completed
+        if skipped is not None:
+            changes["onboarding_skipped"] = skipped
+        if last_status is not None:
+            changes["onboarding_last_status"] = last_status
+        if changes:
+            self.ui_state = self.ui_state_store.update(self.ui_state, **changes)
 
     def set_transcription_preferences(self, *, device: str | None = None, profile: str | None = None) -> None:
         changes: dict[str, object] = {}
@@ -794,6 +816,11 @@ class WorkspaceViewModel:
     def download_transcription_model(self, model_name: str, *, progress_callback=None):
         return self.transcription_service.download_model(model_name, progress_callback=progress_callback)
 
+    def run_transcription_benchmark(self, **kwargs):
+        if self.component_manager_service is None:
+            raise RuntimeError("Component manager service is not available.")
+        return self.component_manager_service.run_transcription_benchmark(**kwargs)
+
     def remove_transcription_model(self, model_name: str) -> bool:
         return self.transcription_service.remove_model(model_name)
 
@@ -806,6 +833,31 @@ class WorkspaceViewModel:
         self.selected_video_id = video_id
         self.activity_log.insert(0, f"Transcripcion: {report.status.value}")
         return report
+
+    def component_manager_status(self, *, profile: str = "balanced", preferred_device: str = "auto") -> ComponentManagerStatus | None:
+        if self.component_manager_service is None:
+            return None
+        return self.component_manager_service.status(profile=profile, preferred_device=preferred_device)
+
+    def transcription_capability(self, *, profile: str = "balanced", preferred_device: str = "auto"):
+        if self.component_manager_service is None:
+            return None
+        return self.component_manager_service.resolve_transcription_capability(profile=profile, preferred_device=preferred_device)
+
+    def transcription_capability_presentation(self, *, profile: str = "balanced", preferred_device: str = "auto"):
+        if self.component_manager_service is None:
+            return None
+        return self.component_manager_service.describe_transcription_capability(profile=profile, preferred_device=preferred_device)
+
+    def transcription_capability_matrix(self, *, preferred_device: str = "auto"):
+        if self.component_manager_service is None:
+            return {}
+        return self.component_manager_service.transcription_capability_matrix(preferred_device=preferred_device)
+
+    def transcription_execution_plan(self, *, profile: str = "balanced", preferred_device: str = "auto"):
+        if self.component_manager_service is None:
+            return None
+        return self.component_manager_service.resolve_transcription_execution_plan(profile=profile, preferred_device=preferred_device)
 
     def get_transcription(self, video_id: str) -> TranscriptionReport:
         return self.transcription_service.get_transcription(video_id)

@@ -171,4 +171,4 @@ The installer emits dedicated runtime/model install, health, activation, repair,
 - no pip-based runtime setup
 - no GPU driver installation
 - no PATH mutation
-- no onboarding yet
+- v32-G later adds a guided onboarding shell that consumes this installer-ready foundation

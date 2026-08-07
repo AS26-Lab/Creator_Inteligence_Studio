@@ -114,6 +114,7 @@ from .projects_view import ProjectsView
 from .task_center_view import TaskCenterView
 from .workflow_view import WorkflowView
 from .onboarding_view import OnboardingView
+from .local_components_view import LocalComponentsView
 from .preferences_dialog import PreferencesDialog
 from .visual_analysis_view import VisualAnalysisView
 from .system_view import SystemView
@@ -273,6 +274,7 @@ __all__ = [
     "TaskCenterView",
     "WorkflowView",
     "OnboardingView",
+    "LocalComponentsView",
     "PreferencesDialog",
     "VisualAnalysisView",
     "SystemView",

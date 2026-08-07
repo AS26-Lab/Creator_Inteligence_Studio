@@ -121,6 +121,7 @@ from creator_intelligence_studio.presentation.desktop.views import (
     CreatorLanguageView,
     AIRuntimeOverviewView,
     OnboardingView,
+    LocalComponentsView,
     MultimodalAnalysisView,
     OperationalEvaluationView,
     PersonalizationDataView,
@@ -253,6 +254,7 @@ class MainWindow(QMainWindow):
             "workflow",
             "tasks",
             "onboarding",
+            "local_components",
             "transcription",
             "subtitles",
             "analysis",
@@ -283,6 +285,8 @@ class MainWindow(QMainWindow):
         self.workspace_button.setText("Tareas")
         self.onboarding_button = QToolButton()
         self.onboarding_button.setText("Guia")
+        self.components_button = QToolButton()
+        self.components_button.setText("Componentes")
 
         self.creator_combo.setMinimumWidth(170)
         self.project_combo.setMinimumWidth(170)
@@ -290,15 +294,18 @@ class MainWindow(QMainWindow):
         self.settings_button.setMinimumWidth(110)
         self.workspace_button.setMinimumWidth(110)
         self.onboarding_button.setMinimumWidth(90)
+        self.components_button.setMinimumWidth(120)
         self.gpu_label.setMinimumWidth(230)
         self.gpu_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
         self.settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.workspace_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.onboarding_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.components_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_button.setToolTip("Abrir configuración de la aplicación")
         self.workspace_button.setToolTip("Abrir el centro de tareas")
         self.onboarding_button.setToolTip("Reabrir el onboarding")
+        self.components_button.setToolTip("Abrir componentes locales")
         self.search_edit.setToolTip("Busca en el contenido visible del espacio de trabajo")
         self.creator_combo.setToolTip("Selecciona el creador activo")
         self.project_combo.setToolTip("Selecciona el proyecto activo")
@@ -319,6 +326,7 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.gpu_label)
         top_layout.addWidget(self.settings_button)
         top_layout.addWidget(self.workspace_button)
+        top_layout.addWidget(self.components_button)
         top_layout.addWidget(self.onboarding_button)
 
         self.stack = QStackedWidget()
@@ -432,7 +440,16 @@ class MainWindow(QMainWindow):
         self.workflow_view = WorkflowView(workspace)
         logger.info("GUI_BOOT_task_center_created")
         self.task_center_view = TaskCenterView(workspace)
-        self.onboarding_view = OnboardingView(workspace)
+        self.local_components_view = LocalComponentsView(
+            workspace,
+            open_transcription_callback=lambda: self.show_page("transcription"),
+            open_task_center_callback=lambda: self.show_page("tasks"),
+        )
+        self.onboarding_view = OnboardingView(
+            workspace,
+            open_local_components_callback=lambda: self.show_page("local_components"),
+            open_transcription_callback=lambda: self.show_page("transcription"),
+        )
         self.transcription_view = TranscriptionView(workspace)
         self.subtitle_editor_view = SubtitleEditorView(workspace)
         self.acoustic_view = AcousticAnalysisView(workspace)
@@ -540,6 +557,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.workflow_view)
         self.stack.addWidget(self.task_center_view)
         self.stack.addWidget(self.onboarding_view)
+        self.stack.addWidget(self.local_components_view)
         self.stack.addWidget(self.transcription_view)
         self.stack.addWidget(self.subtitle_editor_view)
         self.stack.addWidget(self.acoustic_view)
@@ -678,6 +696,7 @@ class MainWindow(QMainWindow):
         self.search_edit.textChanged.connect(self._search_changed)
         self.settings_button.clicked.connect(self._open_preferences)
         self.workspace_button.clicked.connect(lambda: self.show_page("tasks"))
+        self.components_button.clicked.connect(lambda: self.show_page("local_components"))
         self.onboarding_button.clicked.connect(lambda: self.show_page("onboarding"))
         self._refresh_topbar()
 
@@ -698,6 +717,14 @@ class MainWindow(QMainWindow):
             self.refresh_all()
         except Exception as exc:
             logger.warning("deferred_refresh_failed error=%s", exc)
+        QTimer.singleShot(0, self._maybe_show_first_run_onboarding)
+
+    def _maybe_show_first_run_onboarding(self) -> None:
+        if self.workspace.ui_state.onboarding_seen:
+            return
+        if self.workspace.ui_state.onboarding_completed or self.workspace.ui_state.onboarding_skipped:
+            return
+        self.show_page("onboarding")
 
     def refresh_all(self) -> None:
         logger.info("GUI_BOOT_refresh_all_started")
@@ -805,6 +832,7 @@ class MainWindow(QMainWindow):
         self.task_center_view.refresh()
         logger.info("GUI_BOOT_refresh_task_center_completed")
         self.onboarding_view.refresh()
+        self.local_components_view.refresh()
         self.transcription_view.refresh()
         self.subtitle_editor_view.refresh()
         self.visual_view.refresh()
@@ -1096,6 +1124,8 @@ class MainWindow(QMainWindow):
             self.instagram_view.refresh()
         elif current_key == "tiktok":
             self.tiktok_view.refresh()
+        elif current_key == "local_components":
+            self.local_components_view.refresh()
         elif current_key == "transcription":
             self.transcription_view.refresh()
         elif current_key == "subtitles":

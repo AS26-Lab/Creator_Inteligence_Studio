@@ -114,6 +114,7 @@ def build_navigation_items() -> list[NavigationItem]:
         NavigationItem("workflow", "Workflow"),
         NavigationItem("tasks", "Task Center"),
         NavigationItem("onboarding", "Onboarding"),
+        NavigationItem("local_components", "Componentes locales"),
         NavigationItem("transcription", "Transcripcion"),
         NavigationItem("subtitles", "Subtitulos"),
         NavigationItem("analysis", "Analisis"),

@@ -313,3 +313,22 @@ The existing repo already provides reusable infrastructure for future AI work:
 - creator isolation
 
 These are mostly structural, deterministic, and traceable foundations. They should not be documented as mature creative intelligence until they are connected to models, retrieval, and learning.
+
+## v32-G Guided Local Components UI
+
+The first guided local-components screen is implemented.
+
+It presents canonical readiness from the transcription resolver, plus:
+
+- recommended profile
+- component cards
+- structured suggested actions
+- onboarding shell
+- advanced technical details behind an explicit toggle
+
+It does not add:
+
+- product download sources
+- automatic installation
+- automatic benchmark startup
+- readiness decisions in the GUI
