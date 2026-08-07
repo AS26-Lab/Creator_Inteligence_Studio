@@ -283,6 +283,10 @@ v32 should introduce a compact component foundation rather than a loose pile of 
 | `transcription_profiles` | profile definitions and reviews |
 | `transcription_runtime_checks` | runtime check outcomes |
 
+### Download State Storage
+
+The resumable download foundation implemented in v32-D uses filesystem-backed JSON metadata under the controlled downloads root instead of a new SQLite table. This avoids introducing `migration_33` while preserving restartable download state, verification metadata, and atomic verified artifacts.
+
 ### Schema Principles
 
 - keep install/download/runtime states separate

@@ -89,6 +89,9 @@ class TaskCenterView(QWidget):
     def _is_ai_runtime_diagnostic_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "ai_runtime_diagnostic")
 
+    def _is_component_download_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "component_download")
+
     def _ai_runtime_task_details(self, task) -> dict[str, str]:
         payload = getattr(task, "payload", {}) if task is not None else {}
         execution_id = str(payload.get("execution_id") or "")
@@ -297,6 +300,20 @@ class TaskCenterView(QWidget):
                 ),
             )
             return
+        if self._is_component_download_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(
+                self,
+                "Task Center",
+                (
+                    "Descarga de componente\n"
+                    f"componente: {payload.get('component_id', task.video_title or task.task_id)}\n"
+                    f"estado: {task.status}\n"
+                    f"progreso: {task.progress_percent:.1f}%\n"
+                    f"actualizada: {task.updated_at}"
+                ),
+            )
+            return
         if self._is_creator_language_analysis_task(task):
             payload = getattr(task, "payload", {})
             QMessageBox.information(self, "Task Center", f"Analisis de lenguaje: {payload.get('corpus_id', task.task_id)} / {task.status}")
@@ -466,6 +483,9 @@ class TaskCenterView(QWidget):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_audience_model_task(task):
             self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
+        elif self._is_component_download_task(task):
+            if getattr(self.workspace, "download_service", None) is not None:
+                self.workspace.download_service.download_cancel(task.task_id)
         elif self._is_youtube_sync_task(task):
             self.workspace.interrupt_youtube_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_instagram_sync_task(task):
@@ -552,6 +572,14 @@ class TaskCenterView(QWidget):
                 role=role,
                 cache_policy=str(getattr(task, "payload", {}).get("cache_policy") or "use"),
             )
+            self.refresh()
+            return
+        if self._is_component_download_task(task):
+            if getattr(self.workspace, "download_service", None) is not None:
+                try:
+                    self.workspace.download_service.download_resume(task.task_id)
+                except Exception:
+                    self.workspace.download_service.download_pause(task.task_id)
             self.refresh()
             return
         if self._is_creator_language_analysis_task(task):

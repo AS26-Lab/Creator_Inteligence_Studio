@@ -150,3 +150,4 @@ v32-C is wired into:
 - no global PATH management
 - no migration_33
 
+v32-D later introduces a separate resumable download-manager foundation. That manager can hand a verified local artifact to the installer, but it still does not auto-install or auto-activate FFmpeg.

@@ -134,7 +134,7 @@ Representative AI Runtime GUI/orchestrator tests were also re-run to confirm v31
 
 ## Limitations
 
-- no download manager
+- no download manager inside v32-B; resumable download-manager foundation exists later in v32-D and stays separate from benchmark certification
 - no installation workflow
 - no repair workflow
 - no model movement workflow
@@ -143,6 +143,6 @@ Representative AI Runtime GUI/orchestrator tests were also re-run to confirm v31
 
 ## Next Subphase
 
-v32-C is now implemented as a managed FFmpeg boundary that preserves the existing local transcription flow and keeps benchmark resolution read-only.
+v32-C is implemented as a managed FFmpeg boundary that preserves the existing local transcription flow and keeps benchmark resolution read-only. The resumable download manager is a separate v32-D foundation and does not change benchmark semantics.
 
 The benchmark layer continues to rely on the central media-tool resolver, so managed FFmpeg can win by policy while external FFmpeg remains a read-only fallback.

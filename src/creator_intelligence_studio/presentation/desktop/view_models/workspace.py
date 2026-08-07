@@ -20,6 +20,7 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     MediaToolsReport,
     VideoInspectionReport,
 )
+from creator_intelligence_studio.application.services.download_manager_service import ComponentDownloadManagerService
 from creator_intelligence_studio.application.services.transcription_service import (
     TranscriptionExportResult,
     TranscriptionReport,
@@ -344,6 +345,7 @@ class WorkspaceViewModel:
         planning_service: StrategicPlanningService | None = None,
         brief_service: ContentBriefService | None = None,
         production_service: ProductionPreparationService | None = None,
+        download_service: ComponentDownloadManagerService | None = None,
     ) -> None:
         self.service = service
         self.media_service = media_service
@@ -483,6 +485,7 @@ class WorkspaceViewModel:
         self.planning_service = planning_service
         self.brief_service = brief_service
         self.production_service = production_service
+        self.download_service = download_service
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -1037,6 +1040,33 @@ class WorkspaceViewModel:
 
     def background_tasks(self) -> list[BackgroundTaskRecord]:
         tasks = list(self.ui_state.tasks)
+        if self.download_service is not None:
+            try:
+                download_records = self.download_service.list_downloads()
+            except Exception:
+                download_records = []
+            for record in download_records:
+                progress = record.progress
+                tasks.append(
+                    BackgroundTaskRecord(
+                        task_id=record.download_id,
+                        title="Descarga de componente",
+                        status=record.status.value,
+                        stage_name=record.status.value,
+                        video_id=None,
+                        video_title=record.component_id,
+                        action_id=record.destination_logical_location,
+                        progress_percent=progress.percentage or 0.0,
+                        message=record.error.message_safe if record.error else record.verification_status,
+                        error=record.error.message_safe if record.error else None,
+                        cancellable=record.status.value in {"queued", "preparing", "downloading", "pause_requested", "paused", "resume_requested", "verifying", "cancel_requested", "interrupted"},
+                        created_at=to_iso_z(record.created_at),
+                        updated_at=to_iso_z(record.updated_at),
+                        interrupted_at=to_iso_z(record.interrupted_at),
+                        completed_at=to_iso_z(record.completed_at),
+                        payload=record.to_dict(),
+                    )
+                )
         if self.render_service is not None:
             try:
                 render_jobs = self.render_service.list_render_jobs()

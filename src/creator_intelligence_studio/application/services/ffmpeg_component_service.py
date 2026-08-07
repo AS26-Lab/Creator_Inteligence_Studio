@@ -26,6 +26,7 @@ from creator_intelligence_studio.domain.components.entities import (
     ComponentInstallationStatus,
     RuntimeCheckStatus,
 )
+from creator_intelligence_studio.domain.components.downloads import VerifiedComponentArtifact
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
 from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
 from creator_intelligence_studio.infrastructure.audio.ffmpeg_audio_extractor import FFmpegAudioExtractionError
@@ -882,8 +883,12 @@ class FFmpegManagedComponentService:
         self._mirror_ffprobe_installation(installation)
         return installation
 
-    def install_local(self, source_path: str | Path, *, source_label: str | None = None) -> FFmpegInstallResult:
-        source = Path(source_path)
+    def install_local(self, source_path: str | Path | VerifiedComponentArtifact, *, source_label: str | None = None) -> FFmpegInstallResult:
+        if isinstance(source_path, VerifiedComponentArtifact):
+            source = Path(source_path.verified_artifact_path)
+            source_label = source_label or source_path.download_id
+        else:
+            source = Path(source_path)
         self._event(ComponentEventType.FFMPEG_MANAGED_INSTALL_STARTED, "Inicio de instalacion local de FFmpeg.", payload={"source_path": str(source)})
         if not source.exists():
             return FFmpegInstallResult(

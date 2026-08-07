@@ -21,9 +21,11 @@ from creator_intelligence_studio.domain.components.repositories import Component
 from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
+from creator_intelligence_studio.infrastructure.downloads.repository import FileSystemComponentDownloadRepository
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
+from .download_manager_service import ComponentDownloadManagerService, DownloadStatusSummary
 from .ffmpeg_component_service import (
     FFmpegInstallResult,
     FFmpegManagedComponentService,
@@ -73,6 +75,12 @@ class ComponentManagerService:
         self.model_manager = model_manager or TranscriptionModelManager(paths.models_directory)
         self.logger = logger or logging.getLogger("creator_intelligence_studio.components")
         self.ffmpeg_service = FFmpegManagedComponentService(paths=paths, repository=repository, logger=self.logger)
+        self.download_service = ComponentDownloadManagerService(
+            paths=paths,
+            repository=FileSystemComponentDownloadRepository(paths.downloads_directory),
+            component_repository=repository,
+            logger=self.logger,
+        )
         self.tool_locator = MediaToolLocator(project_root=paths.project_root)
         self.hardware_service = HardwareCapabilityService(paths=paths, repository=repository, logger=self.logger)
         self.resolver = TranscriptionCapabilityResolver(
@@ -108,6 +116,24 @@ class ComponentManagerService:
 
     def ffmpeg_remove(self) -> FFmpegRemovalResult:
         return self.ffmpeg_service.remove()
+
+    def download_start(self, request):
+        return self.download_service.start_download(request)
+
+    def download_status(self, download_id: str) -> DownloadStatusSummary | None:
+        return self.download_service.status(download_id)
+
+    def download_pause(self, download_id: str):
+        return self.download_service.pause(download_id)
+
+    def download_resume(self, download_id: str):
+        return self.download_service.resume(download_id)
+
+    def download_cancel(self, download_id: str):
+        return self.download_service.cancel(download_id)
+
+    def list_downloads(self):
+        return self.download_service.list_downloads()
 
     def catalog(self) -> ComponentCatalog:
         catalog = self.repository.get_catalog()

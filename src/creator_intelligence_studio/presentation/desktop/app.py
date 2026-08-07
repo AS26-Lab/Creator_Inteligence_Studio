@@ -75,6 +75,7 @@ def launch_gui(context: ServiceContext, *, stdout=None, stderr=None, argv: Seque
             planning_service=context.planning_service,
             brief_service=context.brief_service,
             production_service=context.production_service,
+            download_service=context.component_manager_service.download_service if context.component_manager_service is not None else None,
             creator_memory_service=context.creator_memory_service,
             creator_language_service=context.creator_language_service,
             creative_packaging_service=context.creative_packaging_service,

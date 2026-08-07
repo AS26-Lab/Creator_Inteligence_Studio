@@ -330,6 +330,12 @@ from creator_intelligence_studio.application.services.transcription_service impo
 from creator_intelligence_studio.application.services.component_manager_service import (
     ComponentManagerService,
 )
+from creator_intelligence_studio.domain.components.downloads import (
+    ComponentDownloadOverwritePolicy,
+    ComponentDownloadPriority,
+    ComponentDownloadRequest,
+    ComponentDownloadRetryPolicy,
+)
 from creator_intelligence_studio.application.services.subtitle_service import (
     SubtitleExportResult,
     SubtitleService,
@@ -673,6 +679,37 @@ def build_parser() -> argparse.ArgumentParser:
     components_benchmark_sub = components_benchmark.add_subparsers(dest="benchmark_action")
     components_benchmark_status = components_benchmark_sub.add_parser("status", help="Mostrar el ultimo benchmark funcional persistido")
     components_benchmark_status.add_argument("--json", action="store_true")
+
+    components_download = components_sub.add_parser("download", help="Gestion resumible de descargas de componentes")
+    components_download_sub = components_download.add_subparsers(dest="download_action", required=True)
+    components_download_status = components_download_sub.add_parser("status", help="Mostrar el estado de una descarga")
+    components_download_status.add_argument("download_id")
+    components_download_status.add_argument("--json", action="store_true")
+    components_download_start = components_download_sub.add_parser("start", help="Iniciar una descarga explicita")
+    components_download_start.add_argument("component_id")
+    components_download_start.add_argument("--source-url", required=True)
+    components_download_start.add_argument("--catalog-version", type=int, default=1)
+    components_download_start.add_argument("--expected-sha256")
+    components_download_start.add_argument("--expected-download-bytes", type=int)
+    components_download_start.add_argument("--destination-logical-location", default="downloads_root")
+    components_download_start.add_argument("--priority", choices=["low", "normal", "high"], default="normal")
+    components_download_start.add_argument("--overwrite-policy", choices=["reject", "reuse", "replace"], default="reject")
+    components_download_start.add_argument("--allowed-domain", action="append", default=[])
+    components_download_start.add_argument("--allow-localhost", action="store_true")
+    components_download_start.add_argument("--test-mode", action="store_true")
+    components_download_start.add_argument("--retry-attempts", type=int, default=3)
+    components_download_start.add_argument("--retry-backoff-seconds", type=float, default=1.0)
+    components_download_start.add_argument("--chunk-size-bytes", type=int, default=256 * 1024)
+    components_download_start.add_argument("--json", action="store_true")
+    components_download_pause = components_download_sub.add_parser("pause", help="Pausar una descarga")
+    components_download_pause.add_argument("download_id")
+    components_download_pause.add_argument("--json", action="store_true")
+    components_download_resume = components_download_sub.add_parser("resume", help="Reanudar una descarga")
+    components_download_resume.add_argument("download_id")
+    components_download_resume.add_argument("--json", action="store_true")
+    components_download_cancel = components_download_sub.add_parser("cancel", help="Cancelar una descarga")
+    components_download_cancel.add_argument("download_id")
+    components_download_cancel.add_argument("--json", action="store_true")
 
     components_ffmpeg = components_sub.add_parser("ffmpeg", help="Gestion explicita del boundary de FFmpeg")
     components_ffmpeg_sub = components_ffmpeg.add_subparsers(dest="ffmpeg_action", required=True)
@@ -2880,6 +2917,11 @@ def _handle_audio(args, service: AudioPreparationService, stdout) -> int:
 
 
 def _handle_components(args, service: ComponentManagerService, stdout) -> int:
+    def _download_payload(record_or_summary) -> dict[str, object]:
+        if hasattr(record_or_summary, "to_dict"):
+            return record_or_summary.to_dict()
+        return {"value": str(record_or_summary)}
+
     if args.action == "status":
         report = service.status(profile=args.profile, preferred_device=args.device)
         if args.json:
@@ -2978,6 +3020,90 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
                 if result.fallback is not None:
                     print(f"Fallback: {result.fallback.source} / {result.fallback.state}", file=stdout)
             return 0 if result.state in {"removed", "fallback_selected"} else 1
+    if args.action == "download":
+        if args.download_action == "status":
+            report = service.download_status(args.download_id)
+            if report is None:
+                print("Descarga no encontrada.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Operacion de descarga de componente:", file=stdout)
+                print("Esta operacion no descarga archivos desde internet.", file=stdout)
+                print(f"Estado: {report.state}", file=stdout)
+                print(f"Descargado: {report.downloaded_bytes}", file=stdout)
+                if report.total_bytes is not None:
+                    print(f"Total: {report.total_bytes}", file=stdout)
+                if report.percentage is not None:
+                    print(f"Progreso: {report.percentage:.1f}%", file=stdout)
+                if report.speed_bytes_per_second is not None:
+                    print(f"Velocidad: {report.speed_bytes_per_second:.1f} B/s", file=stdout)
+                if report.eta_seconds is not None:
+                    print(f"ETA: {report.eta_seconds:.1f} s", file=stdout)
+                if report.reason:
+                    print(f"Motivo: {report.reason}", file=stdout)
+            return 0
+        if args.download_action == "start":
+            request = ComponentDownloadRequest(
+                component_id=args.component_id,
+                catalog_version=args.catalog_version,
+                source_url=args.source_url,
+                expected_sha256=args.expected_sha256,
+                expected_download_bytes=args.expected_download_bytes,
+                destination_logical_location=args.destination_logical_location,
+                priority=ComponentDownloadPriority(args.priority),
+                user_initiated=True,
+                retry_policy=ComponentDownloadRetryPolicy(
+                    max_attempts=args.retry_attempts,
+                    backoff_seconds=args.retry_backoff_seconds,
+                ),
+                overwrite_policy=ComponentDownloadOverwritePolicy(args.overwrite_policy),
+                allowed_domains=tuple(args.allowed_domain or ()),
+                allow_localhost=args.allow_localhost,
+                test_mode=args.test_mode,
+                chunk_size_bytes=args.chunk_size_bytes,
+            )
+            record = service.download_start(request)
+            if args.json:
+                print(json.dumps({"notice": "Esta operacion no descarga archivos desde internet.", "download": record.to_dict()}, ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Operacion de descarga de componente:", file=stdout)
+                print("Esta operacion no descarga archivos desde internet.", file=stdout)
+                print(f"Descarga iniciada: {record.download_id}", file=stdout)
+                print(f"Estado: {record.status.value}", file=stdout)
+                print(f"Componente: {record.component_id}", file=stdout)
+            return 0
+        if args.download_action == "pause":
+            record = service.download_pause(args.download_id)
+            if record is None:
+                print("Descarga no encontrada.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(record.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print(f"Descarga pausada: {record.download_id}", file=stdout)
+            return 0
+        if args.download_action == "resume":
+            record = service.download_resume(args.download_id)
+            if record is None:
+                print("Descarga no encontrada.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(record.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print(f"Descarga reanudada: {record.download_id}", file=stdout)
+            return 0
+        if args.download_action == "cancel":
+            record = service.download_cancel(args.download_id)
+            if record is None:
+                print("Descarga no encontrada.", file=stdout)
+                return 1
+            if args.json:
+                print(json.dumps(record.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print(f"Descarga cancelada: {record.download_id}", file=stdout)
+            return 0
     raise ValueError("Accion de componentes no reconocida.")
 
 

@@ -192,7 +192,6 @@ Status: `requires_ml`
 
 ## What Is Not Started
 
-- v32-D download manager and the later installer / onboarding / relocation expansion work
 - Creator Corpus Foundation
 - Semantic Retrieval Foundation
 - Feedback Learning Foundation
@@ -201,6 +200,17 @@ Status: `requires_ml`
 - automatic video editing
 
 Status: `not_started`
+
+## Component Manager v32-D Resumable Download Manager Foundation
+
+- resumable download manager exists as a filesystem-backed foundation
+- downloads are persisted under the controlled downloads root, separate from installation state
+- pause, resume, cancel, restart recovery, size checks, SHA-256 checks, and Range handling are implemented
+- the manager does not install or activate components automatically
+- local/test sources are allowed only with explicit test/developer approval; no product download sources are enabled yet
+- the FFmpeg installer can consume a verified artifact contractually, but the pipeline is not connected automatically
+
+Status: `implemented`
 
 ## Component Manager v32-A Foundation
 
