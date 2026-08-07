@@ -6,7 +6,7 @@ This plan breaks v32 into small, verifiable subphases. It is intentionally conse
 
 ## Current Status
 
-v32-A is implemented as a read-only foundation and v32-B is implemented as the local hardware/runtime benchmark foundation. The remaining subphases below stay valid and pending: FFmpeg management, download manager, installer, relocation, onboarding, and deeper GUI work.
+v32-A is implemented as a read-only foundation, v32-B is implemented as the local hardware/runtime benchmark foundation, and v32-C is now implemented as the managed FFmpeg boundary. The remaining subphases below stay valid and pending: download manager, runtime/model installer, relocation expansion, onboarding, and deeper GUI work.
 
 ## Phase Order
 
@@ -102,6 +102,10 @@ Gate:
 Non-scope:
 
 - audio algorithm changes
+
+Status:
+
+- implemented as a managed local package boundary with staging, health check, activation, repair, removal, and external fallback policy
 
 ### v32-D - Download Manager
 

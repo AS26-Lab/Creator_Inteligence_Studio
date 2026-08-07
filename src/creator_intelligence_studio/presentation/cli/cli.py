@@ -674,6 +674,23 @@ def build_parser() -> argparse.ArgumentParser:
     components_benchmark_status = components_benchmark_sub.add_parser("status", help="Mostrar el ultimo benchmark funcional persistido")
     components_benchmark_status.add_argument("--json", action="store_true")
 
+    components_ffmpeg = components_sub.add_parser("ffmpeg", help="Gestion explicita del boundary de FFmpeg")
+    components_ffmpeg_sub = components_ffmpeg.add_subparsers(dest="ffmpeg_action", required=True)
+    components_ffmpeg_status = components_ffmpeg_sub.add_parser("status", help="Mostrar el estado de FFmpeg")
+    components_ffmpeg_status.add_argument("--prefer-external", action="store_true")
+    components_ffmpeg_status.add_argument("--json", action="store_true")
+    components_ffmpeg_verify = components_ffmpeg_sub.add_parser("verify", help="Verificar FFmpeg y FFprobe")
+    components_ffmpeg_verify.add_argument("--prefer-external", action="store_true")
+    components_ffmpeg_verify.add_argument("--json", action="store_true")
+    components_ffmpeg_install = components_ffmpeg_sub.add_parser("install-local", help="Instalar FFmpeg desde un paquete local")
+    components_ffmpeg_install.add_argument("source_path")
+    components_ffmpeg_install.add_argument("--json", action="store_true")
+    components_ffmpeg_repair = components_ffmpeg_sub.add_parser("repair-local", help="Reparar FFmpeg desde una fuente local")
+    components_ffmpeg_repair.add_argument("source_path", nargs="?")
+    components_ffmpeg_repair.add_argument("--json", action="store_true")
+    components_ffmpeg_remove = components_ffmpeg_sub.add_parser("remove", help="Eliminar la instalacion administrada de FFmpeg")
+    components_ffmpeg_remove.add_argument("--json", action="store_true")
+
     build_audience_parser(subparsers)
     build_instagram_parser(subparsers)
     build_tiktok_parser(subparsers)
@@ -2440,6 +2457,42 @@ def _print_component_manager_status(report, stream) -> None:
             print(f"- {warning}", file=stream)
 
 
+def _print_ffmpeg_resolution(report, stream) -> None:
+    print("FFmpeg:", file=stream)
+    print(f"Estado: {report.state}", file=stream)
+    print(f"Tipo de instalacion: {report.installation_type}", file=stream)
+    print(f"Fuente: {report.source}", file=stream)
+    print(f"Ruta ffmpeg: {report.ffmpeg_path or 'no disponible'}", file=stream)
+    print(f"Ruta ffprobe: {report.ffprobe_path or 'no disponible'}", file=stream)
+    print(f"Version: {report.version or 'no verificada'}", file=stream)
+    print(f"Ubicacion administrada: {report.managed_location or 'no aplica'}", file=stream)
+    print(f"Salud: {report.health.state}", file=stream)
+    if report.health.warnings:
+        print("Advertencias:", file=stream)
+        for warning in report.health.warnings:
+            print(f"- {warning}", file=stream)
+    if report.health.error_message:
+        print(f"Error: {report.health.error_message}", file=stream)
+
+
+def _print_ffmpeg_result(result, stream) -> None:
+    print("Operacion de FFmpeg local:", file=stream)
+    print("Esta operacion no descarga archivos desde internet.", file=stream)
+    print(f"Estado: {result.state}", file=stream)
+    print(f"Fuente: {result.source_path or 'no disponible'}", file=stream)
+    print(f"Staging: {result.staged_path or 'no disponible'}", file=stream)
+    print(f"Activo: {result.active_path or 'no disponible'}", file=stream)
+    if result.reason:
+        print(f"Motivo: {result.reason}", file=stream)
+    if result.health is not None:
+        print(f"Salud: {result.health.state}", file=stream)
+        if result.health.warnings:
+            for warning in result.health.warnings:
+                print(f"Advertencia: {warning}", file=stream)
+    for error in result.errors:
+        print(f"Error: {error}", file=stream)
+
+
 def _print_acoustic_window(window: AcousticTimelineWindow, stream) -> None:
     print(
         f"[{window.window_index}] {window.start_seconds:.3f} -> {window.end_seconds:.3f} | "
@@ -2882,6 +2935,49 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
             print(f"Benchmark: {presentation.title}", file=stdout)
             print(f"Mensaje: {presentation.message}", file=stdout)
         return 0 if report.status.value in {"completed", "completed_with_warnings"} else 1
+    if args.action == "ffmpeg":
+        if args.ffmpeg_action == "status":
+            report = service.ffmpeg_service.resolve_media_tools(prefer_external=args.prefer_external).resolution
+            if args.json:
+                print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_ffmpeg_resolution(report, stdout)
+            return 0 if report.available else 1
+        if args.ffmpeg_action == "verify":
+            report = service.ffmpeg_service.resolve_media_tools(prefer_external=args.prefer_external).resolution
+            if args.json:
+                print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_ffmpeg_resolution(report, stdout)
+            return 0 if report.available else 1
+        if args.ffmpeg_action == "install-local":
+            result = service.ffmpeg_install_local(args.source_path)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_ffmpeg_result(result, stdout)
+            return 0 if result.state == "ready" else 1
+        if args.ffmpeg_action == "repair-local":
+            result = service.ffmpeg_repair_local(args.source_path)
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                _print_ffmpeg_result(result, stdout)
+            return 0 if result.state == "ready" else 1
+        if args.ffmpeg_action == "remove":
+            result = service.ffmpeg_remove()
+            if args.json:
+                print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), file=stdout)
+            else:
+                print("Operacion de FFmpeg local:", file=stdout)
+                print("Esta operacion no descarga archivos desde internet.", file=stdout)
+                print(f"Estado: {result.state}", file=stdout)
+                print(f"Ruta eliminada: {result.removed_path or 'no disponible'}", file=stdout)
+                if result.reason:
+                    print(f"Motivo: {result.reason}", file=stdout)
+                if result.fallback is not None:
+                    print(f"Fallback: {result.fallback.source} / {result.fallback.state}", file=stdout)
+            return 0 if result.state in {"removed", "fallback_selected"} else 1
     raise ValueError("Accion de componentes no reconocida.")
 
 

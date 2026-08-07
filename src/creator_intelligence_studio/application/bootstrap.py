@@ -235,6 +235,7 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_video_inspect
 from creator_intelligence_studio.infrastructure.persistence.sqlite_video_repository import (
     SQLiteVideoRepository,
 )
+from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
 from creator_intelligence_studio.presentation.cli.cli import dispatch, parse_args
 from creator_intelligence_studio.shared.paths import ProjectPaths, discover_project_root
 
@@ -335,12 +336,23 @@ def _load_service_context() -> ServiceContext:
     video_repository = SQLiteVideoRepository(database)
     prepared_audio_repository = SQLitePreparedAudioRepository(database)
     transcription_repository = SQLiteTranscriptionRepository(database)
+    component_manager_service = ComponentManagerService(
+        paths=context.paths,
+        repository=SQLiteComponentManagerRepository(database),
+        logger=context.logger,
+    )
+    media_tool_locator = MediaToolLocator(
+        settings=context.settings,
+        project_root=context.paths.project_root,
+        resolution_service=component_manager_service,
+    )
     media_service = build_media_inspection_service(
         settings=context.settings,
         paths=context.paths,
         video_repository=video_repository,
         inspection_repository=inspection_repository,
         logger=context.logger,
+        tool_locator=media_tool_locator,
     )
     audio_service = build_audio_preparation_service(
         settings=context.settings,
@@ -349,6 +361,7 @@ def _load_service_context() -> ServiceContext:
         inspection_service=media_service,
         audio_repository=prepared_audio_repository,
         logger=context.logger,
+        tool_locator=media_tool_locator,
     )
     transcription_service = build_transcription_service(
         settings=context.settings,
@@ -356,11 +369,6 @@ def _load_service_context() -> ServiceContext:
         video_repository=video_repository,
         prepared_audio_repository=prepared_audio_repository,
         transcription_repository=transcription_repository,
-        logger=context.logger,
-    )
-    component_manager_service = ComponentManagerService(
-        paths=context.paths,
-        repository=SQLiteComponentManagerRepository(database),
         logger=context.logger,
     )
     acoustic_service = build_acoustic_analysis_service(
@@ -379,6 +387,7 @@ def _load_service_context() -> ServiceContext:
         inspection_repository=inspection_repository,
         visual_repository=SQLiteVisualAnalysisRepository(database),
         logger=context.logger,
+        tool_locator=media_tool_locator,
     )
     multimodal_service = build_multimodal_analysis_service(
         settings=context.settings,
@@ -417,6 +426,7 @@ def _load_service_context() -> ServiceContext:
         repository=SQLiteClipRenderingRepository(database),
         subtitle_service=subtitle_service,
         logger=context.logger,
+        tool_locator=media_tool_locator,
     )
     analytics_repository = SQLiteAnalyticsRepository(database)
     analytics_service, _ = build_analytics_services(

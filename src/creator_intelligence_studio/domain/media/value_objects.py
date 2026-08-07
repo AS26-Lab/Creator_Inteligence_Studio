@@ -174,6 +174,12 @@ class MediaToolInfo:
     version: str | None
     available: bool
     error_message: str | None = None
+    installation_type: str | None = None
+    source: str | None = None
+    health_status: str | None = None
+    managed: bool = False
+    component_id: str | None = None
+    reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -182,6 +188,12 @@ class MediaToolInfo:
             "version": self.version,
             "available": self.available,
             "error_message": self.error_message,
+            "installation_type": self.installation_type,
+            "source": self.source,
+            "health_status": self.health_status,
+            "managed": self.managed,
+            "component_id": self.component_id,
+            "reason": self.reason,
         }
 
 
@@ -288,4 +300,3 @@ class VideoInspection:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
-

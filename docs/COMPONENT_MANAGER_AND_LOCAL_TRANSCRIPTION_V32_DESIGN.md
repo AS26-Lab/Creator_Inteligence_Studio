@@ -64,6 +64,18 @@ flowchart TD
 | `ComponentVerifier` | hash/manifest/functional test verification | no silent activation |
 | `FFmpegComponentAdapter` | locate, validate, and expose FFmpeg/ffprobe | replaces ad hoc discovery over time |
 
+## v32-C Boundary
+
+v32-C narrows the FFmpeg adapter into a managed local boundary:
+
+- managed installations live under the component root
+- external detections remain read-only
+- the resolver chooses managed first unless explicit external preference is requested
+- audio preparation and media inspection resolve executables through the central locator
+- repair, removal, and relocation only apply to managed installs
+
+This does not introduce the HTTP downloader. Local package installation only is the supported activation path in v32-C.
+
 ## Proposed Domain Contract
 
 ### `ComponentCatalogEntry`

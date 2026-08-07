@@ -36,6 +36,8 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-08-06 | AI Runtime and Provider Orchestration Foundation v31 is real-call validated and closed out on OpenAI Responses API | approved | confirm the v31 foundation is implemented, validated, and ready to hand off to the next approved phase without reopening request-contract drift | `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_RUNTIME_OPENAI_PREVENTIVE_AUDIT.md` | treating the foundation as theoretical or unfinished after a confirmed real-call completion |
 | 2026-08-06 | Component Manager and Local Transcription Foundation v32-A is implemented as a read-only catalog/hardware/resolver foundation | approved | establish the managed component contract without activating downloads, installers, or benchmark gates | `docs/COMPONENT_MANAGER_AND_LOCAL_TRANSCRIPTION_V32_DESIGN.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | hidden downloads, installer drift, and premature onboarding claims |
 | 2026-08-06 | Local transcription benchmark readiness must be explicit, fixture-based, and opt-in | approved | separate functional proof from hardware detection so GPU/runtime claims are only promoted after a local benchmark | `docs/COMPONENT_MANAGER_V32_B_HARDWARE_BENCHMARK.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | treating advisory detection as functional certification |
+| 2026-08-07 | FFmpeg must be resolved through a central media-tool policy that prefers managed local installations over read-only external detections | approved | keep a single source of truth for audio and media tooling without forcing PATH dependence or modifying user-owned installations | `docs/COMPONENT_MANAGER_V32_C_MANAGED_FFMPEG.md`, `docs/COMPONENT_MANAGER_AND_LOCAL_TRANSCRIPTION_V32_DESIGN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | ad hoc PATH-first discovery and split resolver behavior |
+| 2026-08-07 | Managed FFmpeg installation, repair, and removal are local-only operations with staging and health verification, and no HTTP downloader is included in v32-C | approved | satisfy the component boundary without introducing network download logic or arbitrary installer execution | `docs/COMPONENT_MANAGER_V32_C_MANAGED_FFMPEG.md`, `docs/COMPONENT_MANAGER_V32_IMPLEMENTATION_PLAN.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | remote download assumptions, PATH-global changes, and unsafe installer execution |
 
 ## Replaced Or Limited Decisions
 
@@ -51,5 +53,6 @@ This register keeps the canonical decisions, their status, and what they replace
 - model registry schema and lifecycle;
 - embedding model winner and vector-store backend selection;
 - component manager packaging and download policy details;
+- component manager packaging and download policy details remain limited to local sources for v32-C;
 - future collective intelligence server rules once enough data exists.
 - whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.

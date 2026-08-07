@@ -72,6 +72,18 @@ class ComponentEventType(str, Enum):
     HARDWARE_INVENTORY_COMPLETED = "hardware_inventory_completed"
     TRANSCRIPTION_CAPABILITY_RESOLVED = "transcription_capability_resolved"
     HIDDEN_DOWNLOAD_BLOCKED = "hidden_download_blocked"
+    FFMPEG_DETECTION_STARTED = "ffmpeg_detection_started"
+    FFMPEG_DETECTED_EXTERNAL = "ffmpeg_detected_external"
+    FFMPEG_MANAGED_INSTALL_STARTED = "ffmpeg_managed_install_started"
+    FFMPEG_MANAGED_INSTALL_STAGED = "ffmpeg_managed_install_staged"
+    FFMPEG_HEALTH_CHECK_STARTED = "ffmpeg_health_check_started"
+    FFMPEG_HEALTH_CHECK_COMPLETED = "ffmpeg_health_check_completed"
+    FFMPEG_MANAGED_ACTIVATED = "ffmpeg_managed_activated"
+    FFMPEG_MANAGED_INSTALL_FAILED = "ffmpeg_managed_install_failed"
+    FFMPEG_REPAIR_STARTED = "ffmpeg_repair_started"
+    FFMPEG_REPAIR_COMPLETED = "ffmpeg_repair_completed"
+    FFMPEG_REMOVED = "ffmpeg_removed"
+    FFMPEG_FALLBACK_SELECTED = "ffmpeg_fallback_selected"
 
 
 @dataclass(frozen=True, slots=True)

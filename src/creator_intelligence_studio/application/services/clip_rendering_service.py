@@ -165,6 +165,7 @@ class ClipRenderService:
         repository: ClipRenderRepository,
         subtitle_service: SubtitleService | None = None,
         logger: logging.Logger | None = None,
+        tool_locator: MediaToolLocator | None = None,
     ) -> None:
         self.settings = settings
         self.paths = paths
@@ -176,7 +177,8 @@ class ClipRenderService:
         self.logger = logger or logging.getLogger("creator_intelligence_studio.clip_rendering")
         self._output_root = self.paths.project_root / "exports" / "clips"
         self._delivery_root_path = self.paths.project_root / "exports" / "deliveries"
-        tools = MediaToolLocator(settings=settings, project_root=paths.project_root).discover()
+        self.tool_locator = tool_locator or MediaToolLocator(settings=settings, project_root=paths.project_root)
+        tools = self.tool_locator.discover()
         ffmpeg_path = Path(tools.ffmpeg.path) if tools.ffmpeg.available and tools.ffmpeg.path else None
         ffprobe_path = Path(tools.ffprobe.path) if tools.ffprobe.available and tools.ffprobe.path else None
         self._renderer = FFmpegClipRenderer(ffmpeg_path)
@@ -1514,6 +1516,7 @@ def build_clip_render_service(
     repository: ClipRenderRepository,
     subtitle_service: SubtitleService | None = None,
     logger: logging.Logger | None = None,
+    tool_locator: MediaToolLocator | None = None,
 ) -> ClipRenderService:
     return ClipRenderService(
         settings=settings,
@@ -1524,4 +1527,5 @@ def build_clip_render_service(
         repository=repository,
         subtitle_service=subtitle_service,
         logger=logger,
+        tool_locator=tool_locator,
     )

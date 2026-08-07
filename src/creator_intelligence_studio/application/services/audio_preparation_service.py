@@ -615,6 +615,12 @@ class AudioPreparationService:
                 snapshot=snapshot,
                 errors=(ffmpeg_tool.error_message or "ffmpeg no esta disponible.",),
             )
+        self.logger.info(
+            "Audio preparation using FFmpeg source=%s version=%s health=%s",
+            getattr(ffmpeg_tool, "source", None) or getattr(ffmpeg_tool, "installation_type", None) or "unknown",
+            ffmpeg_tool.version or "unknown",
+            getattr(ffmpeg_tool, "health_status", None) or "unknown",
+        )
 
         candidates = self._load_audio_streams(inspection_report)
         if not candidates:
@@ -655,13 +661,21 @@ class AudioPreparationService:
         started_at = _utc_now()
         try:
             extractor = FFmpegAudioExtractor(Path(ffmpeg_tool.path), timeout_seconds=self.settings.audio_extraction_timeout_seconds)
-            extractor.extract(
-                source_path=Path(video.source_path),
-                selected_stream_index=selected_stream.index,
-                destination_path=working_audio_path,
-                sample_rate_hz=self.config.sample_rate_hz,
-                channels=self.config.channels,
-            )
+            acquire_lease = getattr(self.tool_locator, "acquire_lease", None)
+            if callable(acquire_lease):
+                lease_context = acquire_lease("ffmpeg")
+            else:
+                from contextlib import nullcontext
+
+                lease_context = nullcontext()
+            with lease_context:
+                extractor.extract(
+                    source_path=Path(video.source_path),
+                    selected_stream_index=selected_stream.index,
+                    destination_path=working_audio_path,
+                    sample_rate_hz=self.config.sample_rate_hz,
+                    channels=self.config.channels,
+                )
             wav_validation = inspect_wav_file(working_audio_path)
             if not _wav_matches_expected(wav_validation, self.config):
                 raise AudioValidationError(
@@ -835,6 +849,7 @@ def build_audio_preparation_service(
     inspection_service: MediaInspectionService,
     audio_repository: PreparedAudioRepository,
     logger: logging.Logger | None = None,
+    tool_locator: MediaToolLocator | None = None,
 ) -> AudioPreparationService:
     """Construye el servicio de preparacion de audio."""
 
@@ -845,4 +860,5 @@ def build_audio_preparation_service(
         inspection_service=inspection_service,
         audio_repository=audio_repository,
         logger=logger,
+        tool_locator=tool_locator,
     )

@@ -219,12 +219,26 @@ class TranscriptionCapabilityResolver:
 
         if ffmpeg_installation.installation_status not in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}:
             missing.append("ffmpeg")
-            blocking.append("Falta instalar o detectar FFmpeg para preparar audio desde video.")
-            actions.append("Instala FFmpeg o configura una ruta valida antes de continuar.")
+            if ffmpeg_installation.installation_status in {ComponentInstallationStatus.INVALID, ComponentInstallationStatus.REPAIR_REQUIRED}:
+                blocking.append("FFmpeg administrado necesita reparacion antes de poder usarse.")
+                actions.append("Repara o reinstala la instalacion administrada de FFmpeg.")
+            elif ffmpeg_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+                blocking.append("FFmpeg es incompatible con este entorno.")
+                actions.append("Usa una instalacion compatible de FFmpeg.")
+            else:
+                blocking.append("Falta instalar o detectar FFmpeg para preparar audio desde video.")
+                actions.append("Instala FFmpeg o configura una ruta valida antes de continuar.")
         if ffprobe_installation.installation_status not in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}:
             missing.append("ffprobe")
-            blocking.append("Falta instalar o detectar FFprobe para inspeccionar medios.")
-            actions.append("Instala FFprobe o configura una ruta valida antes de continuar.")
+            if ffprobe_installation.installation_status in {ComponentInstallationStatus.INVALID, ComponentInstallationStatus.REPAIR_REQUIRED}:
+                blocking.append("FFprobe administrado necesita reparacion antes de poder usarse.")
+                actions.append("Repara o reinstala la instalacion administrada de FFprobe.")
+            elif ffprobe_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+                blocking.append("FFprobe es incompatible con este entorno.")
+                actions.append("Usa una instalacion compatible de FFprobe.")
+            else:
+                blocking.append("Falta instalar o detectar FFprobe para inspeccionar medios.")
+                actions.append("Instala FFprobe o configura una ruta valida antes de continuar.")
         if runtime_installation.installation_status not in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}:
             missing.append("transcription-runtime.ctranslate2")
             blocking.append("Falta el runtime local de transcripcion.")
@@ -297,6 +311,10 @@ class TranscriptionCapabilityResolver:
 
         if not blocking and selected_profile and selected_profile.profile_id == "fast":
             actions.append("El perfil Rapido esta listo para usarse con CPU.")
+        if ffmpeg_installation.managed is False and ffmpeg_installation.installation_status in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED}:
+            warnings.append("Se esta usando una instalacion externa de FFmpeg.")
+        if ffprobe_installation.managed is False and ffprobe_installation.installation_status in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED}:
+            warnings.append("Se esta usando una instalacion externa de FFprobe.")
 
         evidence = [
             f"catalog_version={catalog.catalog_version}",

@@ -192,7 +192,7 @@ Status: `requires_ml`
 
 ## What Is Not Started
 
-- Component Manager and Local Transcription Foundation as a formal AI stage beyond the v32-A foundation
+- v32-D download manager and the later installer / onboarding / relocation expansion work
 - Creator Corpus Foundation
 - Semantic Retrieval Foundation
 - Feedback Learning Foundation
@@ -221,6 +221,22 @@ Status: `not_started`
 - the capability resolver can read the latest successful benchmark evidence without mutating state
 - the benchmark path does not download, install, relocate, or update anything automatically
 - CLI read-only benchmark inspection is available through `components benchmark` and `components benchmark status`
+
+Status: `implemented`
+
+## Component Manager v32-C Managed FFmpeg Boundary
+
+- managed FFmpeg and FFprobe are now represented as a single local bundle with two executables
+- external FFmpeg detection remains read-only and is never repaired, moved, or removed by the app
+- the component manager can install from a local directory or local ZIP package through staging
+- activation is performed only after health checking and validation
+- the health checker verifies both binaries and uses a local fixture for ffprobe / ffmpeg execution checks
+- repair is local-only and preserves the previous active installation until replacement succeeds
+- removal is available for managed installs only and can fall back to external detection when present
+- the central media-tool resolver now feeds audio preparation, media inspection, and transcription capability resolution
+- CLI support is explicit through `components ffmpeg status`, `verify`, `install-local`, `repair-local`, and `remove`
+- no HTTP downloader is implemented
+- no PATH-global mutation is implemented
 
 Status: `implemented`
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from creator_intelligence_studio.domain.components.catalog import build_default_component_catalog, build_default_transcription_profiles
 from creator_intelligence_studio.domain.components.entities import (
@@ -17,11 +18,18 @@ from creator_intelligence_studio.domain.components.entities import (
     RuntimeCheckStatus,
 )
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
+from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
+from .ffmpeg_component_service import (
+    FFmpegInstallResult,
+    FFmpegManagedComponentService,
+    FFmpegRemovalResult,
+    FFmpegResolutionReport,
+)
 from .transcription_runtime_benchmark_service import TranscriptionRuntimeBenchmarkService
 from .hardware_capability_service import HardwareCapabilityReport, HardwareCapabilityService
 from .transcription_capability_resolver import TranscriptionCapabilityPresentation, TranscriptionCapabilityReport, TranscriptionCapabilityResolver
@@ -64,6 +72,7 @@ class ComponentManagerService:
         self.repository = repository
         self.model_manager = model_manager or TranscriptionModelManager(paths.models_directory)
         self.logger = logger or logging.getLogger("creator_intelligence_studio.components")
+        self.ffmpeg_service = FFmpegManagedComponentService(paths=paths, repository=repository, logger=self.logger)
         self.tool_locator = MediaToolLocator(project_root=paths.project_root)
         self.hardware_service = HardwareCapabilityService(paths=paths, repository=repository, logger=self.logger)
         self.resolver = TranscriptionCapabilityResolver(
@@ -82,16 +91,49 @@ class ComponentManagerService:
             logger=self.logger,
         )
 
+    def resolve_media_tools(self, *, prefer_external: bool = False):
+        return self.ffmpeg_service.resolve_media_tools(prefer_external=prefer_external)
+
+    def ffmpeg_status(self) -> FFmpegResolutionReport:
+        return self.ffmpeg_service.status()
+
+    def ffmpeg_verify(self) -> FFmpegResolutionReport:
+        return self.ffmpeg_service.status()
+
+    def ffmpeg_install_local(self, source_path: str | Path) -> FFmpegInstallResult:
+        return self.ffmpeg_service.install_local(source_path)
+
+    def ffmpeg_repair_local(self, source_path: str | Path | None = None) -> FFmpegInstallResult:
+        return self.ffmpeg_service.repair_local(source_path)
+
+    def ffmpeg_remove(self) -> FFmpegRemovalResult:
+        return self.ffmpeg_service.remove()
+
     def catalog(self) -> ComponentCatalog:
         catalog = self.repository.get_catalog()
         if not catalog.entries:
             return build_default_component_catalog()
         return catalog
 
-    def _tool_installation(self, component_id: str, *, available: bool, path: str | None, version: str | None, error_message: str | None) -> ComponentInstallation:
+    def _tool_installation(self, component_id: str, *, tool: MediaToolInfo) -> ComponentInstallation:
+        available = tool.available
+        path = tool.path
+        version = tool.version
+        error_message = tool.error_message
+        installation_type = tool.installation_type or ("managed" if tool.managed else "externally_detected")
+        managed = bool(tool.managed)
         if available:
             status = ComponentInstallationStatus.READY
             health_status = RuntimeCheckStatus.READY
+        elif tool.health_status in {"partial", "missing"}:
+            status = ComponentInstallationStatus.MISSING
+            health_status = RuntimeCheckStatus.NOT_CHECKED
+        elif tool.health_status in {"corrupt", "executable_failed", "probe_failed", "timed_out"}:
+            status = ComponentInstallationStatus.REPAIR_REQUIRED if managed else ComponentInstallationStatus.INVALID
+            health_status = RuntimeCheckStatus.FAILED
+        elif tool.health_status == "incompatible":
+            status = ComponentInstallationStatus.INCOMPATIBLE
+            health_status = RuntimeCheckStatus.INCOMPATIBLE
         else:
             status = ComponentInstallationStatus.MISSING
             health_status = RuntimeCheckStatus.NOT_CHECKED
@@ -100,21 +142,26 @@ class ComponentManagerService:
             installation_status=status,
             installed_version=version,
             revision=None,
-            install_type=ComponentInstallKind.EXTERNALLY_DETECTED,
+            install_type=ComponentInstallKind.MANAGED if managed else ComponentInstallKind.EXTERNALLY_DETECTED,
             location_path=path,
-            location_reference="path" if path else None,
+            location_reference="managed_root" if managed and path else ("path" if path else None),
             detected_at=None,
             verified_at=None,
             health_status=health_status,
-            source="ffmpeg_locator",
-            managed=False,
+            source=tool.source or "ffmpeg_locator",
+            managed=managed,
             last_error_message=error_message,
-            metadata={"version": version} if version else {},
+            metadata={
+                "version": version,
+                "installation_type": installation_type,
+                "health_status": tool.health_status,
+                "reason": tool.reason,
+            } if version or tool.health_status or tool.reason else {},
         )
 
     def inspect_installations(self) -> tuple[ComponentInstallation, ...]:
         catalog = self.catalog()
-        tools = self.tool_locator.discover()
+        tools = self.resolve_media_tools()
         installations: list[ComponentInstallation] = []
         for entry in catalog.entries:
             if entry.category == ComponentCategory.FFMPEG:
@@ -122,10 +169,7 @@ class ComponentManagerService:
                 installations.append(
                     self._tool_installation(
                         entry.component_id,
-                        available=tool.available,
-                        path=tool.path,
-                        version=tool.version,
-                        error_message=tool.error_message,
+                        tool=tool,
                     )
                 )
                 continue

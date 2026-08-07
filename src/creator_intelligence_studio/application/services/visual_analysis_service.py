@@ -508,18 +508,19 @@ class VisualAnalysisService:
         if progress_callback is not None:
             progress_callback("Preparando video", 0.05)
         try:
-            base_samples = sample_frames(
-                ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
-                source_path=Path(video.source_path),
-                duration_seconds=inspection.duration_seconds,
-                source_width=inspection.width,
-                source_height=inspection.height,
-                sample_fps=self.options.sample_fps,
-                max_sample_frames=self.options.max_sample_frames,
-                target_width=self.options.target_sample_width,
-                target_height=self.options.target_sample_height,
-                timeout_seconds=max(30.0, self.settings.audio_extraction_timeout_seconds),
-            )
+            with self.tool_locator.acquire_lease("ffmpeg"):
+                base_samples = sample_frames(
+                    ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
+                    source_path=Path(video.source_path),
+                    duration_seconds=inspection.duration_seconds,
+                    source_width=inspection.width,
+                    source_height=inspection.height,
+                    sample_fps=self.options.sample_fps,
+                    max_sample_frames=self.options.max_sample_frames,
+                    target_width=self.options.target_sample_width,
+                    target_height=self.options.target_sample_height,
+                    timeout_seconds=max(30.0, self.settings.audio_extraction_timeout_seconds),
+                )
         except FrameSamplingError as exc:
             return self._persist_failure(
                 video=video,
@@ -536,12 +537,13 @@ class VisualAnalysisService:
         refine_timestamps = [cut.start_seconds for cut in provisional_cuts[: min(8, len(provisional_cuts))]]
         if refine_timestamps:
             try:
-                refined_samples = self._refine_samples(
-                    ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
-                    video=video,
-                    inspection=inspection,
-                    candidate_timestamps=refine_timestamps,
-                )
+                with self.tool_locator.acquire_lease("ffmpeg"):
+                    refined_samples = self._refine_samples(
+                        ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
+                        video=video,
+                        inspection=inspection,
+                        candidate_timestamps=refine_timestamps,
+                    )
             except FrameSamplingError as exc:
                 return self._persist_failure(
                     video=video,
@@ -581,14 +583,15 @@ class VisualAnalysisService:
                 scene_metrics = [metric for metric in metrics if scene.start_seconds <= metric.timestamp_seconds < scene.end_seconds]
                 representative = max(scene_metrics or metrics, key=lambda metric: (metric.contrast + metric.motion_score * 0.5, -metric.timestamp_seconds))
                 temp_path = temp_keyframe_root / f"scene-{scene.scene_index:04d}.jpg"
-                extract_keyframe(
-                    ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
-                    source_path=Path(video.source_path),
-                    destination_path=temp_path,
-                    timestamp_seconds=representative.timestamp_seconds,
-                    width=self.options.keyframe_width,
-                    timeout_seconds=max(30.0, self.settings.audio_extraction_timeout_seconds),
-                )
+                with self.tool_locator.acquire_lease("ffmpeg"):
+                    extract_keyframe(
+                        ffmpeg_path=Path(tools.ffmpeg.path) if tools.ffmpeg.path else Path("ffmpeg"),
+                        source_path=Path(video.source_path),
+                        destination_path=temp_path,
+                        timestamp_seconds=representative.timestamp_seconds,
+                        width=self.options.keyframe_width,
+                        timeout_seconds=max(30.0, self.settings.audio_extraction_timeout_seconds),
+                    )
                 final_path = build_keyframe_path(self.paths.project_root / "cache", video.id, keyframe_fingerprint, scene.scene_index)
                 final_path.parent.mkdir(parents=True, exist_ok=True)
                 temp_path.replace(final_path)
@@ -855,6 +858,7 @@ def build_visual_analysis_service(
     inspection_repository: SQLiteVideoInspectionRepository,
     visual_repository: VisualAnalysisRepository,
     logger: logging.Logger | None = None,
+    tool_locator: MediaToolLocator | None = None,
 ) -> VisualAnalysisService:
     return VisualAnalysisService(
         settings=settings,
@@ -863,4 +867,5 @@ def build_visual_analysis_service(
         inspection_repository=inspection_repository,
         visual_repository=visual_repository,
         logger=logger,
+        tool_locator=tool_locator,
     )

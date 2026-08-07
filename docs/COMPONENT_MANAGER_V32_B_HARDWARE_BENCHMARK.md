@@ -143,4 +143,6 @@ Representative AI Runtime GUI/orchestrator tests were also re-run to confirm v31
 
 ## Next Subphase
 
-v32-C should wrap FFmpeg as a managed local component boundary while keeping the existing local transcription flow intact.
+v32-C is now implemented as a managed FFmpeg boundary that preserves the existing local transcription flow and keeps benchmark resolution read-only.
+
+The benchmark layer continues to rely on the central media-tool resolver, so managed FFmpeg can win by policy while external FFmpeg remains a read-only fallback.

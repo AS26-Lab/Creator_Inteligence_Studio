@@ -6,8 +6,9 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Mapping
+from typing import Iterator, Mapping, Protocol
 
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 
@@ -25,10 +26,18 @@ class MediaTools:
 
     ffmpeg: MediaToolInfo
     ffprobe: MediaToolInfo
+    resolution: object | None = None
 
     @property
     def available(self) -> bool:
         return self.ffmpeg.available and self.ffprobe.available
+
+
+class MediaToolResolutionService(Protocol):
+    """Contrato minimo para resolucion central de ffmpeg/ffprobe."""
+
+    def resolve_media_tools(self, *, prefer_external: bool = False) -> MediaTools:
+        raise NotImplementedError
 
 
 def _deduplicate_paths(paths: list[Path]) -> list[Path]:
@@ -64,13 +73,29 @@ class MediaToolLocator:
         settings: AppSettings | None = None,
         project_root: Path | None = None,
         env: Mapping[str, str] | None = None,
+        resolution_service: MediaToolResolutionService | None = None,
     ) -> None:
         self.settings = settings
         self.project_root = project_root
         self.env = os.environ if env is None else env
+        self.resolution_service = resolution_service
         self._portable_directory = (
             (project_root / "tools" / "ffmpeg" / "bin") if project_root is not None else None
         )
+
+    @contextmanager
+    def acquire_lease(self, executable: str = "ffmpeg") -> Iterator[None]:
+        service = self.resolution_service
+        lease = None
+        if service is not None:
+            ffmpeg_service = getattr(service, "ffmpeg_service", None)
+            if ffmpeg_service is not None:
+                lease = getattr(ffmpeg_service, "acquire_lease", None)
+        if callable(lease):
+            with lease(executable):
+                yield
+        else:
+            yield
 
     def _configured_paths(self, executable: str) -> list[Path]:
         candidates: list[Path] = []
@@ -142,6 +167,11 @@ class MediaToolLocator:
         return first_line or None, None
 
     def locate(self, executable: str) -> MediaToolInfo:
+        if self.resolution_service is not None:
+            tools = self.resolution_service.resolve_media_tools(prefer_external=False)
+            selected = tools.ffmpeg if executable == "ffmpeg" else tools.ffprobe
+            if selected is not None:
+                return selected
         for candidate in self._path_candidates(executable):
             if not candidate.exists() or not candidate.is_file():
                 continue
@@ -152,6 +182,12 @@ class MediaToolLocator:
                 version=version,
                 available=version is not None,
                 error_message=error_message,
+                installation_type="externally_detected",
+                source="path_discovery",
+                health_status="ready" if version is not None else "failed",
+                managed=False,
+                component_id=executable,
+                reason="external_discovery",
             )
         return MediaToolInfo(
             name=executable,
@@ -163,6 +199,12 @@ class MediaToolLocator:
                 f"de entorno, en PATH, en {self._portable_directory or 'la carpeta portable'} "
                 f"ni en ubicaciones comunes de Windows."
             ),
+            installation_type="missing",
+            source="unavailable",
+            health_status="missing",
+            managed=False,
+            component_id=executable,
+            reason="not_found",
         )
 
     def discover(self) -> MediaTools:

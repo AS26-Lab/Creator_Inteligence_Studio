@@ -166,6 +166,15 @@ class MediaInspectionService:
             warnings.append(tools.ffprobe.error_message or "ffprobe no esta disponible.")
         if not tools.ffmpeg.available:
             warnings.append(tools.ffmpeg.error_message or "ffmpeg no esta disponible.")
+        self.logger.info(
+            "Media inspection using FFmpeg source=%s version=%s health=%s and FFprobe source=%s version=%s health=%s",
+            tools.ffmpeg.source or tools.ffmpeg.installation_type or "unknown",
+            tools.ffmpeg.version or "unknown",
+            tools.ffmpeg.health_status or "unknown",
+            tools.ffprobe.source or tools.ffprobe.installation_type or "unknown",
+            tools.ffprobe.version or "unknown",
+            tools.ffprobe.health_status or "unknown",
+        )
         return MediaToolsReport(ffmpeg=tools.ffmpeg, ffprobe=tools.ffprobe, warnings=tuple(warnings))
 
     def _require_video(self, video_id: str) -> VideoAsset:
@@ -332,7 +341,8 @@ class MediaInspectionService:
 
         try:
             ffprobe_client = FFprobeClient(Path(tools.ffprobe.path or ""), timeout_seconds=30.0)
-            probe_result = ffprobe_client.inspect(Path(video.source_path))
+            with self.tool_locator.acquire_lease("ffprobe"):
+                probe_result = ffprobe_client.inspect(Path(video.source_path))
             summary = parse_ffprobe_json(probe_result.payload)
             inspection = self._build_inspection_entity(
                 video=video,
@@ -348,12 +358,13 @@ class MediaInspectionService:
             if tools.ffmpeg.available:
                 try:
                     destination = build_thumbnail_path(self.cache_root, video.id, THUMBNAIL_CACHE_VERSION)
-                    thumbnail_result = generate_initial_thumbnail(
-                        ffmpeg_path=Path(tools.ffmpeg.path or ""),
-                        source_path=Path(video.source_path),
-                        destination_path=destination,
-                        duration_seconds=summary.duration_seconds,
-                    )
+                    with self.tool_locator.acquire_lease("ffmpeg"):
+                        thumbnail_result = generate_initial_thumbnail(
+                            ffmpeg_path=Path(tools.ffmpeg.path or ""),
+                            source_path=Path(video.source_path),
+                            destination_path=destination,
+                            duration_seconds=summary.duration_seconds,
+                        )
                     thumbnail_relative_path = str(thumbnail_result.path.relative_to(self.cache_root))
                     inspection = self._build_inspection_entity(
                         video=video,
@@ -422,6 +433,7 @@ def build_media_inspection_service(
     video_repository: VideoRepository,
     inspection_repository: VideoInspectionRepository,
     logger: logging.Logger | None = None,
+    tool_locator: MediaToolLocator | None = None,
 ) -> MediaInspectionService:
     """Construye el servicio de inspeccion tecnica."""
 
@@ -431,5 +443,5 @@ def build_media_inspection_service(
         video_repository=video_repository,
         inspection_repository=inspection_repository,
         logger=logger,
-        tool_locator=MediaToolLocator(settings=settings, project_root=paths.project_root),
+        tool_locator=tool_locator or MediaToolLocator(settings=settings, project_root=paths.project_root),
     )

@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from creator_intelligence_studio.application.services.hardware_capability_service import HardwareCapabilityService
+from creator_intelligence_studio.application.services.ffmpeg_component_service import (
+    FFmpegHealthCheckResult,
+    FFmpegHealthChecker,
+    FFmpegManagedComponentService,
+    FFmpegVersionInfo,
+)
 from creator_intelligence_studio.application.services.transcription_capability_resolver import (
     TranscriptionCapabilityResolver,
 )
@@ -65,7 +73,12 @@ class InMemoryComponentRepository(ComponentManagerRepository):
         return self._catalog.get_entry(component_id)
 
     def upsert_catalog_entry(self, entry: ComponentCatalogEntry) -> ComponentCatalogEntry:
-        raise NotImplementedError
+        self._catalog = ComponentCatalog(
+            catalog_version=max(self._catalog.catalog_version, entry.catalog_version),
+            entries=tuple([item for item in self._catalog.entries if item.component_id != entry.component_id] + [entry]),
+            reviewed_at=self._catalog.reviewed_at,
+        )
+        return entry
 
     def list_installations(self) -> tuple[ComponentInstallation, ...]:
         return tuple(self._installations)
@@ -78,7 +91,9 @@ class InMemoryComponentRepository(ComponentManagerRepository):
         return None
 
     def upsert_installation(self, installation: ComponentInstallation) -> ComponentInstallation:
-        raise NotImplementedError
+        self._installations = [item for item in self._installations if item.component_id != installation.component_id]
+        self._installations.append(installation)
+        return installation
 
     def list_hardware_profiles(self) -> tuple[HardwareProfile, ...]:
         return (self._hardware_profile,) if self._hardware_profile is not None else ()
@@ -359,6 +374,237 @@ class ComponentCatalogContractTests(unittest.TestCase):
         balanced = next(profile for profile in profiles if profile.profile_id == "balanced")
         self.assertEqual(balanced.status, TranscriptionProfileStatus.PROVISIONAL)
         self.assertEqual(balanced.version, 1)
+
+
+class _ReadyHealthChecker:
+    def check_bundle(self, *, ffmpeg_path: Path, ffprobe_path: Path, fixture_root: Path) -> FFmpegHealthCheckResult:
+        version = FFmpegVersionInfo(raw_line="ffmpeg version 1.2.3", parsed_version="1.2.3", build_metadata=None)
+        return FFmpegHealthCheckResult(
+            state="ready",
+            ffmpeg_exists=True,
+            ffprobe_exists=True,
+            ffmpeg_version=version,
+            ffprobe_version=FFmpegVersionInfo(raw_line="ffprobe version 1.2.3", parsed_version="1.2.3", build_metadata=None),
+            ffmpeg_path=str(ffmpeg_path),
+            ffprobe_path=str(ffprobe_path),
+            fixture_path=str(fixture_root / "health-fixtures" / "ffmpeg_health.wav"),
+            warnings=(),
+            error_message=None,
+            detected_architecture="AMD64",
+            verified_at=datetime.now(tz=timezone.utc),
+        )
+
+
+class _BrokenHealthChecker:
+    def check_bundle(self, *, ffmpeg_path: Path, ffprobe_path: Path, fixture_root: Path) -> FFmpegHealthCheckResult:
+        return FFmpegHealthCheckResult(
+            state="corrupt",
+            ffmpeg_exists=True,
+            ffprobe_exists=True,
+            ffmpeg_version=None,
+            ffprobe_version=None,
+            ffmpeg_path=str(ffmpeg_path),
+            ffprobe_path=str(ffprobe_path),
+            fixture_path=str(fixture_root / "health-fixtures" / "ffmpeg_health.wav"),
+            warnings=("corrupt",),
+            error_message="corrupt",
+            detected_architecture="AMD64",
+            verified_at=datetime.now(tz=timezone.utc),
+        )
+
+
+class FfmpegBoundaryContractTests(unittest.TestCase):
+    def _paths(self, temp_dir: str) -> ProjectPaths:
+        settings = AppSettings(
+            application_name="Creator Intelligence Studio",
+            environment="development",
+            log_level="INFO",
+            data_directory="data",
+            logs_directory="logs",
+            models_directory="models",
+            artifacts_directory="artifacts",
+            preferred_compute_backend="cuda",
+            allow_cpu_basic_mode=True,
+            external_ai_enabled=False,
+            database_filename="runtime.db",
+            database_timeout_seconds=5.0,
+            audio_cache_version="v1",
+        )
+        root = Path(temp_dir)
+        paths = ProjectPaths.from_settings(root, settings)
+        paths.ensure_runtime_directories()
+        return paths
+
+    def test_install_local_package_success_and_managed_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(temp_dir)
+            repo = InMemoryComponentRepository()
+            service = FFmpegManagedComponentService(paths=paths, repository=repo, health_checker=_ReadyHealthChecker())
+            source = Path(temp_dir) / "package"
+            source.mkdir()
+            (source / "ffmpeg.exe").write_text("ffmpeg", encoding="utf-8")
+            (source / "ffprobe.exe").write_text("ffprobe", encoding="utf-8")
+            (source / "LICENSE.txt").write_text("license", encoding="utf-8")
+
+            result = service.install_local(source)
+            self.assertEqual(result.state, "ready")
+            self.assertIsNotNone(result.installation)
+            self.assertTrue(Path(result.active_path).exists())
+            resolution = service.resolve_media_tools()
+            self.assertEqual(resolution.resolution.source, "managed")
+            self.assertTrue(resolution.available)
+
+    def test_install_local_does_not_mutate_path_or_use_network(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(temp_dir)
+            repo = InMemoryComponentRepository()
+            service = FFmpegManagedComponentService(paths=paths, repository=repo, health_checker=_ReadyHealthChecker())
+            source = Path(temp_dir) / "package"
+            source.mkdir()
+            (source / "ffmpeg.exe").write_text("ffmpeg", encoding="utf-8")
+            (source / "ffprobe.exe").write_text("ffprobe", encoding="utf-8")
+            original_path = os.environ.get("PATH")
+            with patch("urllib.request.urlopen", side_effect=AssertionError("network not allowed")):
+                result = service.install_local(source)
+            self.assertEqual(result.state, "ready")
+            self.assertEqual(os.environ.get("PATH"), original_path)
+
+    def test_health_check_uses_argument_list_without_shell(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ffmpeg = root / "ffmpeg.exe"
+            ffprobe = root / "ffprobe.exe"
+            ffmpeg.write_text("ffmpeg", encoding="utf-8")
+            ffprobe.write_text("ffprobe", encoding="utf-8")
+            checker = FFmpegHealthChecker(timeout_seconds=1.0)
+            calls: list[dict[str, object]] = []
+
+            def fake_run(*args, **kwargs):
+                calls.append({"args": args, "kwargs": kwargs})
+                self.assertFalse(kwargs.get("shell", False))
+                command = args[0]
+                executable = Path(command[0]).stem.lower()
+                if "-version" in command:
+                    return SimpleNamespace(returncode=0, stdout=f"{executable} version 1.2.3\nbuild: test\n", stderr="")
+                if "-print_format" in command:
+                    return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch("creator_intelligence_studio.application.services.ffmpeg_component_service.subprocess.run", side_effect=fake_run):
+                result = checker.check_bundle(ffmpeg_path=ffmpeg, ffprobe_path=ffprobe, fixture_root=root)
+
+            self.assertEqual(result.state, "ready")
+            self.assertTrue(calls)
+            self.assertTrue(all(isinstance(call["args"][0], list) for call in calls))
+
+    def test_install_local_path_traversal_blocked(self) -> None:
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(temp_dir)
+            repo = InMemoryComponentRepository()
+            service = FFmpegManagedComponentService(paths=paths, repository=repo, health_checker=_ReadyHealthChecker())
+            archive = Path(temp_dir) / "traversal.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("../ffmpeg.exe", "evil")
+                zf.writestr("ffprobe.exe", "ok")
+
+            result = service.install_local(archive)
+            self.assertEqual(result.state, "failed")
+            self.assertIn("Traversal", " ".join(result.errors))
+
+    def test_managed_broken_falls_back_to_external(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(temp_dir)
+            repo = InMemoryComponentRepository()
+            service = FFmpegManagedComponentService(paths=paths, repository=repo, health_checker=_BrokenHealthChecker())
+            managed_root = paths.components_directory / "ffmpeg" / "1.0" / "active"
+            managed_root.mkdir(parents=True)
+            (managed_root / "ffmpeg.exe").write_text("ffmpeg", encoding="utf-8")
+            (managed_root / "ffprobe.exe").write_text("ffprobe", encoding="utf-8")
+            repo.upsert_installation(
+                ComponentInstallation(
+                    component_id="ffmpeg",
+                    installation_status=ComponentInstallationStatus.REPAIR_REQUIRED,
+                    installed_version="1.0",
+                    revision="1.0",
+                    install_type=ComponentInstallKind.MANAGED,
+                    location_path=str(managed_root),
+                    location_reference="managed_root",
+                    detected_at=datetime.now(tz=timezone.utc),
+                    verified_at=datetime.now(tz=timezone.utc),
+                    health_status=RuntimeCheckStatus.FAILED,
+                    source="local_package",
+                    managed=True,
+                    metadata={"source_path": str(managed_root)},
+                    created_at=datetime.now(tz=timezone.utc),
+                    updated_at=datetime.now(tz=timezone.utc),
+                )
+            )
+            repo.upsert_installation(
+                ComponentInstallation(
+                    component_id="ffprobe",
+                    installation_status=ComponentInstallationStatus.REPAIR_REQUIRED,
+                    installed_version="1.0",
+                    revision="1.0",
+                    install_type=ComponentInstallKind.MANAGED,
+                    location_path=str(managed_root),
+                    location_reference="managed_root",
+                    detected_at=datetime.now(tz=timezone.utc),
+                    verified_at=datetime.now(tz=timezone.utc),
+                    health_status=RuntimeCheckStatus.FAILED,
+                    source="local_package",
+                    managed=True,
+                    metadata={"source_path": str(managed_root)},
+                    created_at=datetime.now(tz=timezone.utc),
+                    updated_at=datetime.now(tz=timezone.utc),
+                )
+            )
+            with patch.object(service, "_discover_external") as discover_external:
+                discover_external.return_value = service._build_media_tools(
+                    ffmpeg_path=Path(temp_dir) / "external" / "ffmpeg.exe",
+                    ffprobe_path=Path(temp_dir) / "external" / "ffprobe.exe",
+                    source="external",
+                    installation_type="externally_detected",
+                    health=_ReadyHealthChecker().check_bundle(
+                        ffmpeg_path=Path(temp_dir) / "external" / "ffmpeg.exe",
+                        ffprobe_path=Path(temp_dir) / "external" / "ffprobe.exe",
+                        fixture_root=paths.components_directory,
+                    ),
+                    reason="external_discovery",
+                    managed_location=None,
+                    version="1.0",
+                )
+                resolved = service.resolve_media_tools()
+            self.assertEqual(resolved.resolution.source, "external")
+
+    def test_remove_managed_reports_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(temp_dir)
+            repo = InMemoryComponentRepository()
+            service = FFmpegManagedComponentService(paths=paths, repository=repo, health_checker=_ReadyHealthChecker())
+            source = Path(temp_dir) / "package"
+            source.mkdir()
+            (source / "ffmpeg.exe").write_text("ffmpeg", encoding="utf-8")
+            (source / "ffprobe.exe").write_text("ffprobe", encoding="utf-8")
+            service.install_local(source)
+            with patch.object(service, "_discover_external") as discover_external:
+                discover_external.return_value = service._build_media_tools(
+                    ffmpeg_path=Path(temp_dir) / "external" / "ffmpeg.exe",
+                    ffprobe_path=Path(temp_dir) / "external" / "ffprobe.exe",
+                    source="external",
+                    installation_type="externally_detected",
+                    health=_ReadyHealthChecker().check_bundle(
+                        ffmpeg_path=Path(temp_dir) / "external" / "ffmpeg.exe",
+                        ffprobe_path=Path(temp_dir) / "external" / "ffprobe.exe",
+                        fixture_root=paths.components_directory,
+                    ),
+                    reason="external_discovery",
+                    managed_location=None,
+                    version="1.0",
+                )
+                result = service.remove()
+            self.assertIn(result.state, {"removed", "fallback_selected"})
 
 
 if __name__ == "__main__":
