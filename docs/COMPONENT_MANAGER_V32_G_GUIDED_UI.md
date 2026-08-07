@@ -22,6 +22,15 @@ The screen does not duplicate readiness policy. It consumes the canonical result
 - whether local transcription can start now
 - what the user can do next
 
+v32-H extends this surface with explicit local actions:
+
+- verify
+- benchmark
+- local-source install
+- managed repair
+- managed remove
+- task lifecycle feedback
+
 ## What the UI Does Not Do
 
 - no network
@@ -55,3 +64,4 @@ Component truth remains in the component manager and resolver.
 - no product download sources are enabled
 - no automatic installation is triggered from the screen
 - advanced technical details remain optional and secondary
+- explicit component actions are still local-only and require a confirmation dialog plus a safe backend revalidation

@@ -493,3 +493,10 @@ The design must not silently decide:
 v32-A now exists in code as the read-only foundation layer: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, and hidden-download protection. v32-B now adds the small local benchmark foundation on top of that baseline. The downloader, installer, relocation, and onboarding phases remain intentionally out of scope for this subphase.
 
 v32-G later consumes the canonical readiness result for a guided local-components UI without changing the policy itself.
+
+v32-H extends that guided surface with explicit local actions, but it still does not move readiness policy into widgets:
+
+- the resolver keeps deciding readiness and suggested actions
+- the GUI builds structured requests and confirms destructive actions
+- the backend revalidates the current component state before mutating anything
+- task lifecycle updates remain visible through the existing task center state

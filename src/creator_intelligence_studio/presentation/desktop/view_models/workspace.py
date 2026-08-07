@@ -492,6 +492,7 @@ class WorkspaceViewModel:
         self.production_service = production_service
         self.download_service = download_service
         self.component_manager_service = component_manager_service
+        self._local_component_action_service = None
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -838,6 +839,15 @@ class WorkspaceViewModel:
         if self.component_manager_service is None:
             return None
         return self.component_manager_service.status(profile=profile, preferred_device=preferred_device)
+
+    def execute_local_component_action(self, request):
+        if self.component_manager_service is None:
+            raise RuntimeError("El administrador de componentes locales no esta disponible.")
+        if self._local_component_action_service is None:
+            from .local_component_actions import LocalComponentActionService
+
+            self._local_component_action_service = LocalComponentActionService(self)
+        return self._local_component_action_service.execute(request)
 
     def transcription_capability(self, *, profile: str = "balanced", preferred_device: str = "auto"):
         if self.component_manager_service is None:

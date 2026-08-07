@@ -19,6 +19,7 @@ from creator_intelligence_studio.domain.components.entities import (
     ComponentInstallKind,
     ComponentInstallation,
     ComponentInstallationStatus,
+    RuntimeCheckRecord,
     RuntimeCheckStatus,
 )
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
@@ -182,6 +183,156 @@ class ManagedTranscriptionRuntimeInstaller:
         except Exception as exc:
             return False, str(exc)
 
+    def _persist_runtime_check(
+        self,
+        *,
+        component_id: str,
+        status: RuntimeCheckStatus,
+        runtime_version: str | None,
+        notes: str | None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> RuntimeCheckRecord:
+        now = _now()
+        record = RuntimeCheckRecord(
+            component_id=component_id,
+            status=status,
+            runtime_importable=status in {RuntimeCheckStatus.READY, RuntimeCheckStatus.DEGRADED},
+            runtime_version=runtime_version,
+            device_count=None,
+            supported_compute_types=(),
+            notes=notes,
+            warning_message=None if status == RuntimeCheckStatus.READY else notes,
+            error_code=error_code,
+            error_message=error_message,
+            metadata=metadata or {},
+            checked_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        return self.repository.upsert_runtime_check(record)
+
+    def verify_local(self, component_id: str) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion de runtime para verificar.",),
+                reason="missing",
+            )
+        if not installation.location_path:
+            runtime_version = installation.installed_version
+            persisted = self._persist_runtime_check(
+                component_id=component_id,
+                status=RuntimeCheckStatus.NOT_CHECKED,
+                runtime_version=runtime_version,
+                notes="La instalacion no tiene ruta administrada para verificar.",
+                error_code="source_missing",
+                error_message="La instalacion no tiene ruta administrada para verificar.",
+                metadata={"installation_type": installation.install_type.value if installation.install_type else None},
+            )
+            return TranscriptionInstallResult(
+                state="source_missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=installation,
+                health_status=persisted.status.value,
+                errors=(persisted.error_message or "La instalacion no tiene ruta administrada para verificar.",),
+                reason="source_missing",
+            )
+        root = Path(installation.location_path)
+        ok, error = self._check_runtime(root, component_id)
+        if ok:
+            version = installation.installed_version
+            refreshed = ComponentInstallation(
+                component_id=installation.component_id,
+                installation_status=ComponentInstallationStatus.READY,
+                installed_version=installation.installed_version,
+                revision=installation.revision,
+                install_type=installation.install_type,
+                location_path=installation.location_path,
+                location_reference=installation.location_reference,
+                detected_at=installation.detected_at,
+                verified_at=_now(),
+                health_status=RuntimeCheckStatus.READY,
+                source=installation.source,
+                managed=installation.managed,
+                last_error_code=None,
+                last_error_message=None,
+                metadata=dict(installation.metadata),
+                created_at=installation.created_at,
+                updated_at=_now(),
+            )
+            refreshed = self.repository.upsert_installation(refreshed)
+            persisted = self._persist_runtime_check(
+                component_id=component_id,
+                status=RuntimeCheckStatus.READY,
+                runtime_version=version,
+                notes="El runtime administrado fue verificado correctamente.",
+                metadata={"location_path": installation.location_path, "verification": "local"},
+            )
+            return TranscriptionInstallResult(
+                state="ready",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=installation.location_path,
+                installation=refreshed,
+                health_status=persisted.status.value,
+                revision=installation.revision,
+            )
+        persisted = self._persist_runtime_check(
+            component_id=component_id,
+            status=RuntimeCheckStatus.FAILED,
+            runtime_version=installation.installed_version,
+            notes="El runtime administrado no pudo verificarse.",
+            error_code="health_check_failed",
+            error_message=error,
+            metadata={"location_path": installation.location_path, "verification": "local"},
+        )
+        refreshed = ComponentInstallation(
+            component_id=installation.component_id,
+            installation_status=ComponentInstallationStatus.REPAIR_REQUIRED,
+            installed_version=installation.installed_version,
+            revision=installation.revision,
+            install_type=installation.install_type,
+            location_path=installation.location_path,
+            location_reference=installation.location_reference,
+            detected_at=installation.detected_at,
+            verified_at=installation.verified_at,
+            health_status=RuntimeCheckStatus.FAILED,
+            source=installation.source,
+            managed=installation.managed,
+            last_error_code="health_check_failed",
+            last_error_message=error,
+            metadata=dict(installation.metadata),
+            created_at=installation.created_at,
+            updated_at=_now(),
+        )
+        refreshed = self.repository.upsert_installation(refreshed)
+        return TranscriptionInstallResult(
+            state="failed",
+            component_id=component_id,
+            source_path=installation.source,
+            staged_path=None,
+            active_path=installation.location_path,
+            installation=refreshed,
+            health_status=persisted.status.value,
+            errors=(error or "El runtime local no pudo verificarse.",),
+            reason="health_check_failed",
+            revision=installation.revision,
+        )
+
     def install_local(
         self,
         component_id: str,
@@ -282,6 +433,115 @@ class ManagedTranscriptionRuntimeInstaller:
         finally:
             shutil.rmtree(staging_root, ignore_errors=True)
 
+    def repair_local(
+        self,
+        component_id: str,
+        source_path: str | Path | None = None,
+        *,
+        revision: str = "1",
+        artifact: VerifiedComponentArtifact | None = None,
+    ) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion administrada para reparar.",),
+                reason="missing",
+            )
+        if not installation.managed:
+            return TranscriptionInstallResult(
+                state="not_supported",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=installation.location_path,
+                installation=installation,
+                health_status=installation.health_status.value,
+                errors=("Solo las instalaciones administradas pueden repararse.",),
+                reason="not_supported",
+                revision=installation.revision,
+            )
+        if source_path is None and artifact is None and installation.source:
+            source_path = installation.source
+        return self.install_local(component_id, source_path or installation.source or "", revision=revision or (installation.revision or "1"), artifact=artifact)
+
+    def remove_local(self, component_id: str) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion administrada para eliminar.",),
+                reason="missing",
+            )
+        if not installation.managed:
+            return TranscriptionInstallResult(
+                state="not_supported",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=installation.location_path,
+                installation=installation,
+                health_status=installation.health_status.value,
+                errors=("Solo las instalaciones administradas pueden eliminarse.",),
+                reason="not_supported",
+                revision=installation.revision,
+            )
+        if installation.location_path:
+            shutil.rmtree(Path(installation.location_path), ignore_errors=True)
+        missing = ComponentInstallation(
+            component_id=component_id,
+            installation_status=ComponentInstallationStatus.MISSING,
+            installed_version=None,
+            revision=None,
+            install_type=ComponentInstallKind.MANAGED,
+            location_path=None,
+            location_reference=None,
+            detected_at=_now(),
+            verified_at=_now(),
+            health_status=RuntimeCheckStatus.NOT_CHECKED,
+            source=None,
+            managed=True,
+            last_error_code="removed",
+            last_error_message="La instalacion administrada fue eliminada.",
+            metadata={"removed_from": installation.location_path},
+            created_at=installation.created_at,
+            updated_at=_now(),
+        )
+        missing = self.repository.upsert_installation(missing)
+        self._persist_runtime_check(
+            component_id=component_id,
+            status=RuntimeCheckStatus.NOT_CHECKED,
+            runtime_version=None,
+            notes="El runtime administrado fue eliminado.",
+            error_code="removed",
+            error_message="La instalacion administrada fue eliminada.",
+            metadata={"removed_from": installation.location_path},
+        )
+        return TranscriptionInstallResult(
+            state="removed",
+            component_id=component_id,
+            source_path=installation.source,
+            staged_path=None,
+            active_path=None,
+            installation=missing,
+            health_status="removed",
+            revision=installation.revision,
+        )
+
 
 class ManagedTranscriptionModelInstaller:
     """Boundary administrado para instalar modelos locales o artefactos verificados."""
@@ -351,6 +611,66 @@ class ManagedTranscriptionModelInstaller:
                 created_at=_now(),
                 updated_at=_now(),
             )
+        )
+
+    def verify_local(self, component_id: str) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion de modelo para verificar.",),
+                reason="missing",
+            )
+        model_name = self._component_name(component_id)
+        verified = self.model_manager.verify_model(model_name)
+        if verified.installed:
+            updated = self._persist_installation(
+                component_id=component_id,
+                revision=installation.revision or verified.revision or "1",
+                root=Path(verified.path or installation.location_path or self._install_root(component_id, installation.revision or verified.revision or "1")),
+                source=installation.source or verified.source or "",
+                install_type=ComponentInstallKind.MANAGED if verified.managed else installation.install_type,
+                status=ComponentInstallationStatus.READY,
+                health_status=RuntimeCheckStatus.READY,
+            )
+            return TranscriptionInstallResult(
+                state="ready",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=verified.path,
+                installation=updated,
+                health_status="ready",
+                revision=updated.revision,
+            )
+        updated = self._persist_installation(
+            component_id=component_id,
+            revision=installation.revision or verified.revision or "1",
+            root=Path(installation.location_path or verified.path or self._install_root(component_id, installation.revision or verified.revision or "1")),
+            source=installation.source or verified.source or "",
+            install_type=installation.install_type,
+            status=ComponentInstallationStatus.REPAIR_REQUIRED if installation.managed else ComponentInstallationStatus.INVALID,
+            health_status=RuntimeCheckStatus.FAILED if verified.status != TranscriptionModelStatus.INCOMPATIBLE else RuntimeCheckStatus.INCOMPATIBLE,
+            error_message=verified.error_message or verified.notes,
+        )
+        return TranscriptionInstallResult(
+            state="failed",
+            component_id=component_id,
+            source_path=installation.source,
+            staged_path=None,
+            active_path=installation.location_path or verified.path,
+            installation=updated,
+            health_status="failed",
+            errors=(verified.error_message or verified.notes or "El modelo local no pudo verificarse.",),
+            reason="health_check_failed",
+            revision=updated.revision,
         )
 
     def install_local(
@@ -440,3 +760,93 @@ class ManagedTranscriptionModelInstaller:
             )
         finally:
             shutil.rmtree(staging_root, ignore_errors=True)
+
+    def repair_local(
+        self,
+        component_id: str,
+        source_path: str | Path | None = None,
+        *,
+        revision: str,
+        artifact: VerifiedComponentArtifact | None = None,
+    ) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion administrada para reparar.",),
+                reason="missing",
+            )
+        if not installation.managed:
+            return TranscriptionInstallResult(
+                state="not_supported",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=installation.location_path,
+                installation=installation,
+                health_status=installation.health_status.value,
+                errors=("Solo las instalaciones administradas pueden repararse.",),
+                reason="not_supported",
+                revision=installation.revision,
+            )
+        if source_path is None and artifact is None and installation.source:
+            source_path = installation.source
+        return self.install_local(component_id, source_path or installation.source or "", revision=revision or (installation.revision or "1"), artifact=artifact)
+
+    def remove_local(self, component_id: str) -> TranscriptionInstallResult:
+        component_id = _safe_component_id(component_id)
+        installation = self.repository.get_installation(component_id)
+        model_name = self._component_name(component_id)
+        if installation is None:
+            return TranscriptionInstallResult(
+                state="missing",
+                component_id=component_id,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health_status="missing",
+                errors=("No existe una instalacion de modelo para eliminar.",),
+                reason="missing",
+            )
+        if not installation.managed:
+            return TranscriptionInstallResult(
+                state="not_supported",
+                component_id=component_id,
+                source_path=installation.source,
+                staged_path=None,
+                active_path=installation.location_path,
+                installation=installation,
+                health_status=installation.health_status.value,
+                errors=("Solo las instalaciones administradas pueden eliminarse.",),
+                reason="not_supported",
+                revision=installation.revision,
+            )
+        removed = self.model_manager.remove_model(model_name)
+        missing = self._persist_installation(
+            component_id=component_id,
+            revision=installation.revision if installation and installation.revision else "1",
+            root=Path(installation.location_path) if installation and installation.location_path else self._install_root(component_id, installation.revision if installation and installation.revision else "1"),
+            source=installation.source if installation else model_name,
+            install_type=installation.install_type if installation else ComponentInstallKind.MANAGED,
+            status=ComponentInstallationStatus.MISSING,
+            health_status=RuntimeCheckStatus.NOT_CHECKED,
+            error_message="La instalacion administrada fue eliminada." if removed else None,
+        )
+        return TranscriptionInstallResult(
+            state="removed",
+            component_id=component_id,
+            source_path=installation.source if installation else None,
+            staged_path=None,
+            active_path=None,
+            installation=missing,
+            health_status="removed",
+            revision=missing.revision,
+        )

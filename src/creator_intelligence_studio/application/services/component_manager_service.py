@@ -115,6 +115,9 @@ class ComponentManagerService:
     def ffmpeg_verify(self) -> FFmpegResolutionReport:
         return self.ffmpeg_service.status()
 
+    def ffmpeg_verify_local(self) -> FFmpegInstallResult:
+        return self.ffmpeg_service.verify_local()
+
     def ffmpeg_install_local(self, source_path: str | Path) -> FFmpegInstallResult:
         return self.ffmpeg_service.install_local(source_path)
 
@@ -145,8 +148,26 @@ class ComponentManagerService:
     def transcription_runtime_install_local(self, component_id: str, source_path: str | Path, *, revision: str = "1", artifact=None) -> TranscriptionInstallResult:
         return self.transcription_runtime_installer.install_local(component_id, source_path, revision=revision, artifact=artifact)
 
+    def transcription_runtime_verify_local(self, component_id: str) -> TranscriptionInstallResult:
+        return self.transcription_runtime_installer.verify_local(component_id)
+
+    def transcription_runtime_repair_local(self, component_id: str, source_path: str | Path | None = None, *, revision: str = "1", artifact=None) -> TranscriptionInstallResult:
+        return self.transcription_runtime_installer.repair_local(component_id, source_path, revision=revision, artifact=artifact)
+
+    def transcription_runtime_remove_local(self, component_id: str) -> TranscriptionInstallResult:
+        return self.transcription_runtime_installer.remove_local(component_id)
+
     def transcription_model_install_local(self, component_id: str, source_path: str | Path, *, revision: str, artifact=None) -> TranscriptionInstallResult:
         return self.transcription_model_installer.install_local(component_id, source_path, revision=revision, artifact=artifact)
+
+    def transcription_model_verify_local(self, component_id: str) -> TranscriptionInstallResult:
+        return self.transcription_model_installer.verify_local(component_id)
+
+    def transcription_model_repair_local(self, component_id: str, source_path: str | Path | None = None, *, revision: str, artifact=None) -> TranscriptionInstallResult:
+        return self.transcription_model_installer.repair_local(component_id, source_path, revision=revision, artifact=artifact)
+
+    def transcription_model_remove_local(self, component_id: str) -> TranscriptionInstallResult:
+        return self.transcription_model_installer.remove_local(component_id)
 
     def catalog(self) -> ComponentCatalog:
         catalog = self.repository.get_catalog()

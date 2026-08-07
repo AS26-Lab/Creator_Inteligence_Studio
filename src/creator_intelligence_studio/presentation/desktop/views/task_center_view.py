@@ -92,6 +92,9 @@ class TaskCenterView(QWidget):
     def _is_component_download_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "component_download")
 
+    def _is_component_action_task(self, task) -> bool:
+        return bool(getattr(task, "payload", {}).get("kind") == "component_action")
+
     def _ai_runtime_task_details(self, task) -> dict[str, str]:
         payload = getattr(task, "payload", {}) if task is not None else {}
         execution_id = str(payload.get("execution_id") or "")
@@ -308,6 +311,21 @@ class TaskCenterView(QWidget):
                 (
                     "Descarga de componente\n"
                     f"componente: {payload.get('component_id', task.video_title or task.task_id)}\n"
+                    f"estado: {task.status}\n"
+                    f"progreso: {task.progress_percent:.1f}%\n"
+                    f"actualizada: {task.updated_at}"
+                ),
+            )
+            return
+        if self._is_component_action_task(task):
+            payload = getattr(task, "payload", {})
+            QMessageBox.information(
+                self,
+                "Task Center",
+                (
+                    "Accion de componente local\n"
+                    f"accion: {payload.get('action_type', task.action_id or task.task_id)}\n"
+                    f"componente: {payload.get('component_id', '-')}\n"
                     f"estado: {task.status}\n"
                     f"progreso: {task.progress_percent:.1f}%\n"
                     f"actualizada: {task.updated_at}"

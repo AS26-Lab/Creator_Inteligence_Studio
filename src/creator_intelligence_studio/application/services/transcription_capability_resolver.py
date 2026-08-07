@@ -502,6 +502,11 @@ class TranscriptionCapabilityResolver:
                 blockers.append("FFmpeg es incompatible con este entorno.")
             else:
                 blockers.append("Falta FFmpeg.")
+                suggested_actions.append(CapabilitySuggestedAction("install_ffmpeg", "install_component", "ffmpeg", blocking=True, display_label="Instalar FFmpeg", description="Instala el componente multimedia desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
+        else:
+            suggested_actions.append(CapabilitySuggestedAction("verify_ffmpeg", "verify_component", "ffmpeg", blocking=False, display_label="Comprobar FFmpeg", description="Verifica la instalacion local del componente multimedia.", priority=3, available_now=True, reason="verification_available"))
+            if ffmpeg_installation.managed:
+                suggested_actions.append(CapabilitySuggestedAction("remove_ffmpeg", "remove_component", "ffmpeg", blocking=True, display_label="Eliminar FFmpeg", description="Elimina la instalacion administrada del componente multimedia.", priority=4, available_now=True, reason="managed_installation", requires_user_confirmation=True))
 
         if not ffprobe_ok:
             missing.append("ffprobe")
@@ -520,6 +525,11 @@ class TranscriptionCapabilityResolver:
                 suggested_actions.append(CapabilitySuggestedAction("repair_runtime", "repair_component", runtime_component_id, blocking=True, display_label="Reparar runtime", description="Repara el runtime de transcripcion.", priority=1, available_now=True, reason="repair_required"))
             else:
                 blockers.append("Falta el runtime local de transcripcion.")
+                suggested_actions.append(CapabilitySuggestedAction("install_runtime", "install_component", runtime_component_id, blocking=True, display_label="Instalar runtime", description="Instala el motor local desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
+        else:
+            suggested_actions.append(CapabilitySuggestedAction("verify_runtime", "verify_component", runtime_component_id, blocking=False, display_label="Comprobar runtime", description="Verifica el runtime local de transcripcion.", priority=3, available_now=True, reason="verification_available"))
+            if runtime_installation.managed:
+                suggested_actions.append(CapabilitySuggestedAction("remove_runtime", "remove_component", runtime_component_id, blocking=True, display_label="Eliminar runtime", description="Elimina la instalacion administrada del runtime.", priority=4, available_now=True, reason="managed_installation", requires_user_confirmation=True))
 
         if not model_ok:
             missing.append(selected_model_component_id)
@@ -535,10 +545,15 @@ class TranscriptionCapabilityResolver:
             else:
                 if fallback_profile is None:
                     blockers.append("El modelo no esta instalado. Usa Componentes locales para instalarlo.")
+                    suggested_actions.append(CapabilitySuggestedAction("install_model", "install_component", selected_model_component_id, target_profile=requested_key, blocking=True, display_label="Instalar modelo", description="Instala el modelo local desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
                 else:
                     degraded_reasons.append("requested_model_missing")
         elif selected_model_info.status == TranscriptionModelStatus.LEGACY_CACHE:
             warnings.append("Se esta usando un modelo local existente no administrado.")
+        else:
+            suggested_actions.append(CapabilitySuggestedAction("verify_model", "verify_component", selected_model_component_id, target_profile=requested_key, blocking=False, display_label="Comprobar modelo", description="Verifica el modelo de transcripcion local.", priority=3, available_now=True, reason="verification_available"))
+            if selected_model_info.managed:
+                suggested_actions.append(CapabilitySuggestedAction("remove_model", "remove_component", selected_model_component_id, target_profile=requested_key, blocking=True, display_label="Eliminar modelo", description="Elimina la instalacion administrada del modelo.", priority=4, available_now=True, reason="managed_installation", requires_user_confirmation=True))
 
         benchmark_record = self._latest_benchmark_record(selected_model_component_id)
         benchmark_status = benchmark_record.status if benchmark_record is not None else None
@@ -638,6 +653,9 @@ class TranscriptionCapabilityResolver:
                 readiness = "ready_with_warnings"
             else:
                 readiness = "ready"
+
+        if not can_transcribe_now:
+            suggested_actions.append(CapabilitySuggestedAction("continue_limited", "continue_limited", blocking=False, display_label="Continuar en modo limitado", description="Sigue usando la aplicacion sin transcripcion local.", priority=99, available_now=True, reason="limited_mode"))
 
         if selected_profile is None:
             selected_profile = requested

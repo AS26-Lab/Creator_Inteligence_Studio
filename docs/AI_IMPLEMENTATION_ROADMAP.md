@@ -20,14 +20,14 @@ The collective server and predictive ML come later, once there are enough users 
 
 ## Next Handoff
 
-Component Manager and Local Transcription Foundation has now been implemented through v32-F as a foundation stack: v32-A, v32-B, v32-C, v32-D, v32-E, and v32-F are already implemented.
+Component Manager and Local Transcription Foundation now has v32-A through v32-H implemented as a coherent stack: catalog, benchmark, managed FFmpeg, resumable downloads, explicit runtime/model installers, canonical readiness, guided local-components UI, and explicit local actions with task lifecycle wiring.
 
-- Objective: make local model/component installation and transcription readiness explicit, guided, and reproducible.
+- Objective: keep local model/component installation and transcription readiness explicit, guided, and reproducible.
 - Dependencies: stable AI Runtime foundation, clear local component inventory, local-only install sources, and platform-specific policy.
-- Current transcription state: local transcription already exists and remains implemented; it is now wrapped by managed component installers and a canonical readiness resolver.
+- Current transcription state: local transcription already exists and remains implemented; it is now wrapped by managed component installers, a canonical readiness resolver, and explicit UI actions.
 - Risks: drift into automatic media management, permanent media retention, hidden provider coupling, or implicit downloads.
-- Decisions pending: onboarding polish and the exact user-facing installer copy.
-- First contract for the next phase: a guided onboarding flow that consumes readiness, warnings, fallback, and suggested actions without mutating the resolver.
+- Decisions pending: onboarding polish and exact copy refinements for action confirmations and task-center phrasing.
+- First contract for the next phase: recovery and repair polish for interrupted local tasks without changing the canonical resolver.
 
 ## Stage Gates
 
@@ -95,3 +95,21 @@ It should not introduce:
 - automatic installs
 - automatic benchmark startup
 - duplicated readiness logic
+
+## v32-H
+
+Explicit local component actions now sit on top of the guided UI.
+
+It should expose:
+
+- explicit verify / install / repair / remove flows
+- local file and folder picker confirmations
+- task lifecycle feedback in Task Center
+- safe backend revalidation before mutation
+
+It should not introduce:
+
+- productive internet sources
+- automatic install on view open
+- automatic benchmark startup
+- duplicate component truth in widgets

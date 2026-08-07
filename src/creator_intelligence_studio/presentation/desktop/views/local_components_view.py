@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -38,6 +39,24 @@ class LocalComponentsRefreshThread(QThread):
     def run(self) -> None:  # pragma: no cover - Qt thread
         try:
             result = self.vm.refresh_status()
+        except Exception as exc:  # pragma: no cover - defensive
+            self.error_ready.emit(str(exc))
+            return
+        self.result_ready.emit(result)
+
+
+class LocalComponentsActionThread(QThread):
+    result_ready = Signal(object)
+    error_ready = Signal(str)
+
+    def __init__(self, vm: LocalComponentsViewModel, request) -> None:
+        super().__init__()
+        self.vm = vm
+        self.request = request
+
+    def run(self) -> None:  # pragma: no cover - Qt thread
+        try:
+            result = self.vm.execute_component_action(self.request)
         except Exception as exc:  # pragma: no cover - defensive
             self.error_ready.emit(str(exc))
             return
@@ -114,6 +133,7 @@ class LocalComponentsView(QWidget):
         self.open_transcription_callback = open_transcription_callback
         self.open_task_center_callback = open_task_center_callback
         self._refresh_thread: LocalComponentsRefreshThread | None = None
+        self._action_thread: LocalComponentsActionThread | None = None
         self._status: LocalComponentsStatusViewModel | None = None
         self._cards: dict[str, ComponentCardWidget] = {}
         self._profile_buttons: dict[str, QPushButton] = {}
@@ -295,6 +315,98 @@ class LocalComponentsView(QWidget):
     def refresh_after_task(self) -> None:
         self.refresh()
 
+    def _start_action_thread(self, request) -> None:
+        if self._action_thread is not None and self._action_thread.isRunning():
+            QMessageBox.information(self, "Componentes locales", "Ya hay una accion local en curso.")
+            return
+        self._set_loading_state()
+        thread = LocalComponentsActionThread(self.vm, request)
+        thread.result_ready.connect(self._apply_action_result)
+        thread.error_ready.connect(self._apply_action_error)
+        thread.finished.connect(thread.deleteLater)
+        self._action_thread = thread
+        thread.start()
+
+    def _apply_action_error(self, message: str) -> None:
+        self._action_thread = None
+        QMessageBox.warning(self, "Componentes locales", message or "La accion local no pudo completarse.")
+        self.refresh_after_task()
+
+    def _apply_action_result(self, result) -> None:
+        self._action_thread = None
+        status = getattr(result, "status", "failed")
+        safe_error = getattr(result, "safe_error", None)
+        if status != "completed":
+            QMessageBox.warning(self, "Componentes locales", safe_error or "La accion local no pudo completarse.")
+        self.refresh_after_task()
+
+    def _choose_local_source(self, action: LocalComponentsActionViewModel) -> tuple[str | None, str | None]:
+        component_id = (action.target_component or "").strip().lower()
+        file_path: str | None = None
+        folder_path: str | None = None
+        if component_id == "ffmpeg":
+            file_path, _ = QFileDialog.getOpenFileName(self, "Selecciona el paquete local", "", "Paquetes ZIP (*.zip);;Todos los archivos (*)")
+            if file_path:
+                return file_path, "file"
+            folder_path = QFileDialog.getExistingDirectory(self, "Selecciona la carpeta local")
+            if folder_path:
+                return folder_path, "directory"
+            return None, None
+        folder_path = QFileDialog.getExistingDirectory(self, "Selecciona la carpeta local")
+        if folder_path:
+            return folder_path, "directory"
+        file_path, _ = QFileDialog.getOpenFileName(self, "Selecciona el archivo local", "", "Paquetes ZIP (*.zip);;Todos los archivos (*)")
+        if file_path:
+            return file_path, "file"
+        return None, None
+
+    def _confirm_component_action(self, action: LocalComponentsActionViewModel, source_label: str | None = None) -> bool:
+        component = action.target_component or "componente"
+        details = [
+            f"Accion: {action.label}",
+            f"Componente: {component}",
+        ]
+        if source_label:
+            details.append(f"Origen: {source_label}")
+        if action.action_type in {"install_component", "repair_component", "remove_component"}:
+            details.append("Esta operacion no descargara nada de Internet.")
+        text = "\n".join(details)
+        result = QMessageBox.question(self, "Componentes locales", text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        return result == QMessageBox.StandardButton.Yes
+
+    def _run_structured_action(self, action: LocalComponentsActionViewModel) -> None:
+        request = None
+        source_context = None
+        source_path = None
+        if action.action_type in {"install_component", "repair_component"}:
+            source_path, source_context = self._choose_local_source(action)
+            if source_path is None:
+                return
+            if not self._confirm_component_action(action, source_label=source_context):
+                return
+            request = self.vm.build_action_request(
+                action.action_id,
+                local_source=source_path,
+                user_confirmation=True,
+                source_context=source_context,
+            )
+        elif action.action_type == "remove_component":
+            if not self._confirm_component_action(action):
+                return
+            request = self.vm.build_action_request(action.action_id, user_confirmation=True)
+        elif action.action_type == "verify_component":
+            request = self.vm.build_action_request(action.action_id, user_confirmation=False)
+        elif action.action_type == "run_gpu_benchmark":
+            if not self._confirm_component_action(action):
+                return
+            request = self.vm.build_action_request(action.action_id, user_confirmation=True)
+        else:
+            request = self.vm.build_action_request(action.action_id, user_confirmation=False)
+        if request is None:
+            QMessageBox.information(self, "Componentes locales", "Esta accion no esta disponible por ahora.")
+            return
+        self._start_action_thread(request)
+
     def _apply_error(self, message: str) -> None:
         self.summary_label.setText("No se pudo cargar el estado local.")
         self.secondary_label.setText(message)
@@ -475,6 +587,19 @@ class LocalComponentsView(QWidget):
         self.refresh()
 
     def _trigger_action(self, action_id: str) -> None:
+        if self._status is None:
+            self.refresh()
+            return
+        action = next((item for item in self._status.suggested_actions if item.action_id == action_id), None)
+        if action is None:
+            if not self.vm.execute_available_action(action_id):
+                QMessageBox.information(self, "Componentes locales", "Esta accion no esta disponible por ahora.")
+                return
+            self.refresh_after_task()
+            return
+        if action.action_type in {"install_component", "repair_component", "remove_component", "verify_component", "run_gpu_benchmark"}:
+            self._run_structured_action(action)
+            return
         if not self.vm.execute_available_action(action_id):
             QMessageBox.information(self, "Componentes locales", "Esta accion no esta disponible por ahora.")
             return

@@ -10,6 +10,10 @@ from creator_intelligence_studio.application.services.transcription_capability_r
     TranscriptionExecutionPlan,
 )
 from creator_intelligence_studio.domain.components.entities import ComponentInstallation, ComponentInstallationStatus
+from creator_intelligence_studio.presentation.desktop.view_models.local_component_actions import (
+    ComponentActionExecution,
+    ComponentActionRequest,
+)
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 from creator_intelligence_studio.shared.dates import to_iso_z
 
@@ -161,6 +165,40 @@ def _action_label(action_type: str) -> str:
     }.get(action_type, action_type.replace("_", " ").title())
 
 
+def _action_display_label(action: object | None) -> str | None:
+    if action is None:
+        return None
+    label = getattr(action, "display_label", None) or getattr(action, "label", None)
+    if label:
+        return str(label)
+    action_type = getattr(action, "action_type", None)
+    return _action_label(str(action_type)) if action_type else None
+
+
+def _pick_action(
+    report: TranscriptionCapabilityReport | None,
+    *,
+    component_id: str | None = None,
+    action_types: tuple[str, ...] = (),
+    target_profile: str | None = None,
+) -> object | None:
+    if report is None:
+        return None
+    component = component_id.strip().lower() if component_id else None
+    profile = target_profile.strip().lower() if target_profile else None
+    for action_type in action_types:
+        for action in report.structured_suggested_actions:
+            if action.action_type != action_type:
+                continue
+            if component is not None and action.target_component is not None and action.target_component.strip().lower() != component:
+                continue
+            if profile is not None and action.target_profile is not None and action.target_profile.strip().lower() != profile:
+                continue
+            if action.available_now:
+                return action
+    return None
+
+
 def _component_card_from_installation(
     *,
     key: str,
@@ -231,6 +269,12 @@ class LocalComponentsViewModel:
         ffprobe = installations.get("ffprobe")
         runtime = installations.get("transcription-runtime.faster-whisper") or installations.get("transcription-runtime.ctranslate2")
         model = installations.get(capability.selected_model_component_id) if capability and capability.selected_model_component_id else None
+        ffmpeg_action = _pick_action(report, component_id="ffmpeg", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
+        runtime_action = _pick_action(report, component_id="transcription-runtime.faster-whisper", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
+        if runtime_action is None:
+            runtime_action = _pick_action(report, component_id="transcription-runtime.ctranslate2", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
+        model_action = _pick_action(report, component_id=capability.selected_model_component_id if capability else None, action_types=("repair_component", "install_component", "verify_component", "remove_component"), target_profile=report.requested_profile if report else None)
+        gpu_action = _pick_action(report, action_types=("run_gpu_benchmark",))
         gpu_state = "No comprobado"
         gpu_explanation = "No se pudo comprobar la GPU."
         if capability is not None:
@@ -252,8 +296,8 @@ class LocalComponentsViewModel:
             description="Comprueba si la GPU esta lista para transcribir.",
             state_label=gpu_state,
             explanation=gpu_explanation,
-            primary_action_label="Probar GPU",
-            primary_action_id="run_gpu_benchmark",
+            primary_action_label=_action_display_label(gpu_action),
+            primary_action_id=getattr(gpu_action, "action_id", None),
             technical_details=(
                 f"Benchmark: {capability.benchmark_status.value if capability and capability.benchmark_status else 'no verificado'}",
                 f"Edad de evidencia: {capability.benchmark_age_seconds:.0f} s" if capability and capability.benchmark_age_seconds is not None else "Edad de evidencia: no verificada",
@@ -265,6 +309,8 @@ class LocalComponentsViewModel:
                 title="Componente multimedia",
                 description="Prepara el audio de tus videos para poder analizarlo y transcribirlo.",
                 installation=ffmpeg,
+                primary_action_label=_action_display_label(ffmpeg_action),
+                primary_action_id=getattr(ffmpeg_action, "action_id", None),
                 details=(f"FFprobe: {_status_label(ffprobe)}",),
             ),
             _component_card_from_installation(
@@ -272,16 +318,16 @@ class LocalComponentsViewModel:
                 title="Motor de transcripcion",
                 description="Ejecuta la transcripcion local en tu computadora.",
                 installation=runtime,
-                primary_action_label="Ver detalles",
-                primary_action_id="toggle_details",
+                primary_action_label=_action_display_label(runtime_action),
+                primary_action_id=getattr(runtime_action, "action_id", None),
             ),
             _component_card_from_installation(
                 key="model",
                 title="Modelo de transcripcion",
                 description="Convierte la voz del video en texto.",
                 installation=model,
-                primary_action_label="Ver detalles",
-                primary_action_id="toggle_details",
+                primary_action_label=_action_display_label(model_action),
+                primary_action_id=getattr(model_action, "action_id", None),
             ),
             gpu_card,
         )
@@ -320,18 +366,47 @@ class LocalComponentsViewModel:
             return ()
         return tuple(
             LocalComponentsActionViewModel(
-                action_id=action.action_id,
-                action_type=action.action_type,
-                label=_action_label(action.action_type),
-                description=action.description or action.reason or "",
-                available_now=action.available_now,
-                blocking=action.blocking,
-                target_component=action.target_component,
-                target_profile=action.target_profile,
-                reason=action.reason,
+                action_id=getattr(action, "action_id", ""),
+                action_type=str(getattr(action, "action_type", "")),
+                label=_action_label(str(getattr(action, "action_type", ""))),
+                description=str(getattr(action, "description", "") or getattr(action, "reason", "") or ""),
+                available_now=bool(getattr(action, "available_now", False)),
+                blocking=bool(getattr(action, "blocking", False)),
+                target_component=getattr(action, "target_component", None),
+                target_profile=getattr(action, "target_profile", None),
+                reason=getattr(action, "reason", None),
             )
             for action in report.structured_suggested_actions
         )
+
+    def build_action_request(
+        self,
+        action_id: str,
+        *,
+        local_source: str | None = None,
+        user_confirmation: bool = False,
+        source_context: str | None = None,
+    ) -> ComponentActionRequest | None:
+        status = self._last_status or self.refresh_status()
+        action = next((item for item in status.suggested_actions if item.action_id == action_id), None)
+        if action is None:
+            return None
+        fallback_profile_id = (
+            status.capability_report.selected_profile.profile_id
+            if status.capability_report is not None and status.capability_report.selected_profile is not None
+            else self.workspace.ui_state.transcription_profile
+        )
+        return ComponentActionRequest(
+            action_type=action.action_type,
+            component_id=action.target_component,
+            profile=action.target_profile or fallback_profile_id,
+            local_source=local_source,
+            user_confirmation=user_confirmation,
+            source_context=source_context,
+        )
+
+    def execute_component_action(self, request: ComponentActionRequest) -> ComponentActionExecution:
+        return self.workspace.execute_local_component_action(request)
 
     def _download_tasks(self) -> tuple[LocalComponentsDownloadTaskViewModel, ...]:
         tasks: list[LocalComponentsDownloadTaskViewModel] = []

@@ -11,7 +11,7 @@ This document records what is actually implemented in the repository through the
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
-- Component Manager and Local Transcription Foundation now spans v32-A through v32-F: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, and resolver-owned transcription readiness. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
+- Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 
 ## What Is Implemented
 
@@ -332,3 +332,25 @@ It does not add:
 - automatic installation
 - automatic benchmark startup
 - readiness decisions in the GUI
+
+## v32-H Explicit Local Component Actions
+
+The local-components screen now dispatches explicit local actions through a structured request and task lifecycle.
+
+It supports:
+
+- verify
+- GPU benchmark
+- local-source install
+- managed repair
+- managed remove
+- safe revalidation before mutation
+- resolver refresh after terminal state
+
+It still does not add:
+
+- product download sources
+- automatic installation
+- automatic benchmark on startup
+- PATH mutation
+- pip / conda / package-manager install paths

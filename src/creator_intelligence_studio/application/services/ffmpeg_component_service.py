@@ -24,6 +24,7 @@ from creator_intelligence_studio.domain.components.entities import (
     ComponentInstallKind,
     ComponentInstallation,
     ComponentInstallationStatus,
+    RuntimeCheckRecord,
     RuntimeCheckStatus,
 )
 from creator_intelligence_studio.domain.components.downloads import VerifiedComponentArtifact
@@ -814,6 +815,86 @@ class FFmpegManagedComponentService:
         if resolution is None:
             raise RuntimeError("La resolucion de FFmpeg no devolvio un reporte.")
         return resolution.health
+
+    def verify_local(self) -> FFmpegInstallResult:
+        installation = self._active_managed_installation()
+        if installation is None or not installation.location_path:
+            health = self.verify()
+            return FFmpegInstallResult(
+                state=health.state,
+                source_path=None,
+                staged_path=None,
+                active_path=None,
+                installation=None,
+                health=health,
+                warnings=health.warnings,
+                errors=(health.error_message,) if health.error_message else (),
+                reason="not_installed",
+            )
+        ffmpeg_path = Path(installation.location_path) / "ffmpeg.exe"
+        ffprobe_path = Path(installation.location_path) / "ffprobe.exe"
+        health = self.health_checker.check_bundle(
+            ffmpeg_path=ffmpeg_path,
+            ffprobe_path=ffprobe_path,
+            fixture_root=self.paths.components_directory,
+        )
+        status = ComponentInstallationStatus.READY if health.healthy else ComponentInstallationStatus.REPAIR_REQUIRED
+        refreshed = ComponentInstallation(
+            component_id=installation.component_id,
+            installation_status=status,
+            installed_version=installation.installed_version,
+            revision=installation.revision,
+            install_type=installation.install_type,
+            location_path=installation.location_path,
+            location_reference=installation.location_reference,
+            detected_at=installation.detected_at,
+            verified_at=health.verified_at or _utc_now(),
+            health_status=RuntimeCheckStatus.READY if health.healthy else RuntimeCheckStatus.FAILED,
+            source=installation.source,
+            managed=installation.managed,
+            last_error_code=None if health.healthy else "health_check_failed",
+            last_error_message=None if health.healthy else health.error_message,
+            metadata={
+                **dict(installation.metadata),
+                "health": health.to_dict(),
+                "verification": "local",
+            },
+            created_at=installation.created_at,
+            updated_at=_utc_now(),
+        )
+        refreshed = self.repository.upsert_installation(refreshed)
+        self.repository.upsert_installation(
+            ComponentInstallation(
+                component_id=FFPROBE_COMPONENT_ID,
+                installation_status=refreshed.installation_status,
+                installed_version=refreshed.installed_version,
+                revision=refreshed.revision,
+                install_type=refreshed.install_type,
+                location_path=refreshed.location_path,
+                location_reference=refreshed.location_reference,
+                detected_at=refreshed.detected_at,
+                verified_at=refreshed.verified_at,
+                health_status=refreshed.health_status,
+                source=refreshed.source,
+                managed=refreshed.managed,
+                last_error_code=refreshed.last_error_code,
+                last_error_message=refreshed.last_error_message,
+                metadata=dict(refreshed.metadata),
+                created_at=refreshed.created_at,
+                updated_at=refreshed.updated_at,
+            )
+        )
+        return FFmpegInstallResult(
+            state="ready" if health.healthy else "failed",
+            source_path=installation.source,
+            staged_path=None,
+            active_path=installation.location_path,
+            installation=refreshed,
+            health=health,
+            warnings=health.warnings,
+            errors=(health.error_message,) if health.error_message else (),
+            reason="verified" if health.healthy else "health_check_failed",
+        )
 
     def _staging_root(self) -> Path:
         root = self.components_root / ".staging"

@@ -6,7 +6,7 @@ This plan breaks v32 into small, verifiable subphases. It is intentionally conse
 
 ## Current Status
 
-v32-A is implemented as a read-only foundation, v32-B is implemented as the local hardware/runtime benchmark foundation, v32-C is implemented as the managed FFmpeg boundary, v32-D is implemented as the resumable download-manager foundation, v32-E is implemented as the managed transcription runtime/model installer boundary, and v32-F is implemented as the transcription capability resolver closure. The remaining subphases below stay valid and pending: onboarding and deeper GUI work.
+v32-A is implemented as a read-only foundation, v32-B is implemented as the local hardware/runtime benchmark foundation, v32-C is implemented as the managed FFmpeg boundary, v32-D is implemented as the resumable download-manager foundation, v32-E is implemented as the managed transcription runtime/model installer boundary, v32-F is implemented as the transcription capability resolver closure, v32-G is implemented as the guided local-components UI shell, and v32-H is implemented as explicit local component actions plus task lifecycle wiring. The remaining subphases below stay valid and pending.
 
 ## Phase Order
 
@@ -236,28 +236,33 @@ Non-scope:
 
 - full UI overhaul
 
-### v32-H - Integration With Existing Transcription
+### v32-H - Explicit Local Component Actions
 
 Objective:
 
-- plug the resolver into the current transcription entry points
-- keep current service behavior where it is already stable
+- execute explicit local actions from the guided UI
+- keep component truth canonical in the resolver and installers
+- reflect task lifecycle in the Task Center
 
 Files:
 
-- transcription entry points
+- local component action dispatcher
 - workspace integration
+- local components view / view-model
 - task center messages
 
 Tests:
 
-- current transcribe flow still works
-- no hidden download after resolver says blocked
-- cancellation still works
+- install from local source
+- verify
+- repair
+- remove
+- stale action revalidation
+- task lifecycle persistence
 
 Gate:
 
-- existing transcription flow continues to function with the new resolver boundary
+- the GUI can request explicit local actions without mutating readiness directly
 
 Non-scope:
 
