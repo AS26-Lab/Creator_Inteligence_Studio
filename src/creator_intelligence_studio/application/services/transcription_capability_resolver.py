@@ -545,6 +545,7 @@ class TranscriptionCapabilityResolver:
         benchmark_age_seconds: float | None = None
         benchmark_device = None
         benchmark_compute_type = None
+        gpu_functionally_proven = False
         if benchmark_record is not None:
             checked_at = benchmark_record.checked_at or benchmark_record.updated_at or benchmark_record.created_at
             if checked_at is not None:
@@ -552,6 +553,7 @@ class TranscriptionCapabilityResolver:
             metadata = dict(benchmark_record.metadata or {})
             benchmark_device = str(metadata.get("actual_device") or metadata.get("requested_device") or "").strip().lower() or None
             benchmark_compute_type = str(metadata.get("selected_compute_type") or "").strip().lower() or None
+            gpu_functionally_proven = benchmark_device in {"gpu", "cuda"} and benchmark_status in {RuntimeCheckStatus.READY, RuntimeCheckStatus.DEGRADED}
             if metadata.get("model_component_id") and metadata.get("model_component_id") != selected_model_component_id:
                 stale_evidence.append("model_component_changed")
             if metadata.get("model_revision") and selected_profile and selected_profile.model_revision and metadata.get("model_revision") != selected_profile.model_revision:
@@ -563,9 +565,9 @@ class TranscriptionCapabilityResolver:
             if metadata.get("benchmark_version") and int(metadata.get("benchmark_version") or 0) != self.version:
                 stale_evidence.append("benchmark_version_changed")
         if hardware_profile is not None:
-            if hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED and benchmark_device not in {"gpu", "cuda"}:
+            if hardware_profile.gpu.status == HardwareCapabilityState.REPORTED_NOT_TESTED and not gpu_functionally_proven:
                 warnings.append("Se detecto una GPU, pero todavia no fue probada funcionalmente.")
-            if hardware_profile.status == HardwareCapabilityState.REPORTED_NOT_TESTED:
+            if hardware_profile.status == HardwareCapabilityState.REPORTED_NOT_TESTED and not gpu_functionally_proven:
                 warnings.append("La GPU esta detectada pero no validada.")
 
         available_disk = available_disk_bytes

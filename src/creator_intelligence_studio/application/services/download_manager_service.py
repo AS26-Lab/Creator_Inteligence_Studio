@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import http.client
 import hashlib
 import ipaddress
 import logging
@@ -204,6 +205,12 @@ def _error_from_exception(exc: Exception) -> ComponentDownloadError:
         else:
             category = ComponentDownloadErrorCategory.CONNECTION_FAILED
         return ComponentDownloadError(category=category, message_safe="No se pudo conectar con el origen.", details=message)
+    if isinstance(exc, (http.client.IncompleteRead, http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+        return ComponentDownloadError(
+            category=ComponentDownloadErrorCategory.TRUNCATED_RESPONSE,
+            message_safe="La respuesta HTTP termino antes de tiempo.",
+            details=str(exc),
+        )
     if isinstance(exc, ValueError):
         return ComponentDownloadError(category=ComponentDownloadErrorCategory.INVALID_REQUEST, message_safe=str(exc), details=str(exc))
     if isinstance(exc, OSError) and getattr(exc, "errno", None) == errno.ENOSPC:

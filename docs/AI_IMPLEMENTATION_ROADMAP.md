@@ -20,14 +20,14 @@ The collective server and predictive ML come later, once there are enough users 
 
 ## Next Handoff
 
-Component Manager and Local Transcription Foundation has now been implemented through v32-E as a foundation stack: v32-A, v32-B, v32-C, v32-D, and v32-E are already implemented.
+Component Manager and Local Transcription Foundation has now been implemented through v32-F as a foundation stack: v32-A, v32-B, v32-C, v32-D, v32-E, and v32-F are already implemented.
 
-- Objective: make local model/component installation and transcription onboarding explicit, guided, and reproducible.
+- Objective: make local model/component installation and transcription readiness explicit, guided, and reproducible.
 - Dependencies: stable AI Runtime foundation, clear local component inventory, local-only install sources, and platform-specific policy.
-- Current transcription state: local transcription already exists and remains implemented; it is now wrapped by a managed component foundation, a resumable artifact download boundary, and explicit runtime/model installers.
+- Current transcription state: local transcription already exists and remains implemented; it is now wrapped by managed component installers and a canonical readiness resolver.
 - Risks: drift into automatic media management, permanent media retention, hidden provider coupling, or implicit downloads.
-- Decisions pending: model relocation policy depth, onboarding polish, and the exact user-facing installer copy.
-- First contract to design: a guided runtime/model installer boundary that keeps non-technical users out of raw dependency details.
+- Decisions pending: onboarding polish and the exact user-facing installer copy.
+- First contract for the next phase: a guided onboarding flow that consumes readiness, warnings, fallback, and suggested actions without mutating the resolver.
 
 ## Stage Gates
 

@@ -26,6 +26,13 @@ The current stack already works, but it is not yet a component manager. v32 shou
 - UI must be guided and simple; technical details belong in advanced mode
 - First implementation must include onboarding and a local components screen
 
+v32-F closes the readiness layer:
+
+- `TranscriptionCapabilityResolver` becomes the canonical authority
+- `TranscriptionService` consumes an immutable execution plan
+- readiness, fallback, and suggested actions are read-only outputs
+- onboarding is still a later phase
+
 ## Existing Contract To Preserve
 
 The current transcription workflow is already implemented and must remain available while v32 is added:
@@ -228,6 +235,16 @@ v32-E makes runtime and model installation explicit:
 - legacy cache can be reused without automatic migration
 
 The download manager remains a separate boundary and does not activate installs by itself.
+
+## v32-F Boundary
+
+v32-F closes the local readiness contract on top of the installers:
+
+- the resolver decides readiness
+- `can_transcribe_now` is the hard gate
+- GPU readiness depends on benchmark evidence
+- profile fallback is deterministic and read-only
+- the service does not re-resolve after the plan is created
 
 ## Proposed Download Manager Contract
 

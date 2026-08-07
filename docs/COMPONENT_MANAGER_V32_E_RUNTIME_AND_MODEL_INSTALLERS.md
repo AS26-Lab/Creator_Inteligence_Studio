@@ -21,6 +21,8 @@ The download manager remains separate:
 - v32-E consumes that artifact or a local source
 - readiness still depends on installation plus health verification
 
+v32-F closes the readiness layer on top of these installers and makes the resolver the canonical authority for whether transcription can begin.
+
 ## Managed Install Types
 
 - `managed`
@@ -136,6 +138,7 @@ The capability resolver now considers:
 - repair required
 
 The resolver does not install or repair anything automatically.
+v32-F extends that contract so the resolver also owns device selection, profile fallback, and the final `can_transcribe_now` decision.
 
 ## CLI
 
@@ -168,4 +171,4 @@ The installer emits dedicated runtime/model install, health, activation, repair,
 - no pip-based runtime setup
 - no GPU driver installation
 - no PATH mutation
-
+- no onboarding yet

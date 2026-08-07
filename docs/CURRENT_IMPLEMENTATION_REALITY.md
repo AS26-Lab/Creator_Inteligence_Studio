@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v32-E slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v32-F slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -11,7 +11,7 @@ This document records what is actually implemented in the repository through the
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
-- Component Manager and Local Transcription Foundation now spans v32-A through v32-E: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, and explicit runtime/model installers. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
+- Component Manager and Local Transcription Foundation now spans v32-A through v32-F: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, and resolver-owned transcription readiness. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 
 ## What Is Implemented
 
@@ -223,6 +223,17 @@ Status: `implemented`
 - the capability resolver and transcription engine now resolve explicit installed paths instead of assuming download-on-demand behavior
 - no product download sources for runtime or models are enabled
 - no pip-based runtime installation is used
+
+Status: `implemented`
+
+## Component Manager v32-F Transcription Readiness Closure
+
+- `TranscriptionCapabilityResolver` is the canonical readiness authority
+- `can_transcribe_now` is the hard gate for local transcription
+- profile fallback is deterministic and read-only
+- GPU readiness depends on benchmark evidence and freshness
+- `TranscriptionService` consumes a resolved execution plan and refuses to start when the capability is blocked
+- the CLI exposes read-only capability and execution-plan commands
 
 Status: `implemented`
 
