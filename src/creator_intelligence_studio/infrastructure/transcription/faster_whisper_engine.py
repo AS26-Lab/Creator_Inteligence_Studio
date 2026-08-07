@@ -197,22 +197,17 @@ class FasterWhisperEngine:
             fallback_reason=backend.fallback_reason or "Fallback a CPU por disponibilidad o compatibilidad.",
         )
 
-    def _load_model(self, *, model_name: str, device: str, compute_type: str) -> Any:
+    def _load_model(self, *, model_name: str, device: str, compute_type: str, model_path: Path | None = None) -> Any:
         WhisperModel = self._import_backend(device=device)
         model_status = self.model_manager.inspect_model_availability(model_name)
         if not model_status.installed:
             raise TranscriptionBackendError("El modelo local solicitado no esta instalado o no puede verificarse.")
-        cache_root = self.model_manager.download_root(model_name)
-        key = (model_name, device, compute_type, cache_root)
+        resolved_path = Path(model_path) if model_path is not None else Path(self.model_manager.download_root(model_name))
+        key = (model_name, device, compute_type, str(resolved_path))
         if self._model is not None and self._loaded_key == key:
             return self._model
         self.release_model()
-        self._model = WhisperModel(
-            model_name,
-            device=device,
-            compute_type=compute_type,
-            download_root=cache_root,
-        )
+        self._model = WhisperModel(str(resolved_path), device=device, compute_type=compute_type)
         self._loaded_key = key
         return self._model
 
@@ -233,6 +228,7 @@ class FasterWhisperEngine:
             model_name=normalize_model_name(options.model_name),
             device=plan.device,
             compute_type=plan.compute_type,
+            model_path=Path(options.model_cache_root) if options.model_cache_root else None,
         )
         if progress_callback is not None:
             progress_callback(TranscriptionProgress(phase="Cargando modelo", approximate=True))

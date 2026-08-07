@@ -333,6 +333,39 @@ class ComponentManagerService:
     ) -> TranscriptionCapabilityPresentation:
         return self.resolver.present(self.resolve_transcription_capability(profile=profile, preferred_device=preferred_device))
 
+    def resolve_transcription_execution_plan(
+        self,
+        *,
+        profile: str = "balanced",
+        preferred_device: str = "auto",
+    ):
+        hardware = self.hardware_service.collect_inventory(persist=False)
+        installations = {installation.component_id: installation for installation in self.inspect_installations()}
+        available_disk_bytes = max((volume.free_bytes or 0) for volume in hardware.disk_volumes) if hardware.disk_volumes else None
+        return self.resolver.resolve_execution_plan(
+            requested_profile=profile,
+            preferred_device=preferred_device,
+            available_disk_bytes=available_disk_bytes,
+            installations=installations,
+            hardware_profile=hardware,
+            allow_blocked=True,
+        )
+
+    def transcription_capability_matrix(
+        self,
+        *,
+        preferred_device: str = "auto",
+    ) -> dict[str, TranscriptionCapabilityReport]:
+        hardware = self.hardware_service.collect_inventory(persist=False)
+        available_disk_bytes = max((volume.free_bytes or 0) for volume in hardware.disk_volumes) if hardware.disk_volumes else None
+        installations = {installation.component_id: installation for installation in self.inspect_installations()}
+        return self.resolver.capability_matrix(
+            preferred_device=preferred_device,
+            available_disk_bytes=available_disk_bytes,
+            installations=installations,
+            hardware_profile=hardware,
+        )
+
     def run_transcription_benchmark(
         self,
         *,

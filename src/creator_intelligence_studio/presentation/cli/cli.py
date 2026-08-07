@@ -667,6 +667,15 @@ def build_parser() -> argparse.ArgumentParser:
     components_capability.add_argument("--profile", default="balanced")
     components_capability.add_argument("--device", default="auto")
     components_capability.add_argument("--json", action="store_true")
+
+    components_plan = components_sub.add_parser("transcription-plan", help="Mostrar el plan local de ejecucion")
+    components_plan.add_argument("--profile", default="balanced")
+    components_plan.add_argument("--device", default="auto")
+    components_plan.add_argument("--json", action="store_true")
+
+    components_matrix = components_sub.add_parser("capability-matrix", help="Mostrar la matriz de perfiles de transcripcion")
+    components_matrix.add_argument("--device", default="auto")
+    components_matrix.add_argument("--json", action="store_true")
     components_benchmark = components_sub.add_parser("benchmark", help="Ejecutar o revisar el benchmark funcional de transcripcion")
     components_benchmark.add_argument("--profile", default="balanced")
     components_benchmark.add_argument("--device", default="auto")
@@ -2985,7 +2994,8 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
         return 0
     if args.action == "capability":
         report = service.resolve_transcription_capability(profile=args.profile, preferred_device=args.device)
-        presentation = service.describe_transcription_capability(profile=args.profile, preferred_device=args.device)
+        resolver = getattr(service, "resolver", None)
+        presentation = resolver.present(report) if resolver is not None else service.describe_transcription_capability(profile=args.profile, preferred_device=args.device)
         payload = {
             "capability": report.to_dict(),
             "presentation": presentation.to_dict(),
@@ -2995,7 +3005,30 @@ def _handle_components(args, service: ComponentManagerService, stdout) -> int:
         else:
             print("Capacidad de transcripcion:", file=stdout)
             print(f"Estado: {report.readiness}", file=stdout)
+            print(f"Puede transcribir ahora: {'si' if report.can_transcribe_now else 'no'}", file=stdout)
             print(f"Mensaje: {presentation.message}", file=stdout)
+            if report.structured_suggested_actions:
+                print("Acciones sugeridas:", file=stdout)
+                for action in report.structured_suggested_actions:
+                    print(f"- {action.display_label or action.action_type}: {action.description}", file=stdout)
+        return 0
+    if args.action == "transcription-plan":
+        plan = service.resolve_transcription_execution_plan(profile=args.profile, preferred_device=args.device)
+        payload = plan.to_dict()
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Plan de transcripcion:", file=stdout)
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+        return 0
+    if args.action == "capability-matrix":
+        matrix = service.transcription_capability_matrix(preferred_device=args.device)
+        payload = {profile_id: report.to_dict() for profile_id, report in matrix.items()}
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
+        else:
+            print("Matriz de capacidad:", file=stdout)
+            print(json.dumps(payload, ensure_ascii=False, indent=2), file=stdout)
         return 0
     if args.action == "benchmark":
         if getattr(args, "benchmark_action", None) == "status":

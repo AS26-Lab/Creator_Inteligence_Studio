@@ -103,8 +103,13 @@ class TranscriptionModelManager:
         return None
 
     def resolve_model_path(self, model_name: str) -> Path:
-        info = self.inspect_model_availability(model_name)
+        info = self.resolve_installed_model(model_name)
         return Path(info.path) if info.path else self.legacy_cache_root(model_name)
+
+    def resolve_installed_model(self, model_name: str) -> TranscriptionModelInfo:
+        """Devuelve la instalacion local efectiva sin descargar nada."""
+
+        return self.inspect_model_availability(model_name)
 
     def download_root(self, model_name: str) -> str:
         return str(self.resolve_model_path(model_name))

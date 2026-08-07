@@ -42,6 +42,8 @@ from creator_intelligence_studio.domain.transcription.value_objects import (
     TranscriptionSegmentData,
     TranscriptionVerificationResult,
 )
+from creator_intelligence_studio.domain.components.entities import ComponentInstallationStatus, RuntimeCheckStatus
+from creator_intelligence_studio.domain.hardware.entities import HardwareCapabilityState
 from creator_intelligence_studio.domain.videos.entities import VideoAsset
 from creator_intelligence_studio.domain.videos.repositories import VideoRepository
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
@@ -54,6 +56,10 @@ from creator_intelligence_studio.infrastructure.transcription.faster_whisper_eng
 )
 from creator_intelligence_studio.infrastructure.transcription.model_manager import (
     TranscriptionModelManager,
+)
+from creator_intelligence_studio.application.services.transcription_capability_resolver import (
+    TranscriptionCapabilityResolver,
+    TranscriptionExecutionPlan,
 )
 from creator_intelligence_studio.infrastructure.transcription.transcription_exporter import (
     export_json,
@@ -128,6 +134,7 @@ class TranscriptionService:
         prepared_audio_repository: SQLitePreparedAudioRepository,
         transcription_repository: TranscriptionRepository,
         model_manager: TranscriptionModelManager,
+        capability_resolver: TranscriptionCapabilityResolver | None = None,
         engine: FasterWhisperEngine | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -137,6 +144,7 @@ class TranscriptionService:
         self.prepared_audio_repository = prepared_audio_repository
         self.transcription_repository = transcription_repository
         self.model_manager = model_manager
+        self.capability_resolver = capability_resolver
         self.engine = engine or FasterWhisperEngine(model_manager=model_manager, logger=logger)
         self.logger = logger or logging.getLogger("creator_intelligence_studio.transcription")
         self._active_jobs: dict[str, threading.Event] = {}
@@ -159,6 +167,65 @@ class TranscriptionService:
         if callable(inspector):
             return inspector(model_name)
         return self.model_manager.get_model_status(model_name)
+
+    def _resolve_transcription_execution_plan(
+        self,
+        *,
+        options: TranscriptionOptions,
+        available_disk_bytes: int | None = None,
+    ) -> TranscriptionExecutionPlan:
+        resolver = self.capability_resolver
+        if resolver is None:
+            model_name = normalize_model_name(options.model_name)
+            model_info = self._inspect_model_availability(model_name)
+            can_transcribe_now = model_info.status in {TranscriptionModelStatus.INSTALLED, TranscriptionModelStatus.LEGACY_CACHE}
+            model_component_id = model_info.component_id or getattr(self.model_manager, "model_component_id", lambda value: f"transcription-model.{value}")(model_name)
+            return TranscriptionExecutionPlan(
+                resolution_id=str(uuid4()),
+                generated_at=utc_now(),
+                can_transcribe_now=can_transcribe_now,
+                selected_profile=None,
+                selected_profile_id=normalize_profile(options.profile),
+                selected_device=normalize_device(options.device),
+                compute_type=normalize_requested_compute_type(options.compute_type) or ("int8" if normalize_device(options.device) == "cpu" else "int8_float16"),
+                selected_model_component_id=model_component_id,
+                selected_model_reference=model_info.component_id or model_component_id,
+                selected_model_path=model_info.path,
+                selected_runtime_component_id="transcription-runtime.faster-whisper",
+                selected_runtime_installation_id="transcription-runtime.ctranslate2",
+                selected_ffmpeg_installation_id="ffmpeg",
+                selected_ffmpeg_source="legacy_service",
+                ffmpeg_status=ComponentInstallationStatus.READY,
+                ffprobe_status=ComponentInstallationStatus.READY,
+                runtime_status=RuntimeCheckStatus.READY,
+                model_status=ComponentInstallationStatus.READY if can_transcribe_now else ComponentInstallationStatus.MISSING,
+                hardware_status=HardwareCapabilityState.UNKNOWN,
+                gpu_status=HardwareCapabilityState.UNKNOWN,
+                benchmark_status=None,
+                benchmark_age_seconds=None,
+                disk_status={"available_bytes": available_disk_bytes, "estimated_required_bytes": None, "can_transcribe_now": can_transcribe_now},
+                temporary_space_bytes=None,
+                warnings=(),
+                evidence_versions=(),
+                primary_message="Tu computadora esta lista para transcribir." if can_transcribe_now else "El modelo no esta instalado. Usa Componentes locales para instalarlo.",
+                secondary_message="",
+                technical_summary=None,
+            )
+        return resolver.resolve_execution_plan(
+            requested_profile=normalize_profile(options.profile),
+            preferred_device=normalize_device(options.device),
+            available_disk_bytes=available_disk_bytes,
+        )
+
+    def _assert_execution_plan_current(self, plan: TranscriptionExecutionPlan) -> None:
+        if self.capability_resolver is None:
+            return
+        if plan.selected_model_path is not None and not Path(plan.selected_model_path).exists():
+            raise TranscriptionBackendError("component_changed_after_resolution:model")
+        if plan.selected_ffmpeg_installation_id is not None:
+            installation = self.capability_resolver.repository.get_installation(plan.selected_ffmpeg_installation_id) if self.capability_resolver else None
+            if installation is not None and installation.location_path and not Path(installation.location_path).exists():
+                raise TranscriptionBackendError("component_changed_after_resolution:ffmpeg")
 
     def _controlled_export_root(self, video_id: str) -> Path:
         return self.paths.project_root / "cache" / "transcriptions" / video_id
@@ -471,16 +538,15 @@ class TranscriptionService:
         ):
             return self.get_transcription(video.id)
         transcription_id = existing.id if existing else str(uuid4())
-        with self._lock:
-            if video.id in self._active_jobs:
-                raise ConflictError("Ya existe una transcripcion en curso para este video.")
-            cancellation_event = threading.Event()
-            self._active_jobs[video.id] = cancellation_event
-        backend = self.engine.verify_backend()
-        model_name = normalize_model_name(options.model_name)
-        model_status = self._inspect_model_availability(model_name)
-        if model_status.status != TranscriptionModelStatus.INSTALLED:
-            friendly_message = "El modelo no esta instalado. Usa Componentes locales para instalarlo."
+        execution_plan = self._resolve_transcription_execution_plan(
+            options=options,
+            available_disk_bytes=prepared_audio.file_size_bytes,
+        )
+        if not execution_plan.can_transcribe_now:
+            backend = self.engine.verify_backend()
+            model_name = normalize_model_name(options.model_name)
+            model_status = self._inspect_model_availability(model_name)
+            friendly_message = execution_plan.primary_message
             failed = self._persist_status(
                 transcription_id=transcription_id,
                 video=video,
@@ -490,7 +556,7 @@ class TranscriptionService:
                 error_code=model_status.error_code or "model_unavailable",
                 error_message=friendly_message,
                 backend_version=backend.faster_whisper_version,
-                model_version=model_status.model_name,
+                model_version=execution_plan.selected_model_component_id or model_status.model_name,
             )
             return self._report(
                 video=video,
@@ -500,24 +566,42 @@ class TranscriptionService:
                 is_stale=False,
                 backend=backend,
                 model_status=model_status,
-                warnings=(model_status.notes,) if model_status.notes else (),
+                warnings=execution_plan.warnings + ((model_status.notes,) if model_status.notes else ()),
                 errors=(friendly_message,),
                 progress_message=friendly_message,
             )
+        if self.capability_resolver is not None:
+            self._assert_execution_plan_current(execution_plan)
+        with self._lock:
+            if video.id in self._active_jobs:
+                raise ConflictError("Ya existe una transcripcion en curso para este video.")
+            cancellation_event = threading.Event()
+            self._active_jobs[video.id] = cancellation_event
+        backend = self.engine.verify_backend()
+        model_name = normalize_model_name(options.model_name)
+        model_status = self._inspect_model_availability(model_name)
         if not backend.available and normalize_device(options.device) == "cuda":
             raise TranscriptionBackendError(backend.fallback_reason or "CUDA no disponible.")
         if progress_callback is not None:
             progress_callback("Preparando backend", 0.0)
         try:
             engine_version = backend.faster_whisper_version
+            resolved_options = replace(
+                options,
+                profile=execution_plan.selected_profile_id,
+                model_name=(execution_plan.selected_model_component_id.split(".", 1)[-1] if execution_plan.selected_model_component_id else normalize_model_name(options.model_name)),
+                device=execution_plan.selected_device,
+                compute_type=execution_plan.compute_type,
+                model_cache_root=execution_plan.selected_model_path,
+            )
             queued = self._persist_status(
                 transcription_id=transcription_id,
                 video=video,
                 prepared_audio=prepared_audio,
                 status=TranscriptionStatus.QUEUED,
-                options=options,
+                options=resolved_options,
                 backend_version=engine_version,
-                model_version=model_status.model_name,
+                model_version=execution_plan.selected_model_reference or model_status.model_name,
             )
             if progress_callback is not None:
                 progress_callback("Cargando modelo", 0.1)
@@ -534,7 +618,7 @@ class TranscriptionService:
                 audio_path=audio_path,
                 audio_size_bytes=prepared_audio.file_size_bytes,
                 audio_modified_at=prepared_audio.source_file_modified_at.isoformat() if prepared_audio.source_file_modified_at else None,
-                options=options,
+                options=resolved_options,
                 cancellation_token=TranscriptionCancellationToken(is_cancelled=cancellation_event.is_set),
                 progress_callback=progress_callback,
             )
@@ -677,6 +761,7 @@ def build_transcription_service(
     video_repository: VideoRepository,
     prepared_audio_repository: SQLitePreparedAudioRepository,
     transcription_repository: TranscriptionRepository,
+    capability_resolver: TranscriptionCapabilityResolver | None = None,
     logger: logging.Logger | None = None,
 ) -> TranscriptionService:
     """Construye el servicio formal de transcripcion."""
@@ -690,6 +775,7 @@ def build_transcription_service(
         prepared_audio_repository=prepared_audio_repository,
         transcription_repository=transcription_repository,
         model_manager=model_manager,
+        capability_resolver=capability_resolver,
         engine=engine,
         logger=logger,
     )

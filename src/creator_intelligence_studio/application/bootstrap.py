@@ -369,6 +369,7 @@ def _load_service_context() -> ServiceContext:
         video_repository=video_repository,
         prepared_audio_repository=prepared_audio_repository,
         transcription_repository=transcription_repository,
+        capability_resolver=component_manager_service.resolver,
         logger=context.logger,
     )
     acoustic_service = build_acoustic_analysis_service(
