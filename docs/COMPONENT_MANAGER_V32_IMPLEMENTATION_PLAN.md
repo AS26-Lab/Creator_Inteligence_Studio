@@ -304,14 +304,15 @@ Non-scope:
 
 Objective:
 
-- verify all contracts in a small local suite
-- document the new reality
+- verify the full local component foundation as an integrated system
+- document the validated reality
 
 Files:
 
 - audit updates
-- roadmap update if needed
-- decision register entries if needed
+- roadmap update
+- decision register entries
+- closure note
 
 Tests:
 
@@ -321,10 +322,12 @@ Tests:
 - resolver
 - transcription integration
 - GUI onboarding
+- migration validation
+- AI Runtime regression safety
 
 Gate:
 
-- no hidden download, no silent fallback, no cross-creator mixing, no permanent MP4 retention
+- no hidden download, no silent fallback, no cross-creator mixing, no permanent MP4 retention, no `migration_33`
 
 ## Initial Test Matrix
 
@@ -366,7 +369,7 @@ Gate:
 
 ## v32-G Follow-up
 
-After the resolver closure, the next approved slice is the guided local-components UI. It should consume the canonical result and present the state, recommended profile, component cards, and structured actions without adding new readiness logic.
+After the resolver closure, the guided local-components UI consumes the canonical result and presents the state, recommended profile, component cards, and structured actions without adding new readiness logic.
 
 ## First Implementation Prompt Recommendation
 
@@ -378,3 +381,7 @@ The first coding prompt should ask for:
 4. a fake-only test suite for catalog and resolver
 
 That is the smallest safe slice that creates the v32 contract without changing transcription behavior yet.
+
+## Closure Note
+
+v32-J confirms the end-to-end integration of the already implemented slices. It does not enable productive remote sources or a new component-source contract.

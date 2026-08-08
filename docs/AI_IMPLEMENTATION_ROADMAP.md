@@ -113,3 +113,24 @@ It should not introduce:
 - automatic install on view open
 - automatic benchmark startup
 - duplicate component truth in widgets
+
+## v32-I
+
+Component operation lifecycle hardening adds startup reconciliation, cooperative cancellation, and bounded staging cleanup.
+
+It should not introduce:
+
+- automatic resume of interrupted mutations
+- unbounded cleanup outside managed roots
+- a new migration
+
+## v32-J
+
+Integration validation confirms that `v32-A` through `v32-I` work together as one local component foundation.
+
+It should not introduce:
+
+- productive internet component sources
+- real FFmpeg downloads
+- real model downloads
+- `migration_33`

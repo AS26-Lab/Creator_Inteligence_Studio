@@ -217,7 +217,7 @@ class AIRuntimeMigrationTests(unittest.TestCase):
                 after_rows = connection.execute("SELECT COUNT(*) FROM ai_executions").fetchone()[0]
                 self.assertEqual(before_rows + 1, after_rows)
 
-    def test_v30_database_upgrades_idempotently_to_v31(self) -> None:
+    def test_v30_database_upgrades_idempotently_to_v32(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db = SQLiteDatabase(Path(temp_dir) / "upgrade.db", timeout_seconds=5.0)
             with db.connect() as connection:
@@ -233,7 +233,7 @@ class AIRuntimeMigrationTests(unittest.TestCase):
                 second_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
 
                 self.assertEqual(first_count, second_count)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 31)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 32)
 
     def test_model_history_survives_deprecation_and_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

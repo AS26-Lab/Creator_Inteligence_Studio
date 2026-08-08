@@ -374,3 +374,23 @@ It still does not add:
 - automatic install
 - automatic benchmark
 - migration `v33`
+
+## v32-J Integration Validation
+
+The local component foundation has been integration-validated end to end.
+
+Validated behavior includes:
+
+- fresh install and restart recovery
+- interrupted download and interrupted install recovery
+- cancellation lifecycle and Task Center reconciliation
+- migration ceiling `v32`
+- AI Runtime v31 regression safety
+
+It still does not add:
+
+- productive internet component sources
+- automatic download
+- automatic install
+- automatic benchmark
+- `migration_33`

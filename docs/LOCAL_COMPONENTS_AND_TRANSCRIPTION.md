@@ -93,3 +93,18 @@ The benchmark must use real CUDA performance, not only `nvidia-smi`.
 ## Existing Implementation Reality
 
 The repository already includes transcription commands, model status, download, verification, export, and delete flows. The component manager now adds explicit runtime and model installers, managed-versus-legacy cache detection, and artifact handoff without hidden downloads. That is an operational foundation, but not yet the AI catch-up layer.
+
+## v32-J Integration Validation
+
+The local components foundation is now integration-validated as a coherent system.
+
+Validated behavior includes:
+
+- resolver-driven readiness presentation
+- guided onboarding and limited mode
+- explicit local component actions
+- interruption and recovery handling
+- Task Center consistency
+- migration ceiling `v32`
+
+Productive remote component sources remain disabled.

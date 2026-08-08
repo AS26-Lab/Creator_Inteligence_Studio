@@ -509,3 +509,19 @@ v32-H extends that guided surface with explicit local actions, but it still does
 - the GUI builds structured requests and confirms destructive actions
 - the backend revalidates the current component state before mutating anything
 - task lifecycle updates remain visible through the existing task center state
+
+v32-I hardens the lifecycle of those explicit actions:
+
+- startup reconciliation marks stale component work as interrupted
+- cancellation is cooperative and does not claim completion early
+- bounded staging cleanup stays inside managed roots
+- previous active installations remain canonical after interruption
+
+v32-J validates the integrated behavior across the full local component foundation:
+
+- fresh install
+- restart recovery
+- interrupted download and install
+- cancellation lifecycle
+- Task Center consistency
+- migration ceiling `v32`

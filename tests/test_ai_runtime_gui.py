@@ -92,6 +92,9 @@ class DesktopWorkspaceFacade:
     def refresh(self) -> None:
         pass
 
+    def recover_component_operation_state(self):
+        return None
+
     def select_creator(self, creator_id: str) -> None:
         self.selected_creator_id = creator_id
 
