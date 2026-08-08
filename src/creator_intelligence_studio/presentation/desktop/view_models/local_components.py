@@ -165,6 +165,19 @@ def _action_label(action_type: str) -> str:
     }.get(action_type, action_type.replace("_", " ").title())
 
 
+def _task_status_label(status: str) -> str:
+    normalized = (status or "").strip().lower()
+    return {
+        "cancel_requested": "Cancelando...",
+        "cancellation_pending": "Cancelando...",
+        "cancelled": "Cancelado",
+        "interrupted": "Interrumpido",
+        "completed": "Completado",
+        "completed_with_warnings": "Completado con advertencias",
+        "failed": "Error",
+    }.get(normalized, normalized.replace("_", " ").title() or "Desconocido")
+
+
 def _action_display_label(action: object | None) -> str | None:
     if action is None:
         return None
@@ -196,6 +209,24 @@ def _pick_action(
                 continue
             if action.available_now:
                 return action
+    return None
+
+
+def _active_task_for_component(tasks, component_id: str | None):
+    if not component_id:
+        return None
+    normalized = component_id.strip().lower()
+    for task in tasks:
+        payload = getattr(task, "payload", {}) or {}
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "component_action":
+            continue
+        if str(payload.get("component_id") or "").strip().lower() != normalized:
+            continue
+        if str(getattr(task, "status", "") or "").lower() in {"completed", "completed_with_warnings", "failed", "cancelled", "interrupted"}:
+            continue
+        return task
     return None
 
 
@@ -265,6 +296,7 @@ class LocalComponentsViewModel:
         capability = report or self.load_capability()
         component_status = component_status or self._component_status(capability)
         installations = {installation.component_id: installation for installation in component_status.installations} if component_status else {}
+        active_tasks = self.workspace.background_tasks()
         ffmpeg = installations.get("ffmpeg")
         ffprobe = installations.get("ffprobe")
         runtime = installations.get("transcription-runtime.faster-whisper") or installations.get("transcription-runtime.ctranslate2")
@@ -290,44 +322,65 @@ class LocalComponentsViewModel:
                 "NOT_DETECTED": "No se detecto una GPU compatible. Puedes seguir usando el procesador.",
                 "FAILED": "La prueba de GPU no pudo completarse. Puedes usar el procesador.",
             }.get(capability.gpu_status.name, gpu_explanation)
+        active_gpu_task = next(
+            (
+                task
+                for task in active_tasks
+                if getattr(task, "payload", {}).get("kind") == "component_action"
+                and str(getattr(task, "payload", {}).get("action_type") or "").strip().lower() == "run_gpu_benchmark"
+                and str(getattr(task, "status", "") or "").lower() not in {"completed", "completed_with_warnings", "failed", "cancelled", "interrupted"}
+            ),
+            None,
+        )
+        if active_gpu_task is not None:
+            gpu_state = _task_status_label(str(getattr(active_gpu_task, "status", "") or ""))
+            gpu_explanation = str(getattr(active_gpu_task, "message", "") or "La prueba de GPU sigue en curso.")
         gpu_card = LocalComponentsCardViewModel(
             key="gpu",
             title="Aceleracion por GPU",
             description="Comprueba si la GPU esta lista para transcribir.",
             state_label=gpu_state,
             explanation=gpu_explanation,
-            primary_action_label=_action_display_label(gpu_action),
-            primary_action_id=getattr(gpu_action, "action_id", None),
+            primary_action_label="Ver Task Center" if active_gpu_task is not None else _action_display_label(gpu_action),
+            primary_action_id="open_task_center" if active_gpu_task is not None else getattr(gpu_action, "action_id", None),
             technical_details=(
                 f"Benchmark: {capability.benchmark_status.value if capability and capability.benchmark_status else 'no verificado'}",
                 f"Edad de evidencia: {capability.benchmark_age_seconds:.0f} s" if capability and capability.benchmark_age_seconds is not None else "Edad de evidencia: no verificada",
             ),
         )
+        ffmpeg_task = _active_task_for_component(active_tasks, "ffmpeg")
+        runtime_task = _active_task_for_component(active_tasks, "transcription-runtime.faster-whisper") or _active_task_for_component(active_tasks, "transcription-runtime.ctranslate2")
+        model_task = _active_task_for_component(active_tasks, capability.selected_model_component_id if capability else None)
+        ffmpeg_details = (str(getattr(ffmpeg_task, "message", "") or "La operacion sigue en curso."),) if ffmpeg_task is not None else (f"FFprobe: {_status_label(ffprobe)}",)
+        runtime_details = (str(getattr(runtime_task, "message", "") or "La operacion sigue en curso."),) if runtime_task is not None else ()
+        model_details = (str(getattr(model_task, "message", "") or "La operacion sigue en curso."),) if model_task is not None else ()
         return (
             _component_card_from_installation(
                 key="ffmpeg",
                 title="Componente multimedia",
                 description="Prepara el audio de tus videos para poder analizarlo y transcribirlo.",
                 installation=ffmpeg,
-                primary_action_label=_action_display_label(ffmpeg_action),
-                primary_action_id=getattr(ffmpeg_action, "action_id", None),
-                details=(f"FFprobe: {_status_label(ffprobe)}",),
+                primary_action_label="Ver Task Center" if ffmpeg_task is not None else _action_display_label(ffmpeg_action),
+                primary_action_id="open_task_center" if ffmpeg_task is not None else getattr(ffmpeg_action, "action_id", None),
+                details=ffmpeg_details,
             ),
             _component_card_from_installation(
                 key="runtime",
                 title="Motor de transcripcion",
                 description="Ejecuta la transcripcion local en tu computadora.",
                 installation=runtime,
-                primary_action_label=_action_display_label(runtime_action),
-                primary_action_id=getattr(runtime_action, "action_id", None),
+                primary_action_label="Ver Task Center" if runtime_task is not None else _action_display_label(runtime_action),
+                primary_action_id="open_task_center" if runtime_task is not None else getattr(runtime_action, "action_id", None),
+                details=runtime_details,
             ),
             _component_card_from_installation(
                 key="model",
                 title="Modelo de transcripcion",
                 description="Convierte la voz del video en texto.",
                 installation=model,
-                primary_action_label=_action_display_label(model_action),
-                primary_action_id=getattr(model_action, "action_id", None),
+                primary_action_label="Ver Task Center" if model_task is not None else _action_display_label(model_action),
+                primary_action_id="open_task_center" if model_task is not None else getattr(model_action, "action_id", None),
+                details=model_details,
             ),
             gpu_card,
         )
@@ -424,7 +477,7 @@ class LocalComponentsViewModel:
                 LocalComponentsDownloadTaskViewModel(
                     task_id=task.task_id,
                     title=getattr(task, "title", "Descarga de componente"),
-                    status_label=str(getattr(task, "status", "") or ""),
+                    status_label=_task_status_label(str(getattr(task, "status", "") or "")),
                     progress_label=f"{percentage:.1f}%" if isinstance(percentage, (int, float)) else f"{downloaded or 0} / {total or 'no verificado'}",
                     speed_label=f"{speed:.0f} B/s" if isinstance(speed, (int, float)) else "Velocidad no verificada",
                     eta_label=f"{eta:.1f} s" if isinstance(eta, (int, float)) else "ETA no disponible",

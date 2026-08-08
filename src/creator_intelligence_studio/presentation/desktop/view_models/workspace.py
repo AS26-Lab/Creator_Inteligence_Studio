@@ -493,6 +493,8 @@ class WorkspaceViewModel:
         self.download_service = download_service
         self.component_manager_service = component_manager_service
         self._local_component_action_service = None
+        self._component_operation_recovery_service = None
+        self._last_component_operation_recovery_report = None
         self.personalization_service = personalization_service
         self.model_service = model_service
         self.evaluation_service = evaluation_service
@@ -599,6 +601,22 @@ class WorkspaceViewModel:
 
     def recover_ai_runtime_state(self) -> None:
         self._recover_ai_runtime_state()
+
+    def _recover_component_operation_state(self):
+        if self.component_manager_service is None:
+            return None
+        if self._component_operation_recovery_service is None:
+            from creator_intelligence_studio.application.services.component_operation_recovery_service import (
+                ComponentOperationRecoveryService,
+            )
+
+            self._component_operation_recovery_service = ComponentOperationRecoveryService(self)
+        report = self._component_operation_recovery_service.recover_startup_state()
+        self._last_component_operation_recovery_report = report
+        return report
+
+    def recover_component_operation_state(self):
+        return self._recover_component_operation_state()
 
     def _sync_default_selection(self) -> None:
         creators = self.service.list_creators()
@@ -1546,6 +1564,8 @@ class WorkspaceViewModel:
         from datetime import datetime, timezone
         from uuid import uuid4
 
+        now = to_iso_z(datetime.now(timezone.utc))
+
         task = BackgroundTaskRecord(
             task_id=str(uuid4()),
             title=title,
@@ -1559,11 +1579,20 @@ class WorkspaceViewModel:
             error=error,
             cancellable=cancellable,
             payload=payload or {},
-            created_at=to_iso_z(datetime.now(timezone.utc)),
-            updated_at=to_iso_z(datetime.now(timezone.utc)),
+            created_at=now,
+            updated_at=now,
+            last_heartbeat_at=now,
         )
         self._update_tasks(tuple(self.ui_state.tasks) + (task,))
         return task
+
+    def request_local_component_action_cancellation(self, task_id: str) -> BackgroundTaskRecord | None:
+        if self._local_component_action_service is None:
+            return None
+        request_cancel = getattr(self._local_component_action_service, "request_cancellation", None)
+        if not callable(request_cancel):
+            return None
+        return request_cancel(task_id)
 
     def ai_runtime_status(self):
         if self.ai_runtime_service is None:
@@ -1957,6 +1986,7 @@ class WorkspaceViewModel:
         updated: BackgroundTaskRecord | None = None
         tasks: list[BackgroundTaskRecord] = []
         now = to_iso_z(datetime.now(timezone.utc))
+        changes.setdefault("last_heartbeat_at", now)
         for task in self.ui_state.tasks:
             if task.task_id == task_id:
                 updated = replace(task, updated_at=now, **changes)

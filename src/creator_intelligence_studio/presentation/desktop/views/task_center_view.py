@@ -68,6 +68,22 @@ class TaskCenterView(QWidget):
             return None
         return next((task for task in self.workspace.background_tasks() if task.task_id == task_id), None)
 
+    def _status_label(self, task) -> str:
+        status = str(getattr(task, "status", "") or "").lower()
+        labels = {
+            "cancel_requested": "Cancelando...",
+            "cancellation_pending": "Cancelando...",
+            "cancelled": "Cancelado",
+            "interrupted": "Interrumpido",
+            "completed": "Completado",
+            "completed_with_warnings": "Completado con advertencias",
+            "failed": "Error",
+        }
+        return labels.get(status, status.replace("_", " ").title() or "Desconocido")
+
+    def _is_terminal_status(self, task) -> bool:
+        return str(getattr(task, "status", "") or "").lower() in {"completed", "completed_with_warnings", "failed", "cancelled", "interrupted"}
+
     def _is_delivery_task(self, task) -> bool:
         return bool(getattr(task, "payload", {}).get("kind") == "subtitle_delivery")
 
@@ -222,7 +238,7 @@ class TaskCenterView(QWidget):
                 title = task.title
                 video_value = self._task_video_title(task) or self._task_video_id(task) or ""
                 stage_value = task.stage_name or ""
-                status_value = task.status
+                status_value = self._status_label(task)
                 message_value = task.message or task.error or ""
                 updated_value = task.updated_at
             values = [
@@ -244,7 +260,8 @@ class TaskCenterView(QWidget):
         task = self._selected_task()
         enabled = task is not None
         self.open_button.setEnabled(enabled)
-        self.cancel_button.setEnabled(enabled and bool(getattr(task, "cancellable", True)))
+        cancellable = bool(getattr(task, "cancellable", True))
+        self.cancel_button.setEnabled(enabled and cancellable and not self._is_terminal_status(task) and str(getattr(task, "status", "") or "").lower() not in {"cancel_requested", "cancellation_pending"})
         self.retry_button.setEnabled(enabled)
 
     def _open_video(self) -> None:
@@ -326,7 +343,7 @@ class TaskCenterView(QWidget):
                     "Accion de componente local\n"
                     f"accion: {payload.get('action_type', task.action_id or task.task_id)}\n"
                     f"componente: {payload.get('component_id', '-')}\n"
-                    f"estado: {task.status}\n"
+                    f"estado: {self._status_label(task)}\n"
                     f"progreso: {task.progress_percent:.1f}%\n"
                     f"actualizada: {task.updated_at}"
                 ),
@@ -504,6 +521,11 @@ class TaskCenterView(QWidget):
         elif self._is_component_download_task(task):
             if getattr(self.workspace, "download_service", None) is not None:
                 self.workspace.download_service.download_cancel(task.task_id)
+        elif self._is_component_action_task(task):
+            if bool(getattr(task, "cancellable", False)) and hasattr(self.workspace, "request_local_component_action_cancellation"):
+                self.workspace.request_local_component_action_cancellation(task.task_id)
+            else:
+                self.workspace.interrupt_background_task(task.task_id, "Interrumpida desde Task Center")
         elif self._is_youtube_sync_task(task):
             self.workspace.interrupt_youtube_sync_run(task.task_id, "Interrumpida desde Task Center")
         elif self._is_instagram_sync_task(task):

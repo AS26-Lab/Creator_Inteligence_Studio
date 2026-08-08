@@ -27,7 +27,10 @@ class BackgroundTaskRecord:
     cancellable: bool = True
     created_at: str = field(default_factory=lambda: to_iso_z(utc_now()))
     updated_at: str = field(default_factory=lambda: to_iso_z(utc_now()))
+    last_heartbeat_at: str | None = None
+    cancel_requested_at: str | None = None
     interrupted_at: str | None = None
+    cancelled_at: str | None = None
     completed_at: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
@@ -46,7 +49,10 @@ class BackgroundTaskRecord:
             "cancellable": self.cancellable,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "last_heartbeat_at": self.last_heartbeat_at,
+            "cancel_requested_at": self.cancel_requested_at,
             "interrupted_at": self.interrupted_at,
+            "cancelled_at": self.cancelled_at,
             "completed_at": self.completed_at,
             "payload": dict(self.payload),
         }
@@ -67,7 +73,10 @@ class BackgroundTaskRecord:
             cancellable=bool(payload.get("cancellable", True)),
             created_at=str(payload.get("created_at") or to_iso_z(utc_now())),
             updated_at=str(payload.get("updated_at") or to_iso_z(utc_now())),
+            last_heartbeat_at=payload.get("last_heartbeat_at"),
+            cancel_requested_at=payload.get("cancel_requested_at"),
             interrupted_at=payload.get("interrupted_at"),
+            cancelled_at=payload.get("cancelled_at"),
             completed_at=payload.get("completed_at"),
             payload=dict(payload.get("payload") or {}),
         )

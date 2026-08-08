@@ -27,7 +27,7 @@ Component Manager and Local Transcription Foundation now has v32-A through v32-H
 - Current transcription state: local transcription already exists and remains implemented; it is now wrapped by managed component installers, a canonical readiness resolver, and explicit UI actions.
 - Risks: drift into automatic media management, permanent media retention, hidden provider coupling, or implicit downloads.
 - Decisions pending: onboarding polish and exact copy refinements for action confirmations and task-center phrasing.
-- First contract for the next phase: recovery and repair polish for interrupted local tasks without changing the canonical resolver.
+- First contract for the next phase: recovery and repair polish for interrupted local tasks without changing the canonical resolver. v32-I now covers the operation recovery hardening slice for local component actions.
 
 ## Stage Gates
 

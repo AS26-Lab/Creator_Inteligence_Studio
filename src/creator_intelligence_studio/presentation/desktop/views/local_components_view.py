@@ -590,6 +590,9 @@ class LocalComponentsView(QWidget):
         if self._status is None:
             self.refresh()
             return
+        if action_id == "open_task_center":
+            self._open_task_center()
+            return
         action = next((item for item in self._status.suggested_actions if item.action_id == action_id), None)
         if action is None:
             if not self.vm.execute_available_action(action_id):
@@ -624,6 +627,9 @@ class LocalComponentsView(QWidget):
         if not action_id or action_id == "toggle_details":
             self.advanced_toggle.setChecked(not self.advanced_toggle.isChecked())
             return
+        if action_id == "open_task_center":
+            self._open_task_center()
+            return
         self._trigger_action(action_id)
 
     def _open_transcription(self) -> None:
@@ -638,3 +644,9 @@ class LocalComponentsView(QWidget):
     def _open_task_center(self) -> None:
         if self.open_task_center_callback is not None:
             self.open_task_center_callback()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        for thread in (self._action_thread, self._refresh_thread):
+            if thread is not None and thread.isRunning():
+                thread.wait(1000)
+        super().closeEvent(event)

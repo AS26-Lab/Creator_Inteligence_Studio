@@ -292,6 +292,10 @@ Gate:
 
 - no stale lock or orphaned partial file remains after recovery
 
+Status:
+
+- implemented as operation recovery hardening for stale component tasks, cooperative benchmark cancellation, and bounded staging cleanup
+
 Non-scope:
 
 - provider changes

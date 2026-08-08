@@ -456,6 +456,15 @@ Do not use private user content for the initial benchmark.
 | PATH and binary drift | current FFmpeg locator scans PATH and common folders | medium | high | managed install path and verification | v32 |
 | GPU reported but not usable | current hardware diagnostic reports driver/GPU but not a benchmark | high | medium | benchmark gate + runtime check | v32 |
 | Partial downloads can rot | current staging exists but is not a full download state machine | high | high | resumable download manager | v32 |
+
+## v32-I Recovery Hardening
+
+The local-components surface now needs recovery semantics in addition to explicit actions:
+
+- stale component-action tasks are reconciled to interrupted on startup
+- benchmark cancellation is cooperative instead of forced
+- managed staging cleanup remains bounded and safe
+- the previous active installation stays canonical after an interrupted mutation
 | Model movement risk | no first-class relocation state | medium | medium | location table and atomic re-activation | v32 |
 | No catalog signature | current model list is discovery, not a signed component catalog | high | high | signed/versioned catalog | v32 |
 | UI overload | current transcription page is technical | medium | high | guided onboarding and limited mode copy | v32 |

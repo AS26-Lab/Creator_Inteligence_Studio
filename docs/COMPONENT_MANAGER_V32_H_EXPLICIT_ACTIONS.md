@@ -42,3 +42,12 @@ The UI still consumes the canonical `TranscriptionCapabilityResolver` output. It
 Component actions are executed through a structured request, a background task record, and a terminal resolver refresh.
 
 This keeps the GUI responsive while preserving the resolver as the source of truth.
+
+## v32-I Recovery Hardening
+
+The next slice hardens operation recovery:
+
+- cancelable GPU benchmark work uses a cooperative token
+- stale component-action tasks are reconciled to interrupted on startup
+- staging cleanup remains bounded to managed roots
+- previous active installations remain canonical after interruption

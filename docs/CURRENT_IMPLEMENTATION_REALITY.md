@@ -354,3 +354,23 @@ It still does not add:
 - automatic benchmark on startup
 - PATH mutation
 - pip / conda / package-manager install paths
+
+## v32-I Component Operation Recovery Hardening
+
+Component operation lifecycle hardening is implemented on top of the guided local-components surface.
+
+It now includes:
+
+- startup reconciliation for stale component-action tasks
+- cooperative cancellation for GPU benchmark work
+- interrupted-task presentation in the Task Center
+- bounded staging cleanup for managed component work
+- heartbeat-style task updates for local component actions
+
+It still does not add:
+
+- productive internet sources
+- automatic download
+- automatic install
+- automatic benchmark
+- migration `v33`

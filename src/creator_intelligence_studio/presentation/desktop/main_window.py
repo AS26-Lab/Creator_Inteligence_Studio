@@ -712,6 +712,10 @@ class MainWindow(QMainWindow):
             self.workspace.recover_ai_runtime_state()
         except Exception as exc:
             logger.warning("startup_recovery_failed error=%s", exc)
+        try:
+            self.workspace.recover_component_operation_state()
+        except Exception as exc:
+            logger.warning("component_operation_recovery_failed error=%s", exc)
         logger.info("GUI_BOOT_startup_recovery_completed")
         try:
             self.refresh_all()

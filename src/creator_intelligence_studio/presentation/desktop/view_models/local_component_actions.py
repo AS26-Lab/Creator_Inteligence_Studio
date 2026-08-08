@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from creator_intelligence_studio.application.services.component_manager_service import ComponentManagerService
 from creator_intelligence_studio.domain.components.entities import ComponentInstallation, ComponentInstallationStatus
+from creator_intelligence_studio.presentation.desktop.ui_state import BackgroundTaskRecord
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 
 
@@ -47,6 +48,20 @@ class ComponentActionExecution:
     progress_percent: float
 
 
+class _CancellationToken:
+    def __init__(self) -> None:
+        self._cancelled = False
+        self._lock = Lock()
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._cancelled = True
+
+    def cancelled(self) -> bool:
+        with self._lock:
+            return self._cancelled
+
+
 class LocalComponentActionService:
     """Executes validated local component actions and records task lifecycle."""
 
@@ -54,6 +69,7 @@ class LocalComponentActionService:
         self.workspace = workspace
         self.component_manager_service: ComponentManagerService | None = workspace.component_manager_service
         self._component_locks: dict[str, Lock] = {}
+        self._active_tokens: dict[str, _CancellationToken] = {}
         self._lock = Lock()
 
     def _component_lock(self, component_id: str) -> Lock:
@@ -139,6 +155,7 @@ class LocalComponentActionService:
         }.get(category, default)
 
     def _register_task(self, request: ComponentActionRequest, *, cancellable: bool) -> str:
+        now = _now()
         task = self.workspace.register_background_task(
             title=self._task_title(request),
             status="running",
@@ -154,6 +171,10 @@ class LocalComponentActionService:
                 "profile": request.profile,
                 "source_context": request.source_context,
                 "request_id": request.request_id,
+                "operation_id": request.request_id,
+                "requested_at": now,
+                "last_heartbeat_at": now,
+                "cancellable": cancellable,
             },
         )
         return task.task_id
@@ -167,10 +188,48 @@ class LocalComponentActionService:
     def _finish_task(self, task_id: str, *, message: str, status: str = "completed") -> None:
         if status == "completed":
             self.workspace.complete_background_task(task_id, message)
+        elif status == "cancelled":
+            self.workspace.update_background_task(
+                task_id,
+                status="cancelled",
+                progress_percent=100.0,
+                message=message,
+                cancellable=False,
+                cancelled_at=_now(),
+            )
         elif status == "failed":
             self.workspace.fail_background_task(task_id, message)
         else:
             self.workspace.interrupt_background_task(task_id, message)
+
+    def _token_for(self, task_id: str) -> _CancellationToken:
+        with self._lock:
+            token = self._active_tokens.get(task_id)
+            if token is None:
+                token = _CancellationToken()
+                self._active_tokens[task_id] = token
+            return token
+
+    def request_cancellation(self, task_id: str) -> BackgroundTaskRecord | None:
+        with self._lock:
+            token = self._active_tokens.get(task_id)
+        task = next((item for item in self.workspace.background_tasks() if item.task_id == task_id), None)
+        if task is None or not getattr(task, "cancellable", False):
+            return None
+        payload = dict(getattr(task, "payload", {}) or {})
+        payload["cancellation_requested"] = True
+        payload["last_heartbeat_at"] = _now()
+        if token is not None:
+            token.cancel()
+        return self.workspace.update_background_task(
+            task_id,
+            status="cancel_requested",
+            message="Estamos esperando a que la operacion llegue a un punto seguro para cancelarse.",
+            cancellable=True,
+            cancel_requested_at=_now(),
+            last_heartbeat_at=_now(),
+            payload=payload,
+        )
 
     def execute(self, request: ComponentActionRequest) -> ComponentActionExecution:
         if self.component_manager_service is None:
@@ -270,9 +329,12 @@ class LocalComponentActionService:
         terminal_result: dict[str, object] | None = None
         safe_error: str | None = None
         suggested_next_action: str | None = None
-        cancellable = False
+        cancellable = request.action_type == "run_gpu_benchmark"
+        benchmark_token = None
         try:
             task_id = self._register_task(request, cancellable=cancellable)
+            if request.action_type == "run_gpu_benchmark":
+                benchmark_token = self._token_for(task_id)
             self._update_task(task_id, stage_name="validating", progress_percent=5.0, message="Revalidando la accion solicitada.")
             if request.action_type == "choose_profile":
                 self.workspace.set_transcription_preferences(profile=request.profile)
@@ -291,8 +353,26 @@ class LocalComponentActionService:
                     profile=request.profile or self.workspace.ui_state.transcription_profile,
                     preferred_device="gpu",
                     persist_result=True,
+                    cancellation_token=benchmark_token,
                 )
                 terminal_result = result.to_dict() if hasattr(result, "to_dict") else {"result": str(result)}
+                if getattr(result, "status", None) == "cancelled":
+                    self._finish_task(task_id, message="La prueba de GPU fue cancelada.", status="cancelled")
+                    return ComponentActionExecution(
+                        action_id=request.request_id,
+                        task_id=task_id,
+                        status="cancelled",
+                        component_id=component_id,
+                        operation=request.action_type,
+                        started_at=started_at,
+                        finished_at=_now(),
+                        terminal_result=terminal_result,
+                        safe_error="La prueba de GPU fue cancelada.",
+                        suggested_next_action="run_gpu_benchmark",
+                        cancellable=True,
+                        task_status="cancelled",
+                        progress_percent=100.0,
+                    )
                 self._update_task(task_id, stage_name="verifying", progress_percent=90.0, message="Guardando evidencia de la prueba de GPU.")
             elif request.action_type == "verify_component":
                 if component_id == "ffmpeg":
@@ -424,5 +504,7 @@ class LocalComponentActionService:
                 progress_percent=100.0,
             )
         finally:
+            with self._lock:
+                self._active_tokens.pop(task_id, None)
             if lock is not None:
                 lock.release()
