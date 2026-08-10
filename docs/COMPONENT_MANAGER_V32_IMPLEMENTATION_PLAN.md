@@ -410,7 +410,7 @@ Tests:
 
 Gate:
 
-- the selected artifact is pinned, HTTPS-only, hash-qualified, and catalog-approved
+- the selected artifact is pinned, HTTPS-only, hash-qualified, catalog-approved, and chosen from the retained month-end class when available
 
 Status:
 

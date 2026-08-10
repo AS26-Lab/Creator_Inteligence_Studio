@@ -375,10 +375,10 @@ class ComponentCatalogContractTests(unittest.TestCase):
         self.assertEqual(ffmpeg.source_provider, "btbn")
         self.assertEqual(ffmpeg.upstream_project, "ffmpeg")
         self.assertEqual(ffmpeg.license_variant, "lgpl")
-        self.assertEqual(ffmpeg.release_tag, "autobuild-2026-08-09-13-03")
+        self.assertEqual(ffmpeg.release_tag, "autobuild-2026-07-31-14-10")
         self.assertEqual(ffmpeg.asset_name, "ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip")
-        self.assertEqual(ffmpeg.expected_sha256, "6b4edff47f121d2ed218b1b19d17f67aed08f9f1c9cbcee576fd0548a748c412")
-        self.assertEqual(ffmpeg.expected_download_bytes, 145937826)
+        self.assertEqual(ffmpeg.expected_sha256, "089e4169e93b2b3f3acbfced3c0704d24276a225641bdda04d796d28b07a2a38")
+        self.assertEqual(ffmpeg.expected_download_bytes, 145349121)
 
         runtime = catalog.get_entry("transcription-runtime.faster-whisper")
         self.assertIsNotNone(runtime)

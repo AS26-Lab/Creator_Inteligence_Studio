@@ -399,9 +399,11 @@ It still does not add:
 
 - the component catalog now includes one approved product source for FFmpeg only
 - the selected source is pinned to a BtbN GitHub release tag and asset
+- the current product pin is the retained month-end build `autobuild-2026-07-31-14-10`
 - download and install are separate actions
 - runtime and model productive sources remain disabled
 - legacy `v32` databases are kept compatible by startup schema augmentation
+- the previously validated daily pin `autobuild-2026-08-09-13-03` remains historical evidence only and is not the durable default product source
 - real internet validation is opt-in and remains outside the normal regression path
 
-Status: `implemented` and `real_call_validated` on `2026-08-10` with the pinned BtbN FFmpeg source.
+Status: `implemented` and `real_call_validated` on `2026-08-10` with the retained month-end BtbN FFmpeg source.

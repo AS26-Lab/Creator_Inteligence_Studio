@@ -18,7 +18,8 @@ This document covers the selected BtbN Windows FFmpeg bundle used for `v32-K`.
 - FFmpeg official legal documentation says GPL only applies if GPL parts are explicitly enabled
 - BtbN README documents the `lgpl` and `gpl` variants separately
 - the repository treats the product source as a catalog-approved external artifact, not as a product-owned binary
-- the real validation run on `2026-08-10` installed the pinned artifact and reported `ffmpeg version n8.1.2-34-g9b6c8969e0-20260809`
+- the retained month-end release `autobuild-2026-07-31-14-10` preserves the same `win64-lgpl` family and is the current product pin
+- the real validation run on `2026-08-10` installed the month-end pinned artifact and preserved bundled notices
 - the installed bundle exposed `LICENSE.txt` at the package root and preserved bundled notices in the managed installation layout
 
 ## Compliance Implications
@@ -31,5 +32,7 @@ This document covers the selected BtbN Windows FFmpeg bundle used for `v32-K`.
 ## Distribution Notes
 
 Creator Intelligence Studio may download, verify, and install the selected artifact through the managed component flow, but it must not invent a custom license claim. The product should present FFmpeg attribution, provider attribution, and the selected license variant plainly.
+
+The selected release is retained under BtbN's month-end policy, so the licensing qualification remains tied to the exact release tag and asset rather than to a floating daily build.
 
 This is an engineering qualification note, not legal advice.

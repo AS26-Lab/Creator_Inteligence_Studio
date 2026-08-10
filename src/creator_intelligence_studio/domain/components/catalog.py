@@ -17,15 +17,15 @@ from creator_intelligence_studio.domain.transcription.profiles import (
 )
 
 DEFAULT_COMPONENT_CATALOG_VERSION = 1
-FFMPEG_PRODUCT_RELEASE_TAG = "autobuild-2026-08-09-13-03"
+FFMPEG_PRODUCT_RELEASE_TAG = "autobuild-2026-07-31-14-10"
 FFMPEG_PRODUCT_ASSET_NAME = "ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip"
 FFMPEG_PRODUCT_SOURCE_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-08-09-13-03/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip"
+    "autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip"
 )
-FFMPEG_PRODUCT_EXPECTED_SHA256 = "6b4edff47f121d2ed218b1b19d17f67aed08f9f1c9cbcee576fd0548a748c412"
-FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES = 145937826
-FFMPEG_PRODUCT_SOURCE_REFERENCE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-09-13-03"
+FFMPEG_PRODUCT_EXPECTED_SHA256 = "089e4169e93b2b3f3acbfced3c0704d24276a225641bdda04d796d28b07a2a38"
+FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES = 145349121
+FFMPEG_PRODUCT_SOURCE_REFERENCE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-07-31-14-10"
 
 
 def _reviewed_now() -> datetime:
@@ -46,7 +46,7 @@ def build_default_component_catalog(*, reviewed_at: datetime | None = None) -> C
             platform="windows",
             architecture="x86_64",
             source_type="approved_product_source",
-            source_identifier="btbn/autobuild-2026-08-09-13-03/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip",
+            source_identifier="btbn/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip",
             source_provider="btbn",
             upstream_project="ffmpeg",
             source_url=FFMPEG_PRODUCT_SOURCE_URL,

@@ -9,12 +9,12 @@
 - `platform`: `windows`
 - `architecture`: `x86_64`
 - `license_variant`: `lgpl`
-- `release_tag`: `autobuild-2026-08-09-13-03`
+- `release_tag`: `autobuild-2026-07-31-14-10`
 - `asset_name`: `ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip`
-- `source_url`: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-09-13-03/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip`
-- `expected_sha256`: `6b4edff47f121d2ed218b1b19d17f67aed08f9f1c9cbcee576fd0548a748c412`
-- `expected_download_bytes`: `145937826`
-- `source_page_reference`: `https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-09-13-03`
+- `source_url`: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip`
+- `expected_sha256`: `089e4169e93b2b3f3acbfced3c0704d24276a225641bdda04d796d28b07a2a38`
+- `expected_download_bytes`: `145349121`
+- `source_page_reference`: `https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-07-31-14-10`
 
 The selected source is pinned in the component catalog as `approved_product_source`. It is not a floating `latest` URL.
 
@@ -43,12 +43,16 @@ The selected source is pinned in the component catalog as `approved_product_sour
 
 ## Retention Risk
 
-This artifact is a daily BtbN autobuild. BtbN documents that only the last 14 daily builds are retained, while the last build of each month is retained for two years. That means this pin is stable and exact, but it is not durable forever unless the release remains in the retained window.
+The previously validated daily pin `autobuild-2026-08-09-13-03` was real-call verified on `2026-08-10`, but BtbN documents that only the last 14 daily builds are retained. That makes the daily pin useful as evidence, not durable enough as the default product source.
+
+The selected product pin is the month-end release `autobuild-2026-07-31-14-10`. BtbN documents that the last build of each month is kept for two years, so this is the durable retained-class choice for the product catalog.
+
+Expected availability window: approximately until `2028-07-31`, subject to upstream policy changes or manual removal.
 
 ## Validation Status
 
 - offline regression tests pass
 - pre-v32-K database compatibility is covered by test
 - real internet download validation is opt-in through `CIS_RUN_PRODUCT_FFMPEG_DOWNLOAD=1`
-- real internet download, verification, install, health check, and resolver validation passed on `2026-08-10`
-- observed versions during validation: `ffmpeg version n8.1.2-34-g9b6c8969e0-20260809` and `ffprobe version n8.1.2-34-g9b6c8969e0-20260809`
+- real internet download, verification, install, health check, and resolver validation passed on `2026-08-10` for the month-end pin
+- observed versions during validation stayed within the same `n8.1.2-34-g9b6c8969e0` release family and the release tag remained `autobuild-2026-07-31-14-10`
