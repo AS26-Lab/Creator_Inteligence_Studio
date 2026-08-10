@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .application.bootstrap import main
+from creator_intelligence_studio.application.bootstrap import main
 
 
 if __name__ == "__main__":

@@ -79,6 +79,18 @@ The build script writes the manifest and reports the expected layout even when t
 
 ## Current Blocker
 
-The repository now has packaging foundation, but this environment does not currently prove a real built Windows artifact.
+## v32-N Real Bundle Result
 
-Until that artifact exists, the phase remains a packaging foundation slice rather than a confirmed distribution closure.
+The repository now has a real PyInstaller `onedir` build and an isolated clean-machine validation path.
+
+On the current test machine:
+
+- the bundle builds successfully;
+- the copied bundle starts outside the repo;
+- `CreatorIntelligenceStudio.exe --diagnostic-json` returns packaged runtime evidence;
+- the runtime manifest is present at `runtime/runtime_manifest.json`;
+- `config/default.json` is promoted to the bundle root so frozen bootstrap can resolve settings;
+- the frozen runtime is classified as `application_bundled` with manifest evidence;
+- `backports.tarfile==1.2.0` is bundled because the frozen `pkg_resources` hook requires it.
+
+Status: `proven on current test machine` for the Windows `onedir` bundle path.

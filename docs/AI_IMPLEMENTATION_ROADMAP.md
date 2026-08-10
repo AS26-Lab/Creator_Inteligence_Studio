@@ -177,3 +177,17 @@ It should not:
 - bundle Whisper models
 - bundle FFmpeg product sources
 - add a second packaging stack
+
+## v32-N
+
+Windows application packaging is now real-call validated on the current test machine.
+
+It should:
+
+- keep the bundle boundary explicit
+- keep models separate
+- keep FFmpeg separate
+
+It should not:
+
+- claim proof for all Windows machines from one test host

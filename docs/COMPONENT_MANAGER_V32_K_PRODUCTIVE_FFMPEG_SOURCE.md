@@ -68,3 +68,9 @@ It only hardened the downloader's HTTP/TLS resource lifecycle and added explicit
 v32-M does not bundle FFmpeg into the Windows application runtime.
 
 FFmpeg remains a separate managed component and keeps the approved product-source flow.
+
+## v32-N Note
+
+The Windows bundle validation in v32-N did not change the FFmpeg source policy.
+
+FFmpeg still remains separate from the frozen application runtime.

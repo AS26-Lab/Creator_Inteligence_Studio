@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -59,10 +60,20 @@ def _collect_output_paths(bundle_root: Path) -> tuple[str, ...]:
     paths = [
         bundle_root / f"{WINDOWS_APP_BUNDLE_NAME}.exe",
         bundle_root / "runtime" / WINDOWS_RUNTIME_MANIFEST_FILENAME,
+        bundle_root / "config" / "default.json",
         bundle_root / "libraries",
         bundle_root / "resources",
     ]
     return tuple(str(path) for path in paths)
+
+
+def _materialize_bundle_resource(bundle_root: Path, relative_path: str) -> None:
+    internal_path = bundle_root / "_internal" / relative_path
+    target_path = bundle_root / relative_path
+    if not internal_path.exists():
+        return
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(internal_path, target_path)
 
 
 def build_windows_app(
@@ -93,7 +104,7 @@ def build_windows_app(
         ).stdout.strip() or None,
         bundle_kind="onedir",
     )
-    manifest_path = write_windows_runtime_manifest(bundle_root, manifest)
+    manifest_path = bundle_root / "runtime" / WINDOWS_RUNTIME_MANIFEST_FILENAME
     invoked_packager = False
     success = True
 
@@ -128,6 +139,10 @@ def build_windows_app(
             "faster_whisper",
             "--collect-all",
             "ctranslate2",
+            "--collect-all",
+            "backports.tarfile",
+            "--hidden-import",
+            "backports",
             "--add-data",
             f"{project_root / 'config' / 'default.json'};config",
             "--add-data",
@@ -139,8 +154,23 @@ def build_windows_app(
         if not success:
             blockers.append(f"PyInstaller devolvio el codigo {completed.returncode}.")
         else:
+            _materialize_bundle_resource(bundle_root, "config/default.json")
+            _materialize_bundle_resource(
+                bundle_root,
+                "docs/TRANSCRIPTION_RUNTIME_LICENSING.md",
+            )
+            manifest_path = write_windows_runtime_manifest(bundle_root, manifest)
+            if not manifest_path.exists():
+                blockers.append("El runtime manifest no quedo materializado en el bundle.")
+                success = False
+            else:
+                notes.append("Se materializo el runtime manifest en el bundle.")
             notes.append("Se invoco PyInstaller en modo onedir.")
     else:
+        manifest_path = write_windows_runtime_manifest(bundle_root, manifest)
+        if not manifest_path.exists():
+            blockers.append("El runtime manifest no quedo materializado en el bundle.")
+            success = False
         notes.append("Se omitio la ejecucion real del empaquetador.")
 
     return WindowsAppBuildReport(

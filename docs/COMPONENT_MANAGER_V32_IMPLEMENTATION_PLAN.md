@@ -490,6 +490,13 @@ Non-scope:
 - second packaging stack
 - user runtime `pip`
 
-Status:
+## v32-N Closure Note
 
-- foundation only until a real bundle is produced and smoke-tested
+The real Windows bundle was built and clean-machine validated on the current test machine.
+
+That closes the packaging foundation path for this workspace, while keeping the design limits intact:
+
+- no product models yet;
+- no FFmpeg bundling;
+- no second packaging stack;
+- no user runtime `pip`.

@@ -15,6 +15,7 @@ dependencies = [
     "faster-whisper==1.2.1",
     "ctranslate2==4.8.1",
     "scikit-learn==1.7.2",
+    "backports.tarfile==1.2.0; platform_system == 'Windows'",
     "nvidia-cublas-cu12==12.9.2.10; platform_system == 'Windows'",
     "nvidia-cuda-runtime-cu12==12.9.79; platform_system == 'Windows'",
     "nvidia-cuda-nvrtc-cu12==12.9.86; platform_system == 'Windows'",

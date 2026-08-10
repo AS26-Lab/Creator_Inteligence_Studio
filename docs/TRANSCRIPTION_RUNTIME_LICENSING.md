@@ -52,3 +52,15 @@ If the runtime is later bundled inside the Windows app:
 - the manifest should record the shipped runtime versions;
 - notices should cover the shipped runtime wheels and native DLLs;
 - the preferred layout remains `onedir` unless a later decision replaces it.
+
+## v32-N Packaging Note
+
+The frozen Windows bundle currently includes:
+
+- `faster-whisper==1.2.1`
+- `ctranslate2==4.8.1`
+- `backports.tarfile==1.2.0`
+
+`backports.tarfile` is included because the frozen `pkg_resources` runtime hook requires it during startup.
+
+This is a packaging/runtime notice note, not a legal opinion.

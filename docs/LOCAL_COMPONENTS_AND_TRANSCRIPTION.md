@@ -151,3 +151,16 @@ When the app is frozen, `application_bundled` should only be used if:
 - the code is not merely running from the developer venv.
 
 The bundle still must not include Whisper models or FFmpeg product sources.
+
+## v32-N Runtime Distribution Update
+
+The Windows app bundle path is now real-call validated on the current test machine.
+
+That means:
+
+- the application-owned Python runtime is present in the frozen bundle;
+- `faster-whisper` and `CTranslate2` load from the bundle;
+- CPU runtime is available without a system Python install;
+- model sources remain separate and still missing by default;
+- FFmpeg remains separate and still uses the managed product-source flow;
+- GPU acceleration remains optional.

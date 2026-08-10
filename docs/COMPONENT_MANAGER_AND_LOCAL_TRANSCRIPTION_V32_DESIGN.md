@@ -572,4 +572,14 @@ It introduces:
 - a writable app-data root outside the bundle;
 - explicit bundle evidence before `application_bundled` can be claimed.
 
-This remains foundation only until a real packaged artifact is built and exercised.
+## v32-N Packaging Result
+
+The real packaged artifact was built and exercised on the current test machine.
+
+The validated boundary is:
+
+- bundled application runtime for Windows `onedir`;
+- managed FFmpeg remains separate;
+- models remain separate;
+- runtime manifests determine `application_bundled` classification;
+- clean-machine startup does not require user Python or user `pip`.

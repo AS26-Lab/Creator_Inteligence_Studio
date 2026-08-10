@@ -55,4 +55,20 @@ The repository now includes a build script that:
 - points to a PyInstaller onedir flow;
 - reports blockers when the packager is not installed.
 
-This is foundation, not proof of a distributable installer.
+## v32-N Validation Update
+
+The Windows `onedir` bundle is now real-call validated on the current test machine.
+
+The proven bundle characteristics are:
+
+- packaged app launches from a copied directory outside the repo;
+- no system Python is required for startup;
+- `PYTHONPATH` and `PYTHONHOME` are not required;
+- runtime manifest is loaded from the bundle;
+- `config/default.json` is available at the bundle root;
+- `application_bundled` is claimed only when the manifest evidence matches;
+- `faster-whisper` and `CTranslate2` are frozen into the bundle;
+- Whisper models remain separate;
+- FFmpeg remains a separate managed component.
+
+The bundle is proven only on the current test machine, not on all Windows machines.

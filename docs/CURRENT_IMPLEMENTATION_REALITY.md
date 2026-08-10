@@ -427,3 +427,16 @@ Status: `implemented` and `real_call_validated` on `2026-08-10` with the retaine
 - writable runtime state is redirected to an app-data root instead of the bundle directory
 - `application_bundled` now requires manifest evidence and matching runtime imports
 - no real packaged Windows artifact has been proven in this workspace yet
+
+## v32-N Real Windows Bundle Reality
+
+- `PyInstaller 6.14.2` can build the Windows `onedir` bundle in this workspace
+- the bundle starts from a copied isolated directory outside the repo
+- the frozen diagnostic reports `packaged_application = true`
+- the frozen diagnostic loads the runtime manifest from `runtime/runtime_manifest.json`
+- `config/default.json` is promoted to the bundle root for frozen bootstrap
+- `application_bundled` is now proven on the current test machine
+- `faster-whisper` and `CTranslate2` are frozen into the bundle
+- Whisper models remain separate and still do not have a productive source
+- FFmpeg remains separate and still uses the managed product source
+- the bundle is proven on the current test machine only, not all Windows machines
