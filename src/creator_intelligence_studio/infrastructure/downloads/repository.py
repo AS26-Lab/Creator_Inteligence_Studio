@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -79,7 +80,23 @@ class FileSystemComponentDownloadRepository:
         metadata_path = self.record_metadata_path(record.download_id, record.component_id)
         temp_path = metadata_path.with_name(metadata_path.name + ".tmp")
         temp_path.write_text(json.dumps(record.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temp_path, metadata_path)
+        replaced = False
+        try:
+            for attempt in range(6):
+                try:
+                    os.replace(temp_path, metadata_path)
+                    replaced = True
+                    break
+                except PermissionError:
+                    if attempt >= 5:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        finally:
+            if not replaced:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
         return record
 
     def delete_record(self, download_id: str) -> bool:

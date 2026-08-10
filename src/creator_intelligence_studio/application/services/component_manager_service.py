@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from creator_intelligence_studio.domain.components.entities import (
     ComponentInstallation,
     ComponentInstallationStatus,
     RuntimeCheckStatus,
+)
+from creator_intelligence_studio.domain.components.downloads import (
+    ComponentDownloadOverwritePolicy,
+    ComponentDownloadPriority,
+    ComponentDownloadRequest,
+    ComponentDownloadRetryPolicy,
+    VerifiedComponentArtifact,
 )
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
 from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
@@ -129,6 +137,64 @@ class ComponentManagerService:
 
     def download_start(self, request):
         return self.download_service.start_download(request)
+
+    def _product_source_supported(self, entry) -> bool:
+        if entry is None or entry.source_url is None or entry.expected_sha256 is None or entry.expected_download_bytes is None:
+            return False
+        if (entry.source_type or "").strip().lower() != "approved_product_source":
+            return False
+        platform_name = (platform.system() or "").strip().lower()
+        machine = (platform.machine() or "").strip().lower()
+        expected_platform = (entry.platform or "").strip().lower()
+        expected_architecture = (entry.architecture or "").strip().lower()
+        if expected_platform and expected_platform not in {platform_name, "windows"}:
+            return False
+        if expected_architecture and expected_architecture not in {machine, "amd64", "x86_64", "x64"}:
+            return False
+        return True
+
+    def product_download_request(self, component_id: str) -> ComponentDownloadRequest | None:
+        entry = self.catalog().get_entry(component_id)
+        if not self._product_source_supported(entry):
+            return None
+        return ComponentDownloadRequest(
+            component_id=entry.component_id,
+            catalog_version=entry.catalog_version,
+            source_url=entry.source_url or "",
+            expected_sha256=entry.expected_sha256,
+            expected_download_bytes=entry.expected_download_bytes,
+            destination_logical_location=f"product_source:{entry.component_id}",
+            priority=ComponentDownloadPriority.NORMAL,
+            user_initiated=True,
+            retry_policy=ComponentDownloadRetryPolicy(),
+            overwrite_policy=ComponentDownloadOverwritePolicy.REJECT,
+            allowed_domains=entry.allowed_domains,
+            allow_localhost=False,
+            test_mode=False,
+        )
+
+    def start_product_download(self, component_id: str):
+        request = self.product_download_request(component_id)
+        if request is None:
+            raise ValueError("La fuente productiva no esta disponible para este componente.")
+        return self.download_start(request)
+
+    def latest_verified_artifact(self, component_id: str) -> VerifiedComponentArtifact | None:
+        if self.download_service is None:
+            return None
+        normalized = component_id.strip().lower()
+        records = [
+            record
+            for record in self.download_service.list_downloads()
+            if record.component_id.strip().lower() == normalized and record.status.value == "completed" and record.verified_sha256 and record.verified_size_bytes is not None
+        ]
+        if not records:
+            return None
+        latest = max(
+            records,
+            key=lambda record: record.verified_at or record.completed_at or record.updated_at or record.created_at,
+        )
+        return self.download_service.verified_artifact(latest.download_id)
 
     def download_status(self, download_id: str) -> DownloadStatusSummary | None:
         return self.download_service.status(download_id)

@@ -394,3 +394,14 @@ It still does not add:
 - automatic install
 - automatic benchmark
 - `migration_33`
+
+## v32-K Product Source Qualification
+
+- the component catalog now includes one approved product source for FFmpeg only
+- the selected source is pinned to a BtbN GitHub release tag and asset
+- download and install are separate actions
+- runtime and model productive sources remain disabled
+- legacy `v32` databases are kept compatible by startup schema augmentation
+- real internet validation is opt-in and remains outside the normal regression path
+
+Status: `implemented` and `real_call_validated` on `2026-08-10` with the pinned BtbN FFmpeg source.

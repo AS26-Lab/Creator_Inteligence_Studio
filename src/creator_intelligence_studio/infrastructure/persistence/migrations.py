@@ -8515,6 +8515,17 @@ def migration_32(connection: sqlite3.Connection) -> None:
             architecture TEXT,
             source_type TEXT NOT NULL,
             source_identifier TEXT,
+            source_provider TEXT,
+            upstream_project TEXT,
+            source_url TEXT,
+            release_tag TEXT,
+            asset_name TEXT,
+            expected_sha256 TEXT,
+            upstream_version TEXT,
+            build_revision TEXT,
+            license_variant TEXT,
+            source_page_reference TEXT,
+            verified_at TEXT,
             allowed_domains_json TEXT NOT NULL DEFAULT '[]',
             expected_download_bytes INTEGER,
             expected_installed_bytes INTEGER,
@@ -8758,29 +8769,23 @@ def migration_32(connection: sqlite3.Connection) -> None:
     create("CREATE INDEX IF NOT EXISTS idx_component_events_component_id ON component_events(component_id)")
     create("CREATE INDEX IF NOT EXISTS idx_component_events_created_at ON component_events(created_at)")
 
+    component_catalog_values_sql = ", ".join(["?"] * 41)
     catalog = build_default_component_catalog()
     for entry in catalog.entries:
         connection.execute(
-            """
+            f"""
             INSERT OR IGNORE INTO component_catalog (
                 id, component_id, display_name, category, version, revision, platform,
-                architecture, source_type, source_identifier, allowed_domains_json,
-                expected_download_bytes, expected_installed_bytes, temporary_space_bytes,
-                sha256, license_name, license_url, attribution, dependencies_json,
-                capabilities_enabled_json, minimum_requirements_json,
-                recommended_requirements_json, install_strategy, health_check,
-                rollback_supported, catalog_version, reviewed_at, status,
+                architecture, source_type, source_identifier, source_provider,
+                upstream_project, source_url, release_tag, asset_name, expected_sha256,
+                upstream_version, build_revision, license_variant, source_page_reference,
+                verified_at, allowed_domains_json, expected_download_bytes,
+                expected_installed_bytes, temporary_space_bytes, sha256, license_name,
+                license_url, attribution, dependencies_json, capabilities_enabled_json,
+                minimum_requirements_json, recommended_requirements_json, install_strategy,
+                health_check, rollback_supported, catalog_version, reviewed_at, status,
                 created_at, updated_at
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?
-            )
+            ) VALUES ({component_catalog_values_sql})
             """,
             (
                 str(uuid4()),
@@ -8793,6 +8798,17 @@ def migration_32(connection: sqlite3.Connection) -> None:
                 entry.architecture,
                 entry.source_type,
                 entry.source_identifier,
+                entry.source_provider,
+                entry.upstream_project,
+                entry.source_url,
+                entry.release_tag,
+                entry.asset_name,
+                entry.expected_sha256,
+                entry.upstream_version,
+                entry.build_revision,
+                entry.license_variant,
+                entry.source_page_reference,
+                entry.verified_at.isoformat() if entry.verified_at else None,
                 json.dumps(list(entry.allowed_domains), ensure_ascii=False),
                 entry.expected_download_bytes,
                 entry.expected_installed_bytes,
@@ -8818,7 +8834,7 @@ def migration_32(connection: sqlite3.Connection) -> None:
 
     for profile in build_default_transcription_profiles():
         connection.execute(
-            """
+            f"""
             INSERT OR IGNORE INTO transcription_profiles (
                 id, profile_id, display_name, description, model_component_id,
                 model_revision, device_policy, cpu_compute_type, gpu_compute_type,
@@ -8860,6 +8876,137 @@ def migration_32(connection: sqlite3.Connection) -> None:
                 profile.reviewed_at.isoformat() if profile.reviewed_at else _utc_now(),
                 profile.created_at.isoformat() if profile.created_at else _utc_now(),
                 profile.updated_at.isoformat() if profile.updated_at else _utc_now(),
+            ),
+        )
+
+
+def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
+    rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def _ensure_component_catalog_product_source_columns(connection: sqlite3.Connection) -> None:
+    existing = _component_catalog_columns(connection)
+    additions = [
+        ("source_provider", "TEXT"),
+        ("upstream_project", "TEXT"),
+        ("source_url", "TEXT"),
+        ("release_tag", "TEXT"),
+        ("asset_name", "TEXT"),
+        ("expected_sha256", "TEXT"),
+        ("upstream_version", "TEXT"),
+        ("build_revision", "TEXT"),
+        ("license_variant", "TEXT"),
+        ("source_page_reference", "TEXT"),
+        ("verified_at", "TEXT"),
+    ]
+    for column_name, column_sql in additions:
+        if column_name in existing:
+            continue
+        connection.execute(f"ALTER TABLE component_catalog ADD COLUMN {column_name} {column_sql}")
+
+
+def _seed_component_catalog_product_sources(connection: sqlite3.Connection) -> None:
+    component_catalog_values_sql = ", ".join(["?"] * 41)
+    catalog = build_default_component_catalog()
+    for entry in catalog.entries:
+        if entry.source_type != "approved_product_source" or not entry.source_url:
+            continue
+        connection.execute(
+            f"""
+            INSERT INTO component_catalog (
+                id, component_id, display_name, category, version, revision, platform,
+                architecture, source_type, source_identifier, source_provider,
+                upstream_project, source_url, release_tag, asset_name, expected_sha256,
+                upstream_version, build_revision, license_variant, source_page_reference,
+                verified_at, allowed_domains_json, expected_download_bytes,
+                expected_installed_bytes, temporary_space_bytes, sha256, license_name,
+                license_url, attribution, dependencies_json, capabilities_enabled_json,
+                minimum_requirements_json, recommended_requirements_json, install_strategy,
+                health_check, rollback_supported, catalog_version, reviewed_at, status,
+                created_at, updated_at
+            ) VALUES ({component_catalog_values_sql})
+            ON CONFLICT(component_id, catalog_version) DO UPDATE SET
+                display_name = excluded.display_name,
+                category = excluded.category,
+                version = excluded.version,
+                revision = excluded.revision,
+                platform = excluded.platform,
+                architecture = excluded.architecture,
+                source_type = excluded.source_type,
+                source_identifier = excluded.source_identifier,
+                source_provider = excluded.source_provider,
+                upstream_project = excluded.upstream_project,
+                source_url = excluded.source_url,
+                release_tag = excluded.release_tag,
+                asset_name = excluded.asset_name,
+                expected_sha256 = excluded.expected_sha256,
+                upstream_version = excluded.upstream_version,
+                build_revision = excluded.build_revision,
+                license_variant = excluded.license_variant,
+                source_page_reference = excluded.source_page_reference,
+                verified_at = excluded.verified_at,
+                allowed_domains_json = excluded.allowed_domains_json,
+                expected_download_bytes = excluded.expected_download_bytes,
+                expected_installed_bytes = excluded.expected_installed_bytes,
+                temporary_space_bytes = excluded.temporary_space_bytes,
+                sha256 = excluded.sha256,
+                license_name = excluded.license_name,
+                license_url = excluded.license_url,
+                attribution = excluded.attribution,
+                dependencies_json = excluded.dependencies_json,
+                capabilities_enabled_json = excluded.capabilities_enabled_json,
+                minimum_requirements_json = excluded.minimum_requirements_json,
+                recommended_requirements_json = excluded.recommended_requirements_json,
+                install_strategy = excluded.install_strategy,
+                health_check = excluded.health_check,
+                rollback_supported = excluded.rollback_supported,
+                reviewed_at = excluded.reviewed_at,
+                status = excluded.status,
+                updated_at = excluded.updated_at
+            """,
+            (
+                str(uuid4()),
+                entry.component_id,
+                entry.display_name,
+                entry.category.value,
+                entry.version,
+                entry.revision,
+                entry.platform,
+                entry.architecture,
+                entry.source_type,
+                entry.source_identifier,
+                entry.source_provider,
+                entry.upstream_project,
+                entry.source_url,
+                entry.release_tag,
+                entry.asset_name,
+                entry.expected_sha256,
+                entry.upstream_version,
+                entry.build_revision,
+                entry.license_variant,
+                entry.source_page_reference,
+                entry.verified_at.isoformat() if entry.verified_at else None,
+                json.dumps(list(entry.allowed_domains), ensure_ascii=False),
+                entry.expected_download_bytes,
+                entry.expected_installed_bytes,
+                entry.temporary_space_bytes,
+                entry.sha256,
+                entry.license_name,
+                entry.license_url,
+                entry.attribution,
+                json.dumps(list(entry.dependencies), ensure_ascii=False),
+                json.dumps(list(entry.capabilities_enabled), ensure_ascii=False),
+                json.dumps(entry.minimum_requirements, ensure_ascii=False, sort_keys=True),
+                json.dumps(entry.recommended_requirements, ensure_ascii=False, sort_keys=True),
+                entry.install_strategy,
+                entry.health_check,
+                1 if entry.rollback_supported else 0,
+                entry.catalog_version,
+                entry.reviewed_at.isoformat() if entry.reviewed_at else _utc_now(),
+                entry.status.value,
+                entry.created_at.isoformat() if entry.created_at else _utc_now(),
+                entry.updated_at.isoformat() if entry.updated_at else _utc_now(),
             ),
         )
 
@@ -9023,5 +9170,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             raise MigrationError(
                 f"No se pudo aplicar la migracion {migration.version}: {migration.name}"
             ) from exc
+    with connection:
+        _ensure_component_catalog_product_source_columns(connection)
+        _seed_component_catalog_product_sources(connection)
     _repair_ai_runtime_execution_fingerprint_index(connection)
     _ensure_analytics_v15_compatibility(connection)

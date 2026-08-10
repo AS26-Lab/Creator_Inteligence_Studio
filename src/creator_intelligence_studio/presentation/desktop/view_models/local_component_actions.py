@@ -128,6 +128,7 @@ class LocalComponentActionService:
 
     def _task_title(self, request: ComponentActionRequest) -> str:
         label = {
+            "download_product_source": "Descargar componente multimedia",
             "verify_component": "Comprobar componente",
             "run_gpu_benchmark": "Probar GPU",
             "install_component": "Instalar componente",
@@ -145,6 +146,8 @@ class LocalComponentActionService:
             "action_no_longer_available": "La accion ya no esta disponible.",
             "component_changed": "El componente cambió y la accion se revalido.",
             "component_in_use": "El componente esta siendo utilizado por otra tarea.",
+            "download_source_unavailable": "La fuente productiva no esta disponible para este componente.",
+            "cached_artifact_unavailable": "No se encontro el artefacto verificado en cache.",
             "source_required": "Se necesita un archivo o carpeta local para continuar.",
             "operation_not_supported": "Esta accion no esta soportada para este componente.",
             "repair_source_unavailable": "Se necesita el archivo de instalacion para reparar este componente.",
@@ -267,7 +270,7 @@ class LocalComponentActionService:
                 task_status="failed",
                 progress_percent=0.0,
             )
-        if request.action_type in {"install_component", "repair_component", "remove_component"} and not request.user_confirmation:
+        if request.action_type in {"download_product_source", "install_component", "repair_component", "remove_component"} and not request.user_confirmation:
             safe_error = "La accion requiere confirmacion explicita."
             return ComponentActionExecution(
                 action_id=request.request_id,
@@ -286,6 +289,58 @@ class LocalComponentActionService:
             )
 
         component_id = (request.component_id or (action.target_component if action else None) or "").strip().lower() or None
+        if request.action_type == "download_product_source":
+            if component_id != "ffmpeg" or self.component_manager_service is None:
+                safe_error = self._safe_error("download_source_unavailable", "La fuente productiva no esta disponible para este componente.")
+                return ComponentActionExecution(
+                    action_id=request.request_id,
+                    task_id=request.request_id,
+                    status="failed",
+                    component_id=component_id,
+                    operation=request.action_type,
+                    started_at=_now(),
+                    finished_at=_now(),
+                    terminal_result=None,
+                    safe_error=safe_error,
+                    suggested_next_action=None,
+                    cancellable=False,
+                    task_status="failed",
+                    progress_percent=0.0,
+                )
+            try:
+                record = self.component_manager_service.start_product_download(component_id)
+            except Exception as exc:
+                safe_error = self._safe_error("download_source_unavailable", str(exc))
+                return ComponentActionExecution(
+                    action_id=request.request_id,
+                    task_id=request.request_id,
+                    status="failed",
+                    component_id=component_id,
+                    operation=request.action_type,
+                    started_at=_now(),
+                    finished_at=_now(),
+                    terminal_result=None,
+                    safe_error=safe_error,
+                    suggested_next_action=None,
+                    cancellable=False,
+                    task_status="failed",
+                    progress_percent=0.0,
+                )
+            return ComponentActionExecution(
+                action_id=request.request_id,
+                task_id=record.download_id,
+                status="completed",
+                component_id=component_id,
+                operation=request.action_type,
+                started_at=_now(),
+                finished_at=_now(),
+                terminal_result=record.to_dict(),
+                safe_error=None,
+                suggested_next_action="install_component",
+                cancellable=False,
+                task_status=record.status.value,
+                progress_percent=100.0 if record.status.value == "completed" else 0.0,
+            )
         current_installation = self._current_installation(component_id)
         if request.action_type in {"repair_component", "remove_component"} and current_installation is not None and not current_installation.managed:
             safe_error = self._safe_error("operation_not_supported", "Esta accion no esta soportada para este componente.")
@@ -390,17 +445,24 @@ class LocalComponentActionService:
                 if getattr(result, "state", "") in {"failed", "source_missing", "missing"}:
                     safe_error = result.reason or result.errors[0] if getattr(result, "errors", ()) else self._safe_error("health_check_failed", "La instalacion termino, pero el componente no pudo verificarse.")
             elif request.action_type == "install_component":
-                if not request.local_source:
+                artifact = None
+                source_label = request.source_context
+                if request.artifact_id and component_id == "ffmpeg" and self.component_manager_service.download_service is not None:
+                    artifact = self.component_manager_service.download_service.verified_artifact(request.artifact_id)
+                    if artifact is None:
+                        safe_error = self._safe_error("cached_artifact_unavailable", "No se encontro el artefacto verificado en cache.")
+                        raise FileNotFoundError(safe_error)
+                if artifact is None and not request.local_source:
                     safe_error = self._safe_error("source_required", "Se necesita un archivo o carpeta local para continuar.")
                     raise ValueError(safe_error)
-                source = Path(request.local_source)
+                source = Path(artifact.verified_artifact_path) if artifact is not None else Path(request.local_source)
                 if not source.exists():
                     safe_error = self._safe_error("invalid_source", "El archivo seleccionado no es valido para este componente.")
                     raise FileNotFoundError(safe_error)
                 self._update_task(task_id, stage_name="verifying_source", progress_percent=15.0, message="Verificando el origen local.")
                 if component_id == "ffmpeg":
                     self._update_task(task_id, stage_name="copying", progress_percent=35.0, message="Copiando y extrayendo el componente multimedia.")
-                    result = self.component_manager_service.ffmpeg_install_local(source)
+                    result = self.component_manager_service.ffmpeg_install_local(artifact or source, source_label=source_label or (artifact.download_id if artifact is not None else None))
                 elif component_id and component_id.startswith("transcription-runtime."):
                     self._update_task(task_id, stage_name="copying", progress_percent=35.0, message="Copiando y extrayendo el runtime local.")
                     result = self.component_manager_service.transcription_runtime_install_local(component_id, source, revision="1")

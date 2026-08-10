@@ -54,3 +54,7 @@ Validated suites included:
 ## Remaining Limitation
 
 The foundation is integration-validated, but productive remote component sources are still intentionally disabled. The next phase must not relax that gate without explicit source verification.
+
+## v32-K Boundary
+
+`v32-K` is separate from this integration slice. It qualifies one FFmpeg product source only and keeps download != install, with runtime and model productive sources still disabled.

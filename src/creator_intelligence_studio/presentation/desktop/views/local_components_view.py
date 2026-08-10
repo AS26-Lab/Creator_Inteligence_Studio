@@ -360,6 +360,23 @@ class LocalComponentsView(QWidget):
             return file_path, "file"
         return None, None
 
+    def _product_source_summary(self, component_id: str) -> str | None:
+        if self._status is None or self._status.component_status is None:
+            return None
+        entry = self._status.component_status.catalog.get_entry(component_id)
+        if entry is None or not entry.source_url:
+            return None
+        parts = []
+        if entry.source_provider:
+            parts.append(entry.source_provider)
+        if entry.release_tag:
+            parts.append(entry.release_tag)
+        if entry.asset_name:
+            parts.append(entry.asset_name)
+        if entry.expected_download_bytes is not None:
+            parts.append(f"{entry.expected_download_bytes} bytes")
+        return " | ".join(parts) if parts else None
+
     def _confirm_component_action(self, action: LocalComponentsActionViewModel, source_label: str | None = None) -> bool:
         component = action.target_component or "componente"
         details = [
@@ -368,6 +385,10 @@ class LocalComponentsView(QWidget):
         ]
         if source_label:
             details.append(f"Origen: {source_label}")
+        if action.action_type == "download_product_source":
+            details.append("Se requiere conexion a Internet.")
+            details.append("La descarga se verificara antes de instalarse.")
+            details.append("El archivo quedara en almacenamiento administrado.")
         if action.action_type in {"install_component", "repair_component", "remove_component"}:
             details.append("Esta operacion no descargara nada de Internet.")
         text = "\n".join(details)
@@ -378,18 +399,39 @@ class LocalComponentsView(QWidget):
         request = None
         source_context = None
         source_path = None
-        if action.action_type in {"install_component", "repair_component"}:
-            source_path, source_context = self._choose_local_source(action)
-            if source_path is None:
-                return
+        if action.action_type == "download_product_source":
+            source_context = self._product_source_summary(action.target_component or "")
             if not self._confirm_component_action(action, source_label=source_context):
                 return
             request = self.vm.build_action_request(
                 action.action_id,
-                local_source=source_path,
                 user_confirmation=True,
-                source_context=source_context,
+                source_context="product_source",
             )
+        elif action.action_type == "install_component" and (action.target_component or "").strip().lower() == "ffmpeg" and self.vm.has_cached_verified_artifact("ffmpeg"):
+            source_context = self._product_source_summary("ffmpeg") or "artefacto verificado en cache"
+            if not self._confirm_component_action(action, source_label=source_context):
+                return
+            request = self.vm.build_action_request(
+                action.action_id,
+                user_confirmation=True,
+                source_context="verified_download",
+            )
+        if action.action_type in {"install_component", "repair_component"}:
+            if request is not None:
+                pass
+            else:
+                source_path, source_context = self._choose_local_source(action)
+                if source_path is None:
+                    return
+                if not self._confirm_component_action(action, source_label=source_context):
+                    return
+                request = self.vm.build_action_request(
+                    action.action_id,
+                    local_source=source_path,
+                    user_confirmation=True,
+                    source_context=source_context,
+                )
         elif action.action_type == "remove_component":
             if not self._confirm_component_action(action):
                 return

@@ -525,3 +525,21 @@ v32-J validates the integrated behavior across the full local component foundati
 - cancellation lifecycle
 - Task Center consistency
 - migration ceiling `v32`
+
+## v32-K Product Source Boundary
+
+`v32-K` introduces one approved productive FFmpeg source only. The source metadata stays in the versioned catalog and must remain explicit, pinned, and separated from runtime/model source policy.
+
+Required properties:
+
+- exact provider and upstream project
+- exact release tag and asset name
+- exact source URL and release page reference
+- exact SHA-256 and expected byte count
+- explicit platform and architecture constraints
+- explicit license variant
+
+Compatibility rule:
+
+- existing `v32` databases must continue to boot after the startup compatibility pass
+- no new schema version is introduced for this source qualification slice

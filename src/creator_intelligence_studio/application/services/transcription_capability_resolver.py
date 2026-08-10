@@ -32,6 +32,13 @@ def _utc_now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+def _normalized_architecture(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in {"amd64", "x64", "x86_64"}:
+        return "x86_64"
+    return normalized
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilitySuggestedAction:
     action_id: str
@@ -350,6 +357,24 @@ class TranscriptionCapabilityResolver:
         normalized = (model_name or "small").strip().lower()
         return f"transcription-model.{normalized}"
 
+    def _product_source_available(self, entry: ComponentCatalogEntry | None, *, hardware_profile: HardwareProfile | None) -> bool:
+        if entry is None:
+            return False
+        if (entry.source_type or "").strip().lower() != "approved_product_source":
+            return False
+        if not entry.source_url or not entry.expected_sha256 or entry.expected_download_bytes is None:
+            return False
+        if hardware_profile is None:
+            return False
+        expected_platform = (entry.platform or "").strip().lower()
+        if expected_platform and expected_platform not in {hardware_profile.platform.strip().lower(), "windows"}:
+            return False
+        expected_architecture = _normalized_architecture(entry.architecture)
+        actual_architecture = _normalized_architecture(hardware_profile.architecture)
+        if expected_architecture and expected_architecture != actual_architecture:
+            return False
+        return True
+
     def _resolve_installation(self, component_id: str, installations: dict[str, ComponentInstallation]) -> ComponentInstallation:
         installation = installations.get(component_id)
         if installation is not None:
@@ -502,6 +527,8 @@ class TranscriptionCapabilityResolver:
                 blockers.append("FFmpeg es incompatible con este entorno.")
             else:
                 blockers.append("Falta FFmpeg.")
+                if self._product_source_available(catalog.get_entry("ffmpeg"), hardware_profile=hardware_profile):
+                    suggested_actions.append(CapabilitySuggestedAction("download_ffmpeg_product", "download_product_source", "ffmpeg", blocking=True, display_label="Descargar", description="Descarga la fuente productiva aprobada de FFmpeg y FFprobe.", priority=0, available_now=True, reason="product_source_approved", requires_network_future=True, requires_user_confirmation=True))
                 suggested_actions.append(CapabilitySuggestedAction("install_ffmpeg", "install_component", "ffmpeg", blocking=True, display_label="Instalar FFmpeg", description="Instala el componente multimedia desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
         else:
             suggested_actions.append(CapabilitySuggestedAction("verify_ffmpeg", "verify_component", "ffmpeg", blocking=False, display_label="Comprobar FFmpeg", description="Verifica la instalacion local del componente multimedia.", priority=3, available_now=True, reason="verification_available"))

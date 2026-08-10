@@ -134,3 +134,21 @@ It should not introduce:
 - real FFmpeg downloads
 - real model downloads
 - `migration_33`
+
+## v32-K
+
+Qualified FFmpeg product source for Windows x86_64.
+
+It should:
+
+- pin one exact BtbN artifact in the component catalog
+- keep download != install
+- verify SHA-256 before install
+- preserve existing v32 database compatibility
+
+It should not:
+
+- enable runtime or model productive sources
+- allow user-entered source URLs
+- use a floating `latest` URL as the catalog identity
+- introduce `migration_33`

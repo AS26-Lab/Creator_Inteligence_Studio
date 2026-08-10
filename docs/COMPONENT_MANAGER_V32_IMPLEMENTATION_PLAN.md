@@ -385,3 +385,33 @@ That is the smallest safe slice that creates the v32 contract without changing t
 ## Closure Note
 
 v32-J confirms the end-to-end integration of the already implemented slices. It does not enable productive remote sources or a new component-source contract.
+
+## v32-K - Qualified FFmpeg Product Source
+
+Objective:
+
+- qualify one exact BtbN FFmpeg Windows x86_64 artifact
+- keep download and install separate
+- keep runtime and model productive sources disabled
+
+Files:
+
+- component catalog metadata
+- download manager integration
+- FFmpeg installer integration
+- licensing and qualification docs
+
+Tests:
+
+- product source contract
+- pre-v32-K database compatibility
+- opt-in real download validation
+- download != install
+
+Gate:
+
+- the selected artifact is pinned, HTTPS-only, hash-qualified, and catalog-approved
+
+Status:
+
+- partially implemented in the worktree; offline tests and compatibility checks are in place, and the internet validation test is opt-in

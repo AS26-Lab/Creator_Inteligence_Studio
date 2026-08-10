@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import threading
 import wave
 import zipfile
@@ -38,7 +39,7 @@ from creator_intelligence_studio.shared.paths import ProjectPaths
 
 
 MAX_ARCHIVE_MEMBERS = 256
-MAX_ARCHIVE_EXTRACTED_BYTES = 256 * 1024 * 1024
+MAX_ARCHIVE_EXTRACTED_BYTES = 512 * 1024 * 1024
 MAX_VERSION_TEXT_BYTES = 1024
 FFMPEG_COMPONENT_ID = "ffmpeg"
 FFPROBE_COMPONENT_ID = "ffprobe"
@@ -609,15 +610,17 @@ class FFmpegManagedComponentService:
             return self._active_leases.get(component_id.strip().lower(), 0) > 0
 
     def _event(self, event_type: ComponentEventType, message_safe: str, *, payload: dict[str, object] | None = None, severity: str = "info", technical_reference: str | None = None) -> None:
+        event_payload = dict(payload or {})
+        event_payload.setdefault("component_id", FFMPEG_COMPONENT_ID)
         self.repository.append_event(
             ComponentEvent(
                 event_type=event_type,
                 message_safe=message_safe,
-                component_id=FFMPEG_COMPONENT_ID,
-                installation_component_id=FFMPEG_COMPONENT_ID,
+                component_id=None,
+                installation_component_id=None,
                 severity=severity,
                 technical_reference=technical_reference,
-                payload=payload or {},
+                payload=event_payload,
                 created_at=utc_now(),
             )
         )
@@ -909,11 +912,33 @@ class FFmpegManagedComponentService:
         if source_path.is_dir():
             _copy_directory_tree(source_path, staging_dir)
             return staging_dir
-        if source_path.suffix.lower() != ".zip":
+        if not zipfile.is_zipfile(source_path):
             raise ValueError("Solo se aceptan paquetes ZIP o directorios locales.")
         staging_dir.mkdir(parents=True, exist_ok=False)
         _safe_extract_zip(source_path, staging_dir)
         return staging_dir
+
+    def _normalize_bundle_layout(self, root: Path) -> Path:
+        try:
+            self._require_bundle(root)
+            return root
+        except ValueError:
+            pass
+        nested_roots = [child for child in root.iterdir() if child.is_dir()]
+        if len(nested_roots) != 1:
+            raise ValueError("Falta ffmpeg.exe en el paquete local.")
+        candidate_root = nested_roots[0]
+        binary_root = candidate_root / "bin" if (candidate_root / "bin").is_dir() else candidate_root
+        self._require_bundle(binary_root)
+        for item in binary_root.iterdir():
+            target = root / item.name
+            if item.is_dir():
+                if target.exists():
+                    continue
+                shutil.copytree(item, target)
+            else:
+                shutil.copy2(item, target)
+        return root
 
     def _require_bundle(self, root: Path) -> tuple[Path, Path]:
         ffmpeg_path = root / "ffmpeg.exe"
@@ -1002,6 +1027,7 @@ class FFmpegManagedComponentService:
         staging_root.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._copy_source_to_staging(source, staging_root)
+            staging_root = self._normalize_bundle_layout(staging_root)
             self._event(ComponentEventType.FFMPEG_MANAGED_INSTALL_STAGED, "Paquete local extraido a staging.", payload={"staging_path": str(staging_root)})
             ffmpeg_path, ffprobe_path = self._require_bundle(staging_root)
             health = self.health_checker.check_bundle(
@@ -1014,7 +1040,18 @@ class FFmpegManagedComponentService:
             final_root.parent.mkdir(parents=True, exist_ok=True)
             if final_root.exists():
                 shutil.rmtree(final_root, ignore_errors=True)
-            staging_root.replace(final_root)
+            moved = False
+            for attempt in range(12):
+                try:
+                    staging_root.replace(final_root)
+                    moved = True
+                    break
+                except PermissionError:
+                    if attempt >= 11:
+                        raise
+                    time.sleep(0.2 * (attempt + 1))
+            if not moved:
+                raise PermissionError(f"No se pudo activar la instalacion administrada en {final_root}.")
             installation = self._persist_managed_installation(
                 final_root=final_root,
                 health=health,

@@ -51,9 +51,9 @@ class FakeComponentManagerService:
         self.repository = FakeRepository()
         self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
-    def ffmpeg_install_local(self, source_path):
-        self.calls.append(("ffmpeg_install_local", (str(source_path),), {}))
-        return SimpleNamespace(state="ready", to_dict=lambda: {"state": "ready", "source_path": str(source_path)})
+    def ffmpeg_install_local(self, source_path, *, source_label=None):
+        self.calls.append(("ffmpeg_install_local", (str(source_path),), {"source_label": source_label}))
+        return SimpleNamespace(state="ready", to_dict=lambda: {"state": "ready", "source_path": str(source_path), "source_label": source_label})
 
     def transcription_runtime_install_local(self, component_id, source_path, *, revision="1", artifact=None):
         self.calls.append(("runtime_install_local", (component_id, str(source_path)), {"revision": revision}))

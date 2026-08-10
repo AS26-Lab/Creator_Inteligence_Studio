@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from creator_intelligence_studio.application.services.component_manager_service import ComponentManagerStatus
 from creator_intelligence_studio.application.services.transcription_capability_resolver import (
@@ -150,6 +151,7 @@ def _profile_description(profile_id: str) -> str:
 
 def _action_label(action_type: str) -> str:
     return {
+        "download_product_source": "Descargar",
         "run_gpu_benchmark": "Probar GPU",
         "install_component": "Instalar",
         "repair_component": "Reparar",
@@ -163,6 +165,12 @@ def _action_label(action_type: str) -> str:
         "retry_health_check": "Reintentar comprobacion",
         "open_local_install": "Instalar desde archivo local",
     }.get(action_type, action_type.replace("_", " ").title())
+
+
+def _latest_timestamp(*values: object) -> datetime:
+    fallback = datetime.min.replace(tzinfo=timezone.utc)
+    timestamps = [value for value in values if isinstance(value, datetime)]
+    return max(timestamps) if timestamps else fallback
 
 
 def _task_status_label(status: str) -> str:
@@ -301,7 +309,9 @@ class LocalComponentsViewModel:
         ffprobe = installations.get("ffprobe")
         runtime = installations.get("transcription-runtime.faster-whisper") or installations.get("transcription-runtime.ctranslate2")
         model = installations.get(capability.selected_model_component_id) if capability and capability.selected_model_component_id else None
-        ffmpeg_action = _pick_action(report, component_id="ffmpeg", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
+        ffmpeg_install_action = _pick_action(report, component_id="ffmpeg", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
+        ffmpeg_download_action = _pick_action(report, component_id="ffmpeg", action_types=("download_product_source",))
+        ffmpeg_cached_download = self._latest_verified_download("ffmpeg")
         runtime_action = _pick_action(report, component_id="transcription-runtime.faster-whisper", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
         if runtime_action is None:
             runtime_action = _pick_action(report, component_id="transcription-runtime.ctranslate2", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
@@ -351,18 +361,28 @@ class LocalComponentsViewModel:
         ffmpeg_task = _active_task_for_component(active_tasks, "ffmpeg")
         runtime_task = _active_task_for_component(active_tasks, "transcription-runtime.faster-whisper") or _active_task_for_component(active_tasks, "transcription-runtime.ctranslate2")
         model_task = _active_task_for_component(active_tasks, capability.selected_model_component_id if capability else None)
-        ffmpeg_details = (str(getattr(ffmpeg_task, "message", "") or "La operacion sigue en curso."),) if ffmpeg_task is not None else (f"FFprobe: {_status_label(ffprobe)}",)
+        ffmpeg_details = [str(getattr(ffmpeg_task, "message", "") or "La operacion sigue en curso.")] if ffmpeg_task is not None else [f"FFprobe: {_status_label(ffprobe)}"]
+        if ffmpeg_cached_download is not None:
+            ffmpeg_details.append(f"Artefacto verificado: {ffmpeg_cached_download.download_id}")
+        elif ffmpeg_download_action is not None:
+            ffmpeg_details.append("Fuente productiva aprobada disponible para descarga.")
         runtime_details = (str(getattr(runtime_task, "message", "") or "La operacion sigue en curso."),) if runtime_task is not None else ()
         model_details = (str(getattr(model_task, "message", "") or "La operacion sigue en curso."),) if model_task is not None else ()
+        if ffmpeg_cached_download is not None and ffmpeg_install_action is not None:
+            ffmpeg_primary_action = ffmpeg_install_action
+        elif ffmpeg_download_action is not None:
+            ffmpeg_primary_action = ffmpeg_download_action
+        else:
+            ffmpeg_primary_action = ffmpeg_install_action
         return (
             _component_card_from_installation(
                 key="ffmpeg",
                 title="Componente multimedia",
                 description="Prepara el audio de tus videos para poder analizarlo y transcribirlo.",
                 installation=ffmpeg,
-                primary_action_label="Ver Task Center" if ffmpeg_task is not None else _action_display_label(ffmpeg_action),
-                primary_action_id="open_task_center" if ffmpeg_task is not None else getattr(ffmpeg_action, "action_id", None),
-                details=ffmpeg_details,
+                primary_action_label="Ver Task Center" if ffmpeg_task is not None else _action_display_label(ffmpeg_primary_action),
+                primary_action_id="open_task_center" if ffmpeg_task is not None else getattr(ffmpeg_primary_action, "action_id", None),
+                details=tuple(ffmpeg_details),
             ),
             _component_card_from_installation(
                 key="runtime",
@@ -421,7 +441,7 @@ class LocalComponentsViewModel:
             LocalComponentsActionViewModel(
                 action_id=getattr(action, "action_id", ""),
                 action_type=str(getattr(action, "action_type", "")),
-                label=_action_label(str(getattr(action, "action_type", ""))),
+                label=str(getattr(action, "display_label", "") or _action_label(str(getattr(action, "action_type", "")))),
                 description=str(getattr(action, "description", "") or getattr(action, "reason", "") or ""),
                 available_now=bool(getattr(action, "available_now", False)),
                 blocking=bool(getattr(action, "blocking", False)),
@@ -431,6 +451,25 @@ class LocalComponentsViewModel:
             )
             for action in report.structured_suggested_actions
         )
+
+    def _latest_verified_download(self, component_id: str):
+        download_service = getattr(self.workspace, "download_service", None)
+        if download_service is None:
+            return None
+        records = [
+            record
+            for record in download_service.list_downloads()
+            if str(getattr(record, "component_id", "") or "").strip().lower() == component_id.strip().lower()
+            and str(getattr(record, "status", "") or "").lower() == "completed"
+            and getattr(record, "verified_sha256", None)
+            and getattr(record, "verified_size_bytes", None) is not None
+        ]
+        if not records:
+            return None
+        return max(records, key=lambda record: _latest_timestamp(getattr(record, "verified_at", None), getattr(record, "completed_at", None), getattr(record, "updated_at", None), getattr(record, "created_at", None)))
+
+    def has_cached_verified_artifact(self, component_id: str) -> bool:
+        return self._latest_verified_download(component_id) is not None
 
     def build_action_request(
         self,
@@ -449,6 +488,13 @@ class LocalComponentsViewModel:
             if status.capability_report is not None and status.capability_report.selected_profile is not None
             else self.workspace.ui_state.transcription_profile
         )
+        artifact_id = None
+        source_context = source_context
+        if action.action_type == "install_component" and (action.target_component or "").strip().lower() == "ffmpeg" and local_source is None:
+            cached_download = self._latest_verified_download("ffmpeg")
+            if cached_download is not None:
+                artifact_id = cached_download.download_id
+                source_context = source_context or "verified_download"
         return ComponentActionRequest(
             action_type=action.action_type,
             component_id=action.target_component,
@@ -456,6 +502,7 @@ class LocalComponentsViewModel:
             local_source=local_source,
             user_confirmation=user_confirmation,
             source_context=source_context,
+            artifact_id=artifact_id,
         )
 
     def execute_component_action(self, request: ComponentActionRequest) -> ComponentActionExecution:

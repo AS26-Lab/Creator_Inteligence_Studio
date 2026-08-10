@@ -367,6 +367,31 @@ class ComponentCatalogContractTests(unittest.TestCase):
         self.assertIn("transcription-model.medium", component_ids)
         self.assertEqual(catalog.catalog_version, 1)
 
+    def test_ffmpeg_is_the_only_product_source_in_default_catalog(self) -> None:
+        catalog = build_default_component_catalog()
+        ffmpeg = catalog.get_entry("ffmpeg")
+        self.assertIsNotNone(ffmpeg)
+        self.assertEqual(ffmpeg.source_type, "approved_product_source")
+        self.assertEqual(ffmpeg.source_provider, "btbn")
+        self.assertEqual(ffmpeg.upstream_project, "ffmpeg")
+        self.assertEqual(ffmpeg.license_variant, "lgpl")
+        self.assertEqual(ffmpeg.release_tag, "autobuild-2026-08-09-13-03")
+        self.assertEqual(ffmpeg.asset_name, "ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip")
+        self.assertEqual(ffmpeg.expected_sha256, "6b4edff47f121d2ed218b1b19d17f67aed08f9f1c9cbcee576fd0548a748c412")
+        self.assertEqual(ffmpeg.expected_download_bytes, 145937826)
+
+        runtime = catalog.get_entry("transcription-runtime.faster-whisper")
+        self.assertIsNotNone(runtime)
+        self.assertIsNone(runtime.source_url)
+        self.assertIsNone(runtime.expected_sha256)
+        self.assertNotEqual(runtime.source_type, "approved_product_source")
+
+        model = catalog.get_entry("transcription-model.small")
+        self.assertIsNotNone(model)
+        self.assertIsNone(model.source_url)
+        self.assertIsNone(model.expected_sha256)
+        self.assertNotEqual(model.source_type, "approved_product_source")
+
     def test_default_profiles_include_balanced_as_provisional_default(self) -> None:
         profiles = build_default_transcription_profiles()
         profile_ids = {profile.profile_id for profile in profiles}

@@ -138,6 +138,17 @@ class ComponentCatalogEntry:
     architecture: str | None
     source_type: str
     source_identifier: str | None
+    source_provider: str | None = None
+    upstream_project: str | None = None
+    source_url: str | None = None
+    release_tag: str | None = None
+    asset_name: str | None = None
+    expected_sha256: str | None = None
+    upstream_version: str | None = None
+    build_revision: str | None = None
+    license_variant: str | None = None
+    source_page_reference: str | None = None
+    verified_at: datetime | None = None
     allowed_domains: tuple[str, ...] = ()
     expected_download_bytes: int | None = None
     expected_installed_bytes: int | None = None
@@ -170,6 +181,17 @@ class ComponentCatalogEntry:
             "architecture": self.architecture,
             "source_type": self.source_type,
             "source_identifier": self.source_identifier,
+            "source_provider": self.source_provider,
+            "upstream_project": self.upstream_project,
+            "source_url": self.source_url,
+            "release_tag": self.release_tag,
+            "asset_name": self.asset_name,
+            "expected_sha256": self.expected_sha256,
+            "upstream_version": self.upstream_version,
+            "build_revision": self.build_revision,
+            "license_variant": self.license_variant,
+            "source_page_reference": self.source_page_reference,
+            "verified_at": to_iso_z(self.verified_at),
             "allowed_domains": list(self.allowed_domains),
             "expected_download_bytes": self.expected_download_bytes,
             "expected_installed_bytes": self.expected_installed_bytes,

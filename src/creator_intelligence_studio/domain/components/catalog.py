@@ -17,6 +17,15 @@ from creator_intelligence_studio.domain.transcription.profiles import (
 )
 
 DEFAULT_COMPONENT_CATALOG_VERSION = 1
+FFMPEG_PRODUCT_RELEASE_TAG = "autobuild-2026-08-09-13-03"
+FFMPEG_PRODUCT_ASSET_NAME = "ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip"
+FFMPEG_PRODUCT_SOURCE_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
+    "autobuild-2026-08-09-13-03/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip"
+)
+FFMPEG_PRODUCT_EXPECTED_SHA256 = "6b4edff47f121d2ed218b1b19d17f67aed08f9f1c9cbcee576fd0548a748c412"
+FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES = 145937826
+FFMPEG_PRODUCT_SOURCE_REFERENCE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-09-13-03"
 
 
 def _reviewed_now() -> datetime:
@@ -32,18 +41,30 @@ def build_default_component_catalog(*, reviewed_at: datetime | None = None) -> C
             component_id="ffmpeg",
             display_name="FFmpeg",
             category=ComponentCategory.FFMPEG,
-            version=None,
-            revision=None,
+            version="8.1.2",
+            revision="34-g9b6c8969e0",
             platform="windows",
-            architecture="x64",
-            source_type="managed_local_bundle",
-            source_identifier=None,
-            allowed_domains=(),
+            architecture="x86_64",
+            source_type="approved_product_source",
+            source_identifier="btbn/autobuild-2026-08-09-13-03/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-8.1.zip",
+            source_provider="btbn",
+            upstream_project="ffmpeg",
+            source_url=FFMPEG_PRODUCT_SOURCE_URL,
+            release_tag=FFMPEG_PRODUCT_RELEASE_TAG,
+            asset_name=FFMPEG_PRODUCT_ASSET_NAME,
+            expected_sha256=FFMPEG_PRODUCT_EXPECTED_SHA256,
+            upstream_version="8.1.2",
+            build_revision="34-g9b6c8969e0",
+            license_variant="lgpl",
+            source_page_reference=FFMPEG_PRODUCT_SOURCE_REFERENCE,
+            verified_at=reviewed_at,
+            allowed_domains=("github.com", "release-assets.githubusercontent.com"),
+            expected_download_bytes=FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES,
             dependencies=(),
             capabilities_enabled=("audio_preparation", "media_inspection"),
             minimum_requirements={},
             recommended_requirements={},
-            install_strategy="managed_local_bundle",
+            install_strategy="managed_product_bundle",
             health_check="ffmpeg_version_probe",
             rollback_supported=False,
             catalog_version=DEFAULT_COMPONENT_CATALOG_VERSION,

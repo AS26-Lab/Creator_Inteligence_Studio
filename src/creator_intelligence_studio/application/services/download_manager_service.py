@@ -277,14 +277,17 @@ class ComponentDownloadManagerService:
         if self.component_repository is None:
             return
         try:
+            event_payload = dict(payload or {})
+            if component_id is not None and "component_id" not in event_payload:
+                event_payload["component_id"] = component_id
             self.component_repository.append_event(
                 ComponentEvent(
                     event_type=event_type,
                     message_safe=message_safe,
-                    component_id=component_id,
+                    component_id=None,
                     severity=severity,
                     technical_reference=technical_reference,
-                    payload=payload or {},
+                    payload=event_payload,
                     created_at=_utc_now(),
                 )
             )

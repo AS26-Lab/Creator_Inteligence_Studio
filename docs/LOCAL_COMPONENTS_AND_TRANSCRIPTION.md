@@ -108,3 +108,15 @@ Validated behavior includes:
 - migration ceiling `v32`
 
 Productive remote component sources remain disabled.
+
+## v32-K Productive FFmpeg Source
+
+The local components screen may now offer `Descargar componente multimedia` for the approved FFmpeg source only when the catalog, platform, and architecture checks pass.
+
+The normal flow remains:
+
+- download first
+- verify the artifact
+- explicit install second
+
+Runtime and model productive sources stay disabled in this phase.
