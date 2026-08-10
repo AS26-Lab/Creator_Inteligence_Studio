@@ -311,17 +311,17 @@ class ComponentManagerService:
                     installations.append(
                         ComponentInstallation(
                             component_id=entry.component_id,
-                            installation_status=ComponentInstallationStatus.READY,
+                            installation_status=ComponentInstallationStatus.EXTERNALLY_DETECTED,
                             installed_version=version,
                             revision=entry.revision,
-                            install_type=ComponentInstallKind.MANAGED,
+                            install_type=ComponentInstallKind.EXTERNALLY_DETECTED,
                             location_path=None,
                             location_reference="python_package",
                             detected_at=None,
                             verified_at=None,
-                            health_status=RuntimeCheckStatus.READY,
+                            health_status=RuntimeCheckStatus.NOT_CHECKED,
                             source="python_import",
-                            managed=True,
+                            managed=False,
                             metadata={},
                         )
                     )

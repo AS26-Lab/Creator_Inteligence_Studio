@@ -407,3 +407,14 @@ It still does not add:
 - real internet validation is opt-in and remains outside the normal regression path
 
 Status: `implemented` and `real_call_validated` on `2026-08-10` with the retained month-end BtbN FFmpeg source.
+
+## v32-L Runtime Distribution And Transport Hardening
+
+- the transcription runtime now records explicit distribution states instead of implying managed ownership from import success alone
+- `application_bundled` remains a future packaging state because the repository does not yet prove a committed bundled Windows app runtime with an embedded interpreter
+- runtime packages importable from the active Python environment are now classified as `legacy_external`
+- the downloader now closes the HTTP response and underlying connection on success, failure, pause, cancel, redirect, retry, and exception
+- real FFmpeg validation still passes, and the SSL socket `ResourceWarning` no longer appears
+- no runtime product source was enabled
+- no model product source was enabled
+- no `migration_33` was added

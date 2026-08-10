@@ -193,6 +193,7 @@ class TranscriptionService:
                 selected_model_path=model_info.path,
                 selected_runtime_component_id="transcription-runtime.faster-whisper",
                 selected_runtime_installation_id="transcription-runtime.ctranslate2",
+                runtime_resolution=None,
                 selected_ffmpeg_installation_id="ffmpeg",
                 selected_ffmpeg_source="legacy_service",
                 ffmpeg_status=ComponentInstallationStatus.READY,

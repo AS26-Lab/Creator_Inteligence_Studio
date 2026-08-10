@@ -174,6 +174,89 @@ class TranscriptionBackendInfo:
         }
 
 
+class TranscriptionRuntimeDistributionState(str, Enum):
+    """Estado canónico de distribución del runtime local."""
+
+    APPLICATION_BUNDLED = "application_bundled"
+    MANAGED = "managed"
+    LEGACY_EXTERNAL = "legacy_external"
+    MISSING = "missing"
+    INCOMPATIBLE = "incompatible"
+    REPAIR_REQUIRED = "repair_required"
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptionRuntimeInstallation:
+    """Identidad y origen del runtime local efectivo."""
+
+    component_id: str
+    distribution_state: TranscriptionRuntimeDistributionState
+    runtime_implementation: str
+    faster_whisper_version: str | None
+    ctranslate2_version: str | None
+    python_version: str | None
+    source_kind: str | None
+    platform: str | None
+    architecture: str | None
+    cpu_supported: bool
+    gpu_supported: bool
+    build_revision: str | None = None
+    catalog_revision: str | None = None
+    location_path: str | None = None
+    location_reference: str | None = None
+    managed: bool | None = None
+    notes: str | None = None
+    error_message: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "component_id": self.component_id,
+            "distribution_state": self.distribution_state.value,
+            "runtime_implementation": self.runtime_implementation,
+            "faster_whisper_version": self.faster_whisper_version,
+            "ctranslate2_version": self.ctranslate2_version,
+            "python_version": self.python_version,
+            "source_kind": self.source_kind,
+            "platform": self.platform,
+            "architecture": self.architecture,
+            "cpu_supported": self.cpu_supported,
+            "gpu_supported": self.gpu_supported,
+            "build_revision": self.build_revision,
+            "catalog_revision": self.catalog_revision,
+            "location_path": self.location_path,
+            "location_reference": self.location_reference,
+            "managed": self.managed,
+            "notes": self.notes,
+            "error_message": self.error_message,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptionRuntimeResolution:
+    """Resultado canónico de resolucion del runtime local."""
+
+    installation: TranscriptionRuntimeInstallation
+    status: str
+    selected_device: str
+    compute_type: str | None
+    can_transcribe: bool
+    reason: str | None = None
+    warnings: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "installation": self.installation.to_dict(),
+            "status": self.status,
+            "selected_device": self.selected_device,
+            "compute_type": self.compute_type,
+            "can_transcribe": self.can_transcribe,
+            "reason": self.reason,
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class TranscriptionCancellationToken:
     """Token cooperativo de cancelacion."""

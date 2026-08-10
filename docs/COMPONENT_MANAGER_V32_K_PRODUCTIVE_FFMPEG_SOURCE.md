@@ -56,3 +56,9 @@ Expected availability window: approximately until `2028-07-31`, subject to upstr
 - real internet download validation is opt-in through `CIS_RUN_PRODUCT_FFMPEG_DOWNLOAD=1`
 - real internet download, verification, install, health check, and resolver validation passed on `2026-08-10` for the month-end pin
 - observed versions during validation stayed within the same `n8.1.2-34-g9b6c8969e0` release family and the release tag remained `autobuild-2026-07-31-14-10`
+
+## v32-L Note
+
+v32-L did not change the FFmpeg product pin.
+
+It only hardened the downloader's HTTP/TLS resource lifecycle and added explicit runtime distribution classification elsewhere in the component manager.

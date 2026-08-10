@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import warnings
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -116,24 +117,31 @@ class FfmpegProductSourceIntegrationTests(unittest.TestCase):
             self.assertEqual(request.expected_sha256, "089e4169e93b2b3f3acbfced3c0704d24276a225641bdda04d796d28b07a2a38")
             self.assertIn("github.com", request.allowed_domains)
 
-            record = service.start_product_download("ffmpeg")
-            terminal = service.download_service.wait_for_terminal(record.download_id, timeout_seconds=1800)
-            self.assertIsNotNone(terminal)
-            self.assertEqual(terminal.status, ComponentDownloadStatus.COMPLETED)
-            self.assertEqual(terminal.verified_sha256, request.expected_sha256)
-            self.assertEqual(terminal.verified_size_bytes, request.expected_download_bytes)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ResourceWarning)
+                record = service.start_product_download("ffmpeg")
+                terminal = service.download_service.wait_for_terminal(record.download_id, timeout_seconds=1800)
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal.status, ComponentDownloadStatus.COMPLETED)
+                self.assertEqual(terminal.verified_sha256, request.expected_sha256)
+                self.assertEqual(terminal.verified_size_bytes, request.expected_download_bytes)
 
-            artifact = service.download_service.verified_artifact(record.download_id)
-            self.assertIsNotNone(artifact)
-            install = service.ffmpeg_service.install_local(artifact)
-            self.assertEqual(install.state, "ready")
-            self.assertIsNotNone(install.health)
-            self.assertTrue(install.health.healthy)
+                artifact = service.download_service.verified_artifact(record.download_id)
+                self.assertIsNotNone(artifact)
+                install = service.ffmpeg_service.install_local(artifact)
+                self.assertEqual(install.state, "ready")
+                self.assertIsNotNone(install.health)
+                self.assertTrue(install.health.healthy)
 
-            media_tools = service.resolve_media_tools()
-            self.assertTrue(media_tools.available)
-            self.assertIsNotNone(media_tools.resolution)
-            self.assertEqual(media_tools.resolution.source, "managed")
+                media_tools = service.resolve_media_tools()
+                self.assertTrue(media_tools.available)
+                self.assertIsNotNone(media_tools.resolution)
+                self.assertEqual(media_tools.resolution.source, "managed")
+
+            self.assertFalse(
+                any(issubclass(warning.category, ResourceWarning) for warning in caught),
+                "La validacion real de FFmpeg no debe dejar ResourceWarning de sockets SSL.",
+            )
 
     def test_approved_product_source_404_keeps_cached_artifact_installable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

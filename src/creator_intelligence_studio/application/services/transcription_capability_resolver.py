@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
+import platform
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -21,8 +23,13 @@ from creator_intelligence_studio.domain.components.entities import (
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
 from creator_intelligence_studio.domain.hardware.entities import HardwareCapabilityState, HardwareProfile
 from creator_intelligence_studio.domain.transcription.profiles import TranscriptionProfileDefinition
-from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelInfo
-from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
+from creator_intelligence_studio.domain.transcription.value_objects import (
+    TranscriptionModelInfo,
+    TranscriptionModelStatus,
+    TranscriptionRuntimeDistributionState,
+    TranscriptionRuntimeInstallation,
+    TranscriptionRuntimeResolution,
+)
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
@@ -93,6 +100,7 @@ class TranscriptionCapabilityReport:
     selected_runtime_installation_id: str | None = None
     selected_ffmpeg_installation_id: str | None = None
     selected_ffmpeg_source: str | None = None
+    runtime_resolution: TranscriptionRuntimeResolution | None = None
     selected_device: str = "cpu"
     compute_type: str | None = None
     internal_compute_configuration: dict[str, object] = field(default_factory=dict)
@@ -187,6 +195,7 @@ class TranscriptionCapabilityReport:
             "selected_model_reference": self.selected_model_reference,
             "selected_runtime_component_id": self.selected_runtime_component_id,
             "selected_runtime_installation_id": self.selected_runtime_installation_id,
+            "runtime_resolution": self.runtime_resolution.to_dict() if self.runtime_resolution else None,
             "selected_ffmpeg_installation_id": self.selected_ffmpeg_installation_id,
             "selected_ffmpeg_source": self.selected_ffmpeg_source,
             "selected_device": self.selected_device,
@@ -238,6 +247,7 @@ class TranscriptionExecutionPlan:
     selected_model_path: str | None
     selected_runtime_component_id: str | None
     selected_runtime_installation_id: str | None
+    runtime_resolution: TranscriptionRuntimeResolution | None
     selected_ffmpeg_installation_id: str | None
     selected_ffmpeg_source: str | None
     ffmpeg_status: ComponentInstallationStatus
@@ -270,6 +280,7 @@ class TranscriptionExecutionPlan:
             "selected_model_path": self.selected_model_path,
             "selected_runtime_component_id": self.selected_runtime_component_id,
             "selected_runtime_installation_id": self.selected_runtime_installation_id,
+            "runtime_resolution": self.runtime_resolution.to_dict() if self.runtime_resolution else None,
             "selected_ffmpeg_installation_id": self.selected_ffmpeg_installation_id,
             "selected_ffmpeg_source": self.selected_ffmpeg_source,
             "ffmpeg_status": self.ffmpeg_status.value,
@@ -397,6 +408,157 @@ class TranscriptionCapabilityResolver:
             updated_at=_utc_now(),
         )
 
+    def _runtime_module_versions(self) -> tuple[str | None, str | None, str | None, bool, bool, tuple[str, ...], tuple[str, ...]]:
+        errors: list[str] = []
+        warnings: list[str] = []
+        faster_whisper_version: str | None = None
+        ctranslate2_version: str | None = None
+        faster_whisper_imported = False
+        ctranslate2_imported = False
+        gpu_supported = False
+        try:
+            module = importlib.import_module("faster_whisper")
+            faster_whisper_version = getattr(module, "__version__", None)
+            faster_whisper_imported = True
+        except Exception as exc:
+            errors.append(str(exc))
+        try:
+            module = importlib.import_module("ctranslate2")
+            ctranslate2_version = getattr(module, "__version__", None)
+            ctranslate2_imported = True
+            try:
+                device_count = int(module.get_cuda_device_count())
+            except Exception as exc:
+                warnings.append(str(exc))
+                device_count = 0
+            try:
+                supported = tuple(str(item) for item in module.get_supported_compute_types("cuda"))
+            except Exception as exc:
+                warnings.append(str(exc))
+                supported = ()
+            gpu_supported = device_count > 0 and ("int8_float16" in supported or "float16" in supported)
+        except Exception as exc:
+            errors.append(str(exc))
+        python_version = platform.python_version()
+        cpu_supported = faster_whisper_imported and ctranslate2_imported
+        return faster_whisper_version, ctranslate2_version, python_version, cpu_supported, gpu_supported, tuple(dict.fromkeys(warnings)), tuple(dict.fromkeys(errors))
+
+    def _resolve_runtime_installation(
+        self,
+        installations: dict[str, ComponentInstallation],
+        *,
+        catalog: ComponentCatalog,
+        hardware_profile: HardwareProfile | None,
+    ) -> TranscriptionRuntimeInstallation:
+        runtime_installation = installations.get("transcription-runtime.faster-whisper") or installations.get("transcription-runtime.ctranslate2")
+        entry = catalog.get_entry("transcription-runtime.faster-whisper")
+        faster_whisper_version, ctranslate2_version, python_version, cpu_supported, gpu_supported, runtime_warnings, runtime_errors = self._runtime_module_versions()
+        platform_name = platform.system() or None
+        architecture = platform.machine() or None
+        complete_runtime_present = faster_whisper_version is not None and ctranslate2_version is not None
+        if runtime_installation is None:
+            if complete_runtime_present:
+                return TranscriptionRuntimeInstallation(
+                    component_id="transcription-runtime.faster-whisper",
+                    distribution_state=TranscriptionRuntimeDistributionState.LEGACY_EXTERNAL,
+                    runtime_implementation="faster-whisper",
+                    faster_whisper_version=faster_whisper_version,
+                    ctranslate2_version=ctranslate2_version,
+                    python_version=python_version,
+                    source_kind="python_import",
+                    platform=platform_name,
+                    architecture=architecture,
+                    cpu_supported=cpu_supported,
+                    gpu_supported=gpu_supported,
+                    build_revision=entry.build_revision if entry else None,
+                    catalog_revision=entry.revision if entry else None,
+                    location_path=None,
+                    location_reference="python_package",
+                    managed=False,
+                    notes="Runtime importado desde el entorno de Python actual.",
+                    error_message="; ".join(runtime_errors) if runtime_errors else None,
+                )
+            if faster_whisper_version or ctranslate2_version:
+                return TranscriptionRuntimeInstallation(
+                    component_id="transcription-runtime.faster-whisper",
+                    distribution_state=TranscriptionRuntimeDistributionState.REPAIR_REQUIRED,
+                    runtime_implementation="faster-whisper",
+                    faster_whisper_version=faster_whisper_version,
+                    ctranslate2_version=ctranslate2_version,
+                    python_version=python_version,
+                    source_kind="python_import",
+                    platform=platform_name,
+                    architecture=architecture,
+                    cpu_supported=False,
+                    gpu_supported=False,
+                    build_revision=entry.build_revision if entry else None,
+                    catalog_revision=entry.revision if entry else None,
+                    location_path=None,
+                    location_reference="python_package",
+                    managed=False,
+                    notes="El runtime de transcripcion solo esta parcialmente disponible en el entorno actual.",
+                    error_message="; ".join(runtime_errors) if runtime_errors else None,
+                )
+            return TranscriptionRuntimeInstallation(
+                component_id="transcription-runtime.faster-whisper",
+                distribution_state=TranscriptionRuntimeDistributionState.MISSING,
+                runtime_implementation="faster-whisper",
+                faster_whisper_version=None,
+                ctranslate2_version=None,
+                python_version=python_version,
+                source_kind=None,
+                platform=platform_name,
+                architecture=architecture,
+                cpu_supported=False,
+                gpu_supported=False,
+                build_revision=entry.build_revision if entry else None,
+                catalog_revision=entry.revision if entry else None,
+                location_path=None,
+                location_reference=None,
+                managed=None,
+                notes="El runtime local de transcripcion no esta instalado.",
+                error_message=None,
+            )
+        if not complete_runtime_present:
+            if runtime_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+                state = TranscriptionRuntimeDistributionState.INCOMPATIBLE
+            else:
+                state = TranscriptionRuntimeDistributionState.REPAIR_REQUIRED
+        elif runtime_installation.installation_status in {ComponentInstallationStatus.INVALID, ComponentInstallationStatus.REPAIR_REQUIRED}:
+            state = TranscriptionRuntimeDistributionState.REPAIR_REQUIRED
+        elif runtime_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+            state = TranscriptionRuntimeDistributionState.INCOMPATIBLE
+        elif runtime_installation.managed and (runtime_installation.location_reference or "").strip().lower() == "application_bundle":
+            state = TranscriptionRuntimeDistributionState.APPLICATION_BUNDLED
+        elif runtime_installation.managed:
+            state = TranscriptionRuntimeDistributionState.MANAGED
+        else:
+            state = TranscriptionRuntimeDistributionState.LEGACY_EXTERNAL
+        source_kind = runtime_installation.source or (runtime_installation.metadata.get("installation_type") if runtime_installation.metadata else None) or "python_package"
+        if runtime_installation.installation_status == ComponentInstallationStatus.INCOMPATIBLE:
+            cpu_supported = False
+            gpu_supported = False
+        return TranscriptionRuntimeInstallation(
+            component_id=runtime_installation.component_id,
+            distribution_state=state,
+            runtime_implementation="faster-whisper",
+            faster_whisper_version=faster_whisper_version,
+            ctranslate2_version=ctranslate2_version,
+            python_version=python_version,
+            source_kind=str(source_kind) if source_kind is not None else None,
+            platform=platform_name,
+            architecture=architecture,
+            cpu_supported=cpu_supported,
+            gpu_supported=gpu_supported,
+            build_revision=runtime_installation.revision or (entry.build_revision if entry else None),
+            catalog_revision=entry.revision if entry else None,
+            location_path=runtime_installation.location_path,
+            location_reference=runtime_installation.location_reference,
+            managed=runtime_installation.managed,
+            notes=runtime_installation.last_error_message or (runtime_installation.metadata.get("notes") if runtime_installation.metadata else None),
+            error_message=runtime_installation.last_error_message,
+        )
+
     def resolve(
         self,
         *,
@@ -500,9 +662,17 @@ class TranscriptionCapabilityResolver:
 
         ffmpeg_installation = self._resolve_installation("ffmpeg", installations)
         ffprobe_installation = self._resolve_installation("ffprobe", installations)
-        runtime_installation = self._resolve_installation("transcription-runtime.ctranslate2", installations)
         runtime_component_id = "transcription-runtime.faster-whisper"
+        runtime_installation = self._resolve_runtime_installation(installations, catalog=catalog, hardware_profile=hardware_profile)
         runtime_installation_id = runtime_installation.component_id if runtime_installation.component_id else runtime_component_id
+        runtime_status = {
+            TranscriptionRuntimeDistributionState.APPLICATION_BUNDLED: RuntimeCheckStatus.READY,
+            TranscriptionRuntimeDistributionState.MANAGED: RuntimeCheckStatus.READY,
+            TranscriptionRuntimeDistributionState.LEGACY_EXTERNAL: RuntimeCheckStatus.READY,
+            TranscriptionRuntimeDistributionState.MISSING: RuntimeCheckStatus.NOT_CHECKED,
+            TranscriptionRuntimeDistributionState.INCOMPATIBLE: RuntimeCheckStatus.INCOMPATIBLE,
+            TranscriptionRuntimeDistributionState.REPAIR_REQUIRED: RuntimeCheckStatus.FAILED,
+        }[runtime_installation.distribution_state]
         ffmpeg_selected = ffmpeg_installation
         ffmpeg_source = ffmpeg_installation.source or "ffmpeg_locator"
 
@@ -515,7 +685,11 @@ class TranscriptionCapabilityResolver:
 
         ffmpeg_ok = ffmpeg_installation.installation_status in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}
         ffprobe_ok = ffprobe_installation.installation_status in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}
-        runtime_ok = runtime_installation.installation_status in {ComponentInstallationStatus.READY, ComponentInstallationStatus.EXTERNALLY_DETECTED, ComponentInstallationStatus.MANAGED}
+        runtime_ok = runtime_installation.distribution_state not in {
+            TranscriptionRuntimeDistributionState.MISSING,
+            TranscriptionRuntimeDistributionState.INCOMPATIBLE,
+            TranscriptionRuntimeDistributionState.REPAIR_REQUIRED,
+        }
         model_ok = selected_model_info.status in {TranscriptionModelStatus.INSTALLED, TranscriptionModelStatus.LEGACY_CACHE}
 
         if not ffmpeg_ok:
@@ -547,15 +721,17 @@ class TranscriptionCapabilityResolver:
 
         if not runtime_ok:
             missing.append(runtime_component_id)
-            if runtime_installation.installation_status in {ComponentInstallationStatus.INVALID, ComponentInstallationStatus.REPAIR_REQUIRED}:
+            if runtime_installation.distribution_state == TranscriptionRuntimeDistributionState.REPAIR_REQUIRED:
                 blockers.append("El runtime local necesita reparacion.")
                 suggested_actions.append(CapabilitySuggestedAction("repair_runtime", "repair_component", runtime_component_id, blocking=True, display_label="Reparar runtime", description="Repara el runtime de transcripcion.", priority=1, available_now=True, reason="repair_required"))
+            elif runtime_installation.distribution_state == TranscriptionRuntimeDistributionState.INCOMPATIBLE:
+                blockers.append("El runtime local es incompatible con este entorno.")
             else:
                 blockers.append("Falta el runtime local de transcripcion.")
                 suggested_actions.append(CapabilitySuggestedAction("install_runtime", "install_component", runtime_component_id, blocking=True, display_label="Instalar runtime", description="Instala el motor local desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
         else:
             suggested_actions.append(CapabilitySuggestedAction("verify_runtime", "verify_component", runtime_component_id, blocking=False, display_label="Comprobar runtime", description="Verifica el runtime local de transcripcion.", priority=3, available_now=True, reason="verification_available"))
-            if runtime_installation.managed:
+            if bool(runtime_installation.managed):
                 suggested_actions.append(CapabilitySuggestedAction("remove_runtime", "remove_component", runtime_component_id, blocking=True, display_label="Eliminar runtime", description="Elimina la instalacion administrada del runtime.", priority=4, available_now=True, reason="managed_installation", requires_user_confirmation=True))
 
         if not model_ok:
@@ -600,7 +776,7 @@ class TranscriptionCapabilityResolver:
                 stale_evidence.append("model_component_changed")
             if metadata.get("model_revision") and selected_profile and selected_profile.model_revision and metadata.get("model_revision") != selected_profile.model_revision:
                 stale_evidence.append("model_revision_changed")
-            if metadata.get("runtime_version") and runtime_installation.installed_version and metadata.get("runtime_version") != runtime_installation.installed_version:
+            if metadata.get("runtime_version") and runtime_installation.ctranslate2_version and metadata.get("runtime_version") != runtime_installation.ctranslate2_version:
                 stale_evidence.append("runtime_version_changed")
             if metadata.get("driver_version") and hardware_profile is not None and hardware_profile.gpu.driver_version and metadata.get("driver_version") != hardware_profile.gpu.driver_version:
                 stale_evidence.append("driver_version_changed")
@@ -704,7 +880,8 @@ class TranscriptionCapabilityResolver:
         evidence = [
             f"catalog_version={catalog.catalog_version}",
             f"profile_version={selected_profile.version if selected_profile else 'unknown'}",
-            f"runtime_status={runtime_installation.health_status.value}",
+            f"runtime_status={runtime_status.value}",
+            f"runtime_distribution={runtime_installation.distribution_state.value}",
             f"gpu_status={(hardware_profile.gpu.status.value if hardware_profile is not None else HardwareCapabilityState.UNKNOWN.value)}",
             f"model_status={selected_model_info.status.value}",
         ]
@@ -746,6 +923,16 @@ class TranscriptionCapabilityResolver:
             selected_model_reference=selected_model_component_id,
             selected_runtime_component_id=runtime_component_id,
             selected_runtime_installation_id=runtime_installation_id,
+            runtime_resolution=TranscriptionRuntimeResolution(
+                installation=runtime_installation,
+                status=runtime_status.value,
+                selected_device=selected_device,
+                compute_type=selected_compute_type,
+                can_transcribe=can_transcribe_now,
+                reason=fallback_reason,
+                warnings=tuple(warnings),
+                errors=(runtime_installation.error_message,) if runtime_installation.error_message else (),
+            ),
             selected_ffmpeg_installation_id=ffmpeg_selected.component_id if ffmpeg_ok else None,
             selected_ffmpeg_source=ffmpeg_source,
             selected_device=selected_device,
@@ -753,7 +940,7 @@ class TranscriptionCapabilityResolver:
             internal_compute_configuration=internal_compute_configuration,
             ffmpeg_status=ffmpeg_installation.installation_status,
             ffprobe_status=ffprobe_installation.installation_status,
-            runtime_status=runtime_installation.health_status,
+            runtime_status=runtime_status,
             model_status=TranscriptionCapabilityReport._model_status_to_component_status(selected_model_info.status),
             hardware_status=hardware_profile.status if hardware_profile is not None else HardwareCapabilityState.UNKNOWN,
             gpu_status=hardware_profile.gpu.status if hardware_profile is not None else HardwareCapabilityState.UNKNOWN,

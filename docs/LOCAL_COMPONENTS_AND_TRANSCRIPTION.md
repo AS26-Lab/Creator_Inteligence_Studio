@@ -120,3 +120,22 @@ The normal flow remains:
 - explicit install second
 
 Runtime and model productive sources stay disabled in this phase.
+
+## v32-L Runtime Distribution Reality
+
+The transcription runtime is now documented as one of three explicit distribution states:
+
+- `application_bundled` for a future real app bundle with an embedded interpreter
+- `managed` for app-controlled local runtime installs
+- `legacy_external` for runtime packages importable from the active Python environment
+
+Current repository reality is still not a true bundled app runtime. The clean-machine promise therefore remains a packaging target, not a proven repo artifact.
+
+The UI should keep the runtime explanation plain:
+
+- listo
+- necesita reparacion
+- no compatible
+- no instalado
+
+It should not imply that a runtime product download source is available unless one is explicitly qualified later.

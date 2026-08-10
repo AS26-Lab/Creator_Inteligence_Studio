@@ -29,6 +29,13 @@ Component Manager and Local Transcription Foundation now has v32-A through v32-H
 - Decisions pending: onboarding polish and exact copy refinements for action confirmations and task-center phrasing.
 - First contract for the next phase: recovery and repair polish for interrupted local tasks without changing the canonical resolver. v32-I now covers the operation recovery hardening slice for local component actions.
 
+v32-L hardens the runtime distribution boundary and downloader resource cleanup.
+
+- runtime distribution is now recorded explicitly as application-bundled, managed, or legacy-external rather than implied by import success alone
+- the current repository still does not prove a self-contained bundled Windows app runtime with an embedded interpreter
+- HTTP/TLS response ownership is now deterministic so SSL sockets close on success, failure, pause, cancel, redirect, and retry
+- runtime and model productive sources remain disabled
+
 ## Stage Gates
 
 Every stage must define:

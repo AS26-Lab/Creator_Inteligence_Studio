@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import threading
 import tempfile
 import unittest
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -22,6 +24,7 @@ from creator_intelligence_studio.domain.components.downloads import (
     ComponentDownloadStatus,
     validate_download_transition,
 )
+from creator_intelligence_studio.infrastructure.downloads.http_transport import HTTPTransportResponse
 from creator_intelligence_studio.infrastructure.downloads.repository import FileSystemComponentDownloadRepository
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -81,6 +84,83 @@ class _DownloadHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):  # noqa: A003
         pass
+
+
+class _TrackingBody:
+    def __init__(self, payload: bytes, *, chunk_size: int = 1024) -> None:
+        self._stream = io.BytesIO(payload)
+        self.closed = False
+        self.read_calls = 0
+        self.chunk_size = chunk_size
+
+    def read(self, size: int = -1) -> bytes:
+        self.read_calls += 1
+        if size < 0:
+            size = self.chunk_size
+        return self._stream.read(size)
+
+    def close(self) -> None:
+        self.closed = True
+        self._stream.close()
+
+
+class _SlowTrackingBody(_TrackingBody):
+    def __init__(self, payload: bytes, *, first_read_event: threading.Event, delay_seconds: float = 0.05) -> None:
+        super().__init__(payload)
+        self.first_read_event = first_read_event
+        self.delay_seconds = delay_seconds
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = super().read(size)
+        self.first_read_event.set()
+        time.sleep(self.delay_seconds)
+        return chunk
+
+
+class _TrackingConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _ScenarioTransport:
+    def __init__(self, scenarios: list[object]) -> None:
+        self.scenarios = list(scenarios)
+        self.responses: list[object] = []
+        self.open_calls = 0
+        self.body_factory = None
+
+    def open(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        timeout_seconds: float = 30.0,
+    ) -> HTTPTransportResponse:
+        self.open_calls += 1
+        if not self.scenarios:
+            raise AssertionError("No hay mas escenarios para probar.")
+        scenario = self.scenarios.pop(0)
+        if isinstance(scenario, Exception):
+            raise scenario
+        status_code, response_headers, payload = scenario
+        connection = _TrackingConnection()
+        if callable(self.body_factory):
+            body = self.body_factory(payload)
+        else:
+            body = _TrackingBody(payload)
+        response = HTTPTransportResponse(
+            status_code=status_code,
+            headers=dict(response_headers),
+            url=url,
+            body=body,
+            connection=connection,
+        )
+        self.responses.append(response)
+        return response
 
 
 def _start_server(payload: bytes, *, support_range: bool = True, disconnect_first: bool = False):
@@ -266,6 +346,50 @@ class DownloadManagerTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_transport_response_closes_connection_across_error_paths(self) -> None:
+        payload = b"payload-bytes"
+        scenarios = [
+            (302, {"location": "/redirect.bin", "content-length": "0"}, b""),
+            (500, {"content-length": "0"}, b""),
+            (200, {"content-length": str(len(payload) + 4)}, payload),
+            (200, {"content-length": str(len(payload))}, payload),
+            (404, {"content-length": "0"}, b""),
+        ]
+
+        for index, scenario in enumerate(scenarios, start=1):
+            with self.subTest(path=index):
+                status_code, headers, body = scenario
+                connection = _TrackingConnection()
+                body_wrapper = _TrackingBody(body)
+                response = HTTPTransportResponse(
+                    status_code=status_code,
+                    headers=headers,
+                    url="https://example.test/artifact.bin",
+                    body=body_wrapper,
+                    connection=connection,
+                )
+                with response as owned:
+                    self.assertEqual(owned.status_code, status_code)
+                self.assertTrue(body_wrapper.closed)
+                self.assertTrue(connection.closed)
+
+    def test_pause_and_cancel_close_response_and_connection(self) -> None:
+        for action_name in ("pause", "cancel"):
+            with self.subTest(action=action_name):
+                connection = _TrackingConnection()
+                body_wrapper = _SlowTrackingBody(b"payload-bytes" * 2048, first_read_event=threading.Event(), delay_seconds=0.0)
+                response = HTTPTransportResponse(
+                    status_code=200,
+                    headers={"content-length": "1024"},
+                    url="https://example.test/artifact.bin",
+                    body=body_wrapper,
+                    connection=connection,
+                )
+                self.assertTrue(response.read(16))
+                response.close()
+                self.assertTrue(body_wrapper.closed)
+                self.assertTrue(connection.closed)
 
     def test_restart_recovery_marks_running_download_interrupted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -543,3 +543,20 @@ Compatibility rule:
 
 - existing `v32` databases must continue to boot after the startup compatibility pass
 - no new schema version is introduced for this source qualification slice
+
+## v32-L Runtime Distribution Boundary
+
+v32-L does not add a runtime product source.
+
+It tightens the runtime distribution contract so the system can distinguish:
+
+- `application_bundled`
+- `managed`
+- `legacy_external`
+- `missing`
+- `incompatible`
+- `repair_required`
+
+It also hardens the HTTP/TLS downloader so every response has an explicit owner and every terminal path closes the underlying socket.
+
+This phase does not change the resolver's canonical authority or the separation between runtime and model sources.

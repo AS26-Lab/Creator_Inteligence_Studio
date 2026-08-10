@@ -21,15 +21,31 @@ class HTTPTransportResponse:
     headers: dict[str, str]
     url: str
     body: object
+    connection: object | None = None
+    _closed: bool = False
 
     def read(self, size: int = -1) -> bytes:
         return self.body.read(size)  # type: ignore[attr-defined]
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         try:
             self.body.close()  # type: ignore[attr-defined]
         except Exception:
             pass
+        try:
+            if self.connection is not None:
+                self.connection.close()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
 
 class ComponentHTTPTransport(Protocol):
@@ -85,6 +101,7 @@ class UrllibComponentHTTPTransport:
                 headers=_response_headers(response),
                 url=url,
                 body=response,
+                connection=connection,
             )
         except Exception as exc:  # pragma: no cover - bubble up with context
             try:

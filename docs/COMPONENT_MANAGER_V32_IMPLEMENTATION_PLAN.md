@@ -415,3 +415,41 @@ Gate:
 Status:
 
 - partially implemented in the worktree; offline tests and compatibility checks are in place, and the internet validation test is opt-in
+
+## v32-L - Runtime Distribution And Transport Hardening
+
+Objective:
+
+- record the runtime distribution boundary explicitly
+- distinguish bundled, managed, and legacy-external runtime states
+- harden HTTP/TLS resource ownership in the download transport
+
+Files:
+
+- transcription runtime value objects
+- capability resolver
+- downloader HTTP transport
+- runtime licensing and distribution docs
+
+Tests:
+
+- clean-machine runtime distribution contract
+- import-only runtime classified as external
+- missing runtime classified as missing
+- response/socket cleanup on success and failure
+- pause and cancel cleanup
+- retry and redirect cleanup
+
+Gate:
+
+- runtime readiness is explicit and the downloader closes owned network resources on every terminal path
+
+Non-scope:
+
+- runtime product sources
+- model product sources
+- migration_33
+
+Status:
+
+- implemented as the v32-L hardening slice
