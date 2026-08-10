@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import platform
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -31,6 +32,11 @@ from creator_intelligence_studio.domain.transcription.value_objects import (
     TranscriptionRuntimeResolution,
 )
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
+from creator_intelligence_studio.infrastructure.packaging import (
+    WindowsAppRuntimeManifest,
+    load_windows_runtime_manifest,
+    resolve_windows_app_bundle_root,
+)
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -443,6 +449,13 @@ class TranscriptionCapabilityResolver:
         cpu_supported = faster_whisper_imported and ctranslate2_imported
         return faster_whisper_version, ctranslate2_version, python_version, cpu_supported, gpu_supported, tuple(dict.fromkeys(warnings)), tuple(dict.fromkeys(errors))
 
+    def _runtime_bundle_manifest(self) -> tuple[WindowsAppRuntimeManifest | None, str | None]:
+        if not getattr(sys, "frozen", False):
+            return None, None
+        bundle_root = resolve_windows_app_bundle_root()
+        manifest = load_windows_runtime_manifest(bundle_root)
+        return manifest, str(bundle_root)
+
     def _resolve_runtime_installation(
         self,
         installations: dict[str, ComponentInstallation],
@@ -455,7 +468,55 @@ class TranscriptionCapabilityResolver:
         faster_whisper_version, ctranslate2_version, python_version, cpu_supported, gpu_supported, runtime_warnings, runtime_errors = self._runtime_module_versions()
         platform_name = platform.system() or None
         architecture = platform.machine() or None
+        bundle_manifest, bundle_root = self._runtime_bundle_manifest()
         complete_runtime_present = faster_whisper_version is not None and ctranslate2_version is not None
+        if bundle_manifest is not None:
+            manifest_matches = (
+                complete_runtime_present
+                and (bundle_manifest.faster_whisper_version is None or bundle_manifest.faster_whisper_version == faster_whisper_version)
+                and (bundle_manifest.ctranslate2_version is None or bundle_manifest.ctranslate2_version == ctranslate2_version)
+            )
+            if manifest_matches:
+                return TranscriptionRuntimeInstallation(
+                    component_id="transcription-runtime.faster-whisper",
+                    distribution_state=TranscriptionRuntimeDistributionState.APPLICATION_BUNDLED,
+                    runtime_implementation="faster-whisper",
+                    faster_whisper_version=faster_whisper_version,
+                    ctranslate2_version=ctranslate2_version,
+                    python_version=python_version,
+                    source_kind="application_bundle",
+                    platform=bundle_manifest.platform or platform_name,
+                    architecture=bundle_manifest.architecture or architecture,
+                    cpu_supported=bool(bundle_manifest.cpu_supported and cpu_supported),
+                    gpu_supported=bool(bundle_manifest.gpu_supported and gpu_supported),
+                    build_revision=bundle_manifest.build_revision or (entry.build_revision if entry else None),
+                    catalog_revision=entry.revision if entry else None,
+                    location_path=bundle_root,
+                    location_reference="application_bundle",
+                    managed=True,
+                    notes="Runtime empaquetado con la aplicacion.",
+                    error_message=None,
+                )
+            return TranscriptionRuntimeInstallation(
+                component_id="transcription-runtime.faster-whisper",
+                distribution_state=TranscriptionRuntimeDistributionState.REPAIR_REQUIRED,
+                runtime_implementation="faster-whisper",
+                faster_whisper_version=faster_whisper_version,
+                ctranslate2_version=ctranslate2_version,
+                python_version=python_version,
+                source_kind="application_bundle",
+                platform=bundle_manifest.platform or platform_name,
+                architecture=bundle_manifest.architecture or architecture,
+                cpu_supported=False,
+                gpu_supported=False,
+                build_revision=bundle_manifest.build_revision or (entry.build_revision if entry else None),
+                catalog_revision=entry.revision if entry else None,
+                location_path=bundle_root,
+                location_reference="application_bundle",
+                managed=True,
+                notes="El bundle empaquetado no pudo confirmar el runtime requerido.",
+                error_message="; ".join(runtime_errors) if runtime_errors else None,
+            )
         if runtime_installation is None:
             if complete_runtime_present:
                 return TranscriptionRuntimeInstallation(

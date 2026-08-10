@@ -560,3 +560,16 @@ It tightens the runtime distribution contract so the system can distinguish:
 It also hardens the HTTP/TLS downloader so every response has an explicit owner and every terminal path closes the underlying socket.
 
 This phase does not change the resolver's canonical authority or the separation between runtime and model sources.
+
+## v32-M Packaging Foundation
+
+v32-M adds a single Windows packaging direction: PyInstaller `onedir`.
+
+It introduces:
+
+- a deterministic runtime manifest;
+- bundle-root resolution from the executable when frozen;
+- a writable app-data root outside the bundle;
+- explicit bundle evidence before `application_bundled` can be claimed.
+
+This remains foundation only until a real packaged artifact is built and exercised.

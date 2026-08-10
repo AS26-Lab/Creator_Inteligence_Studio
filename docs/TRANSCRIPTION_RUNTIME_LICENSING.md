@@ -44,3 +44,11 @@ If the runtime remains environment-detected, the installed environment is still 
 This document does not claim that the project is redistributing every dependency today.
 
 It only records what should be reviewed if the runtime packaging boundary changes later.
+
+## Packaged Windows Foundation
+
+If the runtime is later bundled inside the Windows app:
+
+- the manifest should record the shipped runtime versions;
+- notices should cover the shipped runtime wheels and native DLLs;
+- the preferred layout remains `onedir` unless a later decision replaces it.

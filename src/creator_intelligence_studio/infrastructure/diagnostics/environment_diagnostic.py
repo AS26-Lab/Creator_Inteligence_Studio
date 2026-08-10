@@ -18,6 +18,10 @@ from creator_intelligence_studio.infrastructure.diagnostics.models import (
     EnvironmentDiagnostic,
     GpuInfo,
 )
+from creator_intelligence_studio.infrastructure.packaging import (
+    load_windows_runtime_manifest,
+    resolve_windows_app_bundle_root,
+)
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
 
@@ -103,6 +107,17 @@ def collect_environment_diagnostic(
         platform.processor()
     )
     logical_processors = os.cpu_count()
+    packaged_application = bool(getattr(sys, "frozen", False))
+    application_root = None
+    runtime_manifest_path = None
+    runtime_manifest = None
+    if packaged_application:
+        bundle_root = resolve_windows_app_bundle_root()
+        application_root = str(bundle_root)
+        runtime_manifest_path = str(bundle_root / "runtime" / "runtime_manifest.json")
+        manifest = load_windows_runtime_manifest(bundle_root)
+        if manifest is not None:
+            runtime_manifest = manifest.to_dict()
 
     warnings: list[str] = []
     errors: list[str] = []
@@ -159,6 +174,8 @@ def collect_environment_diagnostic(
         application_name=APP_NAME,
         application_version=VERSION,
         project_root=project_root,
+        packaged_application=packaged_application,
+        application_root=application_root,
         os_name=os_name,
         os_version=os_version,
         os_architecture=os_architecture,
@@ -180,6 +197,8 @@ def collect_environment_diagnostic(
         model_roles_configured=False,
         budget_policy_configured=False,
         credential_store_available=credential_store_available,
+        runtime_manifest_path=runtime_manifest_path,
+        runtime_manifest=runtime_manifest,
         state=state,
         warnings=tuple(warnings),
         errors=tuple(errors),

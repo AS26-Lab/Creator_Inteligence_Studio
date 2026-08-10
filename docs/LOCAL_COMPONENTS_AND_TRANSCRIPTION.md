@@ -139,3 +139,15 @@ The UI should keep the runtime explanation plain:
 - no instalado
 
 It should not imply that a runtime product download source is available unless one is explicitly qualified later.
+
+## v32-M Packaging Foundation
+
+Packaged Windows execution is a separate boundary from local transcription capability.
+
+When the app is frozen, `application_bundled` should only be used if:
+
+- a runtime manifest exists in the bundle;
+- the manifest matches the imported runtime versions;
+- the code is not merely running from the developer venv.
+
+The bundle still must not include Whisper models or FFmpeg product sources.

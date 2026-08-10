@@ -109,3 +109,7 @@ That decision should be made with:
 - rollback strategy
 
 v32-L does not implement that bundle.
+
+## v32-M Note
+
+v32-M adds the packaging foundation and bundle manifest contract, but it does not change the v32-L conclusion that a real bundled runtime must be demonstrated with an actual build before `application_bundled` can be claimed.

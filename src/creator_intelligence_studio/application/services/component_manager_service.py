@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import platform
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from creator_intelligence_studio.domain.components.repositories import Component
 from creator_intelligence_studio.domain.media.value_objects import MediaToolInfo
 from creator_intelligence_studio.domain.transcription.value_objects import TranscriptionModelStatus
 from creator_intelligence_studio.infrastructure.media.ffmpeg_locator import MediaToolLocator
+from creator_intelligence_studio.infrastructure.packaging import load_windows_runtime_manifest, resolve_windows_app_bundle_root
 from creator_intelligence_studio.infrastructure.downloads.repository import FileSystemComponentDownloadRepository
 from creator_intelligence_studio.application.services.transcription_installation_service import (
     ManagedTranscriptionModelInstaller,
@@ -288,6 +290,7 @@ class ComponentManagerService:
     def inspect_installations(self) -> tuple[ComponentInstallation, ...]:
         catalog = self.catalog()
         tools = self.resolve_media_tools()
+        bundle_manifest = load_windows_runtime_manifest(resolve_windows_app_bundle_root()) if bool(getattr(sys, "frozen", False)) else None
         installations: list[ComponentInstallation] = []
         for entry in catalog.entries:
             if entry.category == ComponentCategory.FFMPEG:
@@ -308,21 +311,27 @@ class ComponentManagerService:
                 try:
                     module = importlib.import_module(module_name)
                     version = getattr(module, "__version__", None)
+                    is_bundle = False
+                    if bundle_manifest is not None:
+                        if module_name == "faster_whisper":
+                            is_bundle = bundle_manifest.faster_whisper_version == version
+                        else:
+                            is_bundle = bundle_manifest.ctranslate2_version == version
                     installations.append(
                         ComponentInstallation(
                             component_id=entry.component_id,
-                            installation_status=ComponentInstallationStatus.EXTERNALLY_DETECTED,
+                            installation_status=ComponentInstallationStatus.READY if is_bundle else ComponentInstallationStatus.EXTERNALLY_DETECTED,
                             installed_version=version,
                             revision=entry.revision,
-                            install_type=ComponentInstallKind.EXTERNALLY_DETECTED,
-                            location_path=None,
-                            location_reference="python_package",
+                            install_type=ComponentInstallKind.MANAGED if is_bundle else ComponentInstallKind.EXTERNALLY_DETECTED,
+                            location_path=str(resolve_windows_app_bundle_root()) if is_bundle else None,
+                            location_reference="application_bundle" if is_bundle else "python_package",
                             detected_at=None,
                             verified_at=None,
-                            health_status=RuntimeCheckStatus.NOT_CHECKED,
-                            source="python_import",
-                            managed=False,
-                            metadata={},
+                            health_status=RuntimeCheckStatus.READY if is_bundle else RuntimeCheckStatus.NOT_CHECKED,
+                            source="application_bundle" if is_bundle else "python_import",
+                            managed=is_bundle,
+                            metadata={"runtime_manifest": bundle_manifest.to_dict()} if is_bundle and bundle_manifest is not None else {},
                         )
                     )
                 except Exception as exc:

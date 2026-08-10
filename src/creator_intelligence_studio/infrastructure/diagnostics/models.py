@@ -55,6 +55,10 @@ class EnvironmentDiagnostic:
     model_roles_configured: bool = False
     budget_policy_configured: bool = False
     credential_store_available: bool = False
+    packaged_application: bool = False
+    application_root: str | None = None
+    runtime_manifest_path: str | None = None
+    runtime_manifest: dict[str, Any] | None = None
     state: DiagnosticState = field(
         default_factory=lambda: DiagnosticState(
             ready_for_basic_mode=True,
@@ -83,6 +87,7 @@ class EnvironmentDiagnostic:
         lines = [
             f"Aplicacion: {self.application_name} {self.application_version}",
             f"Proyecto: {self.project_root}",
+            f"Empaquetada: {'si' if self.packaged_application else 'no'}",
             f"Sistema operativo: {self.os_name} {self.os_version or 'no verificado'}",
             f"Arquitectura: {self.os_architecture or 'no verificado'}",
             f"Python: {self.python_version}",
@@ -113,6 +118,8 @@ class EnvironmentDiagnostic:
             lines.append(f"CUDA reportada por driver: {self.cuda_version_reported}")
         if self.free_space_bytes is not None:
             lines.append(f"Espacio libre en la unidad del proyecto: {self.free_space_bytes} bytes")
+        if self.runtime_manifest_path:
+            lines.append(f"Runtime manifest: {self.runtime_manifest_path}")
         if self.errors:
             lines.append("Errores:")
             lines.extend(f"- {error}" for error in self.errors)

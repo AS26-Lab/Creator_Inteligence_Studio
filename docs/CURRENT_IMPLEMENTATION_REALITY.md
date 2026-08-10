@@ -418,3 +418,12 @@ Status: `implemented` and `real_call_validated` on `2026-08-10` with the retaine
 - no runtime product source was enabled
 - no model product source was enabled
 - no `migration_33` was added
+
+## v32-M Windows Packaging Foundation
+
+- the repository now has a single packaging direction: PyInstaller `onedir`
+- a deterministic runtime manifest can be written for a Windows bundle
+- packaged execution resolves bundle root from the executable when frozen
+- writable runtime state is redirected to an app-data root instead of the bundle directory
+- `application_bundled` now requires manifest evidence and matching runtime imports
+- no real packaged Windows artifact has been proven in this workspace yet

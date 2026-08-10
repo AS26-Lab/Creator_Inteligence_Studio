@@ -1,7 +1,9 @@
-"""Resolucion centralizada de rutas del proyecto."""
+"""Resolucion centralizada de rutas del proyecto y de bundles empaquetados."""
 
 from __future__ import annotations
 
+import os
+import sys
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,9 @@ if TYPE_CHECKING:
 def discover_project_root(start: Path | None = None) -> Path:
     """Encuentra la raiz del proyecto buscando archivos de referencia."""
 
+    if getattr(sys, "frozen", False):
+        executable = Path(getattr(sys, "executable", start or Path.cwd())).resolve()
+        return executable.parent
     candidate = (start or Path(__file__).resolve()).resolve()
     if candidate.is_file():
         candidate = candidate.parent
@@ -24,6 +29,22 @@ def discover_project_root(start: Path | None = None) -> Path:
         if (current / "pyproject.toml").exists() and (current / "docs").exists():
             return current
     raise FileNotFoundError("No se pudo determinar la raiz del proyecto.")
+
+
+def is_packaged_application() -> bool:
+    """Indica si la ejecucion proviene de un bundle empaquetado."""
+
+    return bool(getattr(sys, "frozen", False))
+
+
+def resolve_application_data_root(application_name: str) -> Path:
+    """Resuelve la raiz writable del usuario para una app empaquetada."""
+
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / application_name
+    return Path.home() / ".local" / "share" / application_name
 
 
 def resolve_configured_path(project_root: Path, configured_value: str) -> Path:
@@ -53,7 +74,12 @@ class ProjectPaths:
     def from_settings(cls, project_root: Path, settings: AppSettings) -> "ProjectPaths":
         """Construye las rutas del proyecto a partir de la configuracion."""
 
-        resolved = settings.resolved_directories(project_root)
+        resolved_base = (
+            resolve_application_data_root(settings.application_name)
+            if is_packaged_application()
+            else project_root
+        )
+        resolved = settings.resolved_directories(resolved_base)
         return cls(
             project_root=project_root,
             config_directory=project_root / "config",

@@ -62,3 +62,9 @@ Expected availability window: approximately until `2028-07-31`, subject to upstr
 v32-L did not change the FFmpeg product pin.
 
 It only hardened the downloader's HTTP/TLS resource lifecycle and added explicit runtime distribution classification elsewhere in the component manager.
+
+## v32-M Note
+
+v32-M does not bundle FFmpeg into the Windows application runtime.
+
+FFmpeg remains a separate managed component and keeps the approved product-source flow.

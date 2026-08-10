@@ -453,3 +453,43 @@ Non-scope:
 Status:
 
 - implemented as the v32-L hardening slice
+
+## v32-M - Windows Self-Contained Application Packaging
+
+Objective:
+
+- prepare a Windows `onedir` bundle path for the application
+- write a deterministic runtime manifest during build
+- resolve packaged bundle roots without depending on `pyproject.toml`
+- redirect writable runtime state to an app-data root
+
+Files:
+
+- packaging helpers
+- bootstrap and path resolution
+- build script
+- runtime licensing and packaging docs
+
+Tests:
+
+- runtime manifest round-trip
+- packaged bundle root detection
+- app-data root resolution
+- bundled classification requires manifest evidence
+- external Python remains legacy-external
+- diagnostic reports packaged metadata when frozen
+
+Gate:
+
+- `application_bundled` may only be claimed with real bundle evidence and matching runtime imports
+
+Non-scope:
+
+- bundled models
+- bundled FFmpeg product source
+- second packaging stack
+- user runtime `pip`
+
+Status:
+
+- foundation only until a real bundle is produced and smoke-tested

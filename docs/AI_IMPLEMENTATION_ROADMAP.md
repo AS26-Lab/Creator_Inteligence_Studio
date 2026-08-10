@@ -159,3 +159,21 @@ It should not:
 - allow user-entered source URLs
 - use a floating `latest` URL as the catalog identity
 - introduce `migration_33`
+
+## v32-M
+
+Windows application packaging foundation.
+
+It should:
+
+- use PyInstaller `onedir` as the single packaging strategy
+- generate a deterministic runtime manifest
+- resolve a bundle root from the executable when frozen
+- redirect writable runtime state to an app-data root
+
+It should not:
+
+- claim a proven distributable bundle without a real build
+- bundle Whisper models
+- bundle FFmpeg product sources
+- add a second packaging stack
