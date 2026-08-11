@@ -7,7 +7,7 @@ This document records what is actually implemented in the repository through the
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v33`
+- current migration ceiling: `v34`
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
@@ -473,5 +473,16 @@ Status: `implemented` and `real_call_validated` on `2026-08-10` with the retaine
 - creator isolation is enforced on source reuse and version append operations
 - minimal UX now reflects that transcription results are saved to the corpus
 - retrieval and embeddings remain paused
+
+Status: `implemented`
+
+## v33-C Explicit Local Retrieval
+
+- retrieval is now canonical, creator-scoped, and local-only
+- query contracts are explicit and require `creator_id`
+- the retrieval layer returns document, version, and segment hits with bounded pagination and explainable match reasons
+- archived and non-eligible content stay out of the default result set
+- the current query implementation uses deterministic normalized-text filtering over the derived retrieval index; embeddings and LLM retrieval remain paused
+- the retrieval index is derived data and can be rebuilt from canonical corpus tables
 
 Status: `implemented`

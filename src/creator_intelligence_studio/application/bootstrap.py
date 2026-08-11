@@ -75,6 +75,9 @@ from creator_intelligence_studio.application.services.creator_corpus_service imp
     CreatorCorpusService,
     build_creator_corpus_service,
 )
+from creator_intelligence_studio.application.services.creator_corpus_retrieval_service import (
+    CreatorCorpusRetrievalService,
+)
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
     build_creator_language_service,
@@ -279,6 +282,7 @@ class ServiceContext(BootstrapContext):
     experiment_service: ExperimentService | None = None
     creator_memory_service: CreatorMemoryService | None = None
     creator_corpus_service: CreatorCorpusService | None = None
+    creator_corpus_retrieval_service: CreatorCorpusRetrievalService | None = None
     creator_language_service: CreatorLanguageService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
@@ -471,16 +475,21 @@ def _load_service_context() -> ServiceContext:
         repository=SQLiteCreatorMemoryRepository(database),
         logger=context.logger,
     )
+    creator_corpus_repository = SQLiteCreatorCorpusRepository(database)
     creator_corpus_service = build_creator_corpus_service(
         settings=context.settings,
         paths=context.paths,
-        repository=SQLiteCreatorCorpusRepository(database),
+        repository=creator_corpus_repository,
         project_repository=project_repository,
         video_repository=video_repository,
         transcription_repository=transcription_repository,
         logger=context.logger,
     )
     transcription_service.creator_corpus_service = creator_corpus_service
+    creator_corpus_retrieval_service = CreatorCorpusRetrievalService(
+        repository=creator_corpus_repository,
+        logger=context.logger,
+    )
     creator_language_service = build_creator_language_service(
         settings=context.settings,
         paths=context.paths,
@@ -684,6 +693,7 @@ def _load_service_context() -> ServiceContext:
         experiment_service=experiment_service,
         creator_memory_service=creator_memory_service,
         creator_corpus_service=creator_corpus_service,
+        creator_corpus_retrieval_service=creator_corpus_retrieval_service,
         creator_language_service=creator_language_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
@@ -787,6 +797,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,
             creator_memory_service=context.creator_memory_service,
+            creator_corpus_retrieval_service=context.creator_corpus_retrieval_service,
             creator_language_service=context.creator_language_service,
             packaging_service=context.creative_packaging_service,
             render_service=context.render_service,

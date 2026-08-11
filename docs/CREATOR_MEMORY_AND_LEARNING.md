@@ -70,6 +70,17 @@ The current corpus implementation now distinguishes:
 
 The ingestion layer is still local-only and does not send corpus text to OpenAI, Anthropic, Supabase, Hugging Face, or any other remote service.
 
+## Retrieval Reality
+
+v33-C adds the first explicit local retrieval layer for the corpus.
+
+- retrieval is creator-scoped and requires `creator_id`
+- default retrieval excludes archived and non-eligible records
+- document, version, and segment hits are returned with explainable match reasons
+- the retrieval index is derived data, not the source of truth
+- embeddings, vector databases, and LLM retrieval remain paused
+- voice-learning eligibility remains separate from retrieval eligibility
+
 ## Memory Dimensions
 
 Retrieval and memory must consider:

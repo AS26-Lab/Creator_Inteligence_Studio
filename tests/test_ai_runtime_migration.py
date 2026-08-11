@@ -233,7 +233,7 @@ class AIRuntimeMigrationTests(unittest.TestCase):
                 second_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
 
                 self.assertEqual(first_count, second_count)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 33)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
 
     def test_model_history_survives_deprecation_and_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

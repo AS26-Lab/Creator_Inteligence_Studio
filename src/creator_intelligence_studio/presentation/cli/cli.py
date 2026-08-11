@@ -396,6 +396,9 @@ from creator_intelligence_studio.application.services.experiment_service import 
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
+from creator_intelligence_studio.application.services.creator_corpus_retrieval_service import (
+    CreatorCorpusRetrievalService,
+)
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
 )
@@ -419,6 +422,13 @@ from creator_intelligence_studio.application.services.media_inspection_service i
     VideoInspectionReport,
 )
 from creator_intelligence_studio.domain.errors import DomainError
+from creator_intelligence_studio.domain.creator_corpus import (
+    CorpusAuthorshipClass,
+    CorpusDocumentStatus,
+    CorpusDocumentType,
+    CorpusRetrievalQuery,
+    CorpusRetrievalSort,
+)
 from creator_intelligence_studio.presentation.cli.platforms_cli import build_platforms_parser, handle_platforms_command
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.acoustic_analysis.value_objects import AcousticAnalysisStatus
@@ -1711,6 +1721,34 @@ def build_parser() -> argparse.ArgumentParser:
     packaging_export.add_argument("--summary", action="store_true")
     packaging_export.add_argument("--json", action="store_true")
 
+    corpus_parser = subparsers.add_parser("corpus", help="Recuperacion local del Creator Corpus")
+    corpus_sub = corpus_parser.add_subparsers(dest="action", required=True)
+
+    corpus_search = corpus_sub.add_parser("search", help="Buscar contenido del corpus")
+    corpus_search.add_argument("--creator-id", required=True)
+    corpus_search.add_argument("--query")
+    corpus_search.add_argument("--project-id")
+    corpus_search.add_argument("--document-id")
+    corpus_search.add_argument("--segment-id")
+    corpus_search.add_argument("--source-asset-id")
+    corpus_search.add_argument("--document-type", action="append")
+    corpus_search.add_argument("--authorship-class", action="append")
+    corpus_search.add_argument("--language", action="append")
+    corpus_search.add_argument("--status", action="append")
+    corpus_search.add_argument("--include-historical", action="store_true")
+    corpus_search.add_argument("--limit", type=int, default=20)
+    corpus_search.add_argument("--offset", type=int, default=0)
+    corpus_search.add_argument("--sort", choices=[item.value for item in CorpusRetrievalSort], default=CorpusRetrievalSort.RELEVANCE.value)
+    corpus_search.add_argument("--json", action="store_true")
+
+    corpus_index_status = corpus_sub.add_parser("index-status", help="Mostrar salud del indice del corpus")
+    corpus_index_status.add_argument("--creator-id")
+    corpus_index_status.add_argument("--json", action="store_true")
+
+    corpus_index_rebuild = corpus_sub.add_parser("index-rebuild", help="Reconstruir el indice del corpus")
+    corpus_index_rebuild.add_argument("--creator-id")
+    corpus_index_rebuild.add_argument("--json", action="store_true")
+
     creator_language_parser = subparsers.add_parser("creator-language", help="Creator Language Analysis")
     creator_language_sub = creator_language_parser.add_subparsers(dest="action", required=True)
 
@@ -2390,6 +2428,26 @@ def _print_video_list(videos, stream) -> None:
     for video in videos:
         _print_video(video, stream)
         print("", file=stream)
+
+
+def _print_corpus_retrieval_result(result, stream) -> None:
+    print(f"Creator: {result.query.creator_id}", file=stream)
+    print(f"Consultas: {result.total_count} resultados", file=stream)
+    print(f"Devueltos: {result.returned_count}", file=stream)
+    if result.index_health is not None:
+        health = result.index_health
+        print(
+            f"Indice: {health.indexed_row_count}/{health.expected_row_count} filas "
+            f"(faltantes: {health.missing_row_count}, obsoletas: {health.stale_row_count})",
+            file=stream,
+        )
+    for item in result.results:
+        print(f"- {item.row_kind} {item.document_type.value}: {item.title}", file=stream)
+        print(f"  ID documento: {item.document_id}", file=stream)
+        if item.segment_id:
+            print(f"  ID segmento: {item.segment_id}", file=stream)
+        print(f"  Motivo: {item.relevance_reason}", file=stream)
+        print(f"  Snippet: {item.snippet}", file=stream)
 
 
 def _print_media_tool(tool, stream) -> None:
@@ -5141,6 +5199,55 @@ def _handle_creator_memory(args, service: CreatorMemoryService, stdout, stderr) 
     raise ValueError("Accion de creator-memory no reconocida.")
 
 
+def _handle_creator_corpus(args, service: CreatorCorpusRetrievalService, stdout, stderr) -> int:
+    if args.action == "search":
+        query = CorpusRetrievalQuery(
+            creator_id=args.creator_id,
+            query_text=args.query,
+            project_id=args.project_id,
+            document_id=args.document_id,
+            segment_id=args.segment_id,
+            source_asset_id=args.source_asset_id,
+            document_types=tuple(CorpusDocumentType(item) for item in args.document_type or ()),
+            authorship_classes=tuple(CorpusAuthorshipClass(item) for item in args.authorship_class or ()),
+            languages=tuple(args.language or ()),
+            statuses=tuple(CorpusDocumentStatus(item) for item in args.status or ()),
+            retrieval_eligible_only=True,
+            current_versions_only=not args.include_historical,
+            limit=args.limit,
+            offset=args.offset,
+            sort=CorpusRetrievalSort(args.sort),
+        )
+        payload = service.search(query)
+        if args.json:
+            print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            _print_corpus_retrieval_result(payload, stdout)
+        return 0
+    if args.action == "index-status":
+        payload = service.index_status(args.creator_id)
+        if args.json:
+            print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(
+                f"Indice corpus: {payload.indexed_row_count}/{payload.expected_row_count} filas "
+                f"(faltantes: {payload.missing_row_count}, obsoletas: {payload.stale_row_count})",
+                file=stdout,
+            )
+        return 0
+    if args.action == "index-rebuild":
+        payload = service.rebuild_index(args.creator_id)
+        if args.json:
+            print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
+        else:
+            print(
+                f"Indice corpus reconstruido: {payload.indexed_row_count}/{payload.expected_row_count} filas",
+                file=stdout,
+            )
+        return 0
+    raise ValueError("Accion de corpus no reconocida.")
+
+
 def _handle_creator_language(args, service: CreatorLanguageService, stdout, stderr) -> int:
     if args.action == "corpora":
         payload = [item.to_dict() for item in service.list_corpora(args.creator_id)]
@@ -5890,6 +5997,7 @@ def dispatch(
     analytics_lab_service: AnalyticsLabService | None = None,
     experiment_service: ExperimentService | None = None,
     creator_memory_service: CreatorMemoryService | None = None,
+    creator_corpus_retrieval_service: CreatorCorpusRetrievalService | None = None,
     creator_language_service: CreatorLanguageService | None = None,
     packaging_service: CreativePackagingService | None = None,
     render_service: ClipRenderService | None = None,
@@ -5995,6 +6103,10 @@ def dispatch(
             if creator_memory_service is None:
                 raise DomainError("El servicio de creator memory no esta disponible.")
             return _handle_creator_memory(args, creator_memory_service, stdout, stderr)
+        if args.entity == "corpus":
+            if creator_corpus_retrieval_service is None:
+                raise DomainError("El servicio de corpus no esta disponible.")
+            return _handle_creator_corpus(args, creator_corpus_retrieval_service, stdout, stderr)
         if args.entity == "creator-language":
             if creator_language_service is None:
                 raise DomainError("El servicio de creator language no esta disponible.")

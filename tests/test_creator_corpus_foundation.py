@@ -379,11 +379,11 @@ class CreatorCorpusFoundationTests(unittest.TestCase):
             self.assertEqual(corpus.get_document(result.document.id).status, CorpusDocumentStatus.ARCHIVED)
             self.assertEqual(corpus.list_versions(result.document.id)[0].content, "contenido")
 
-    def test_migration_0_to_33_and_32_to_33(self) -> None:
+    def test_migration_0_to_34_and_32_to_34(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             _, _, database, _, _ = _build_context(temp_dir)
             with database.connect() as connection:
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 33)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = _settings()
@@ -393,7 +393,7 @@ class CreatorCorpusFoundationTests(unittest.TestCase):
             with database.connect() as connection:
                 _create_legacy_v32_schema(connection)
                 run_migrations(connection)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 33)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
 
 
 if __name__ == "__main__":

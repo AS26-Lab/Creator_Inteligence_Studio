@@ -11,6 +11,7 @@ from .entities import (
     CorpusSegment,
     CorpusSourceAsset,
 )
+from .retrieval import CorpusRetrievalIndexHealth, CorpusRetrievalQuery
 
 
 class CreatorCorpusRepository(ABC):
@@ -84,4 +85,24 @@ class CreatorCorpusRepository(ABC):
 
     @abstractmethod
     def mark_source_asset_missing(self, source_asset_id: str) -> CorpusSourceAsset | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def supports_fts5(self) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def refresh_retrieval_index_for_document(self, document_id: str) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def rebuild_retrieval_index(self, creator_id: str | None = None) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def search_retrieval_rows(self, query: CorpusRetrievalQuery) -> tuple[list[dict[str, object]], int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_retrieval_index_health(self, creator_id: str | None = None) -> CorpusRetrievalIndexHealth:
         raise NotImplementedError

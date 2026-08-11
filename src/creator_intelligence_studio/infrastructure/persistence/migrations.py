@@ -9039,6 +9039,105 @@ def migration_33(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_provenance_edges_parent_id ON creator_corpus_provenance_edges(parent_id)")
 
 
+def migration_34(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_retrieval_index (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            retrieval_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            document_id TEXT NOT NULL,
+            version_id TEXT NOT NULL,
+            segment_id TEXT,
+            row_kind TEXT NOT NULL CHECK (row_kind IN ('document', 'segment')),
+            document_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            language TEXT,
+            authorship_class TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            source_asset_id TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'deleted')),
+            retrieval_eligible INTEGER NOT NULL CHECK (retrieval_eligible IN (0, 1)),
+            voice_learning_eligible INTEGER NOT NULL CHECK (voice_learning_eligible IN (0, 1)),
+            is_current_version INTEGER NOT NULL CHECK (is_current_version IN (0, 1)),
+            version_number INTEGER NOT NULL,
+            content_text TEXT NOT NULL,
+            search_text TEXT NOT NULL,
+            provenance_summary TEXT NOT NULL,
+            segment_start_seconds REAL,
+            segment_end_seconds REAL,
+            segment_confidence REAL,
+            segment_review_state TEXT,
+            quality_flags_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            version_created_at TEXT NOT NULL,
+            document_updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id) REFERENCES creator_corpus_documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (version_id) REFERENCES creator_corpus_document_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (segment_id) REFERENCES creator_corpus_segments(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_creator_id ON creator_corpus_retrieval_index(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_project_id ON creator_corpus_retrieval_index(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_document_id ON creator_corpus_retrieval_index(document_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_version_id ON creator_corpus_retrieval_index(version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_segment_id ON creator_corpus_retrieval_index(segment_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_document_type ON creator_corpus_retrieval_index(document_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_status ON creator_corpus_retrieval_index(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_row_kind ON creator_corpus_retrieval_index(row_kind)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_retrieval_eligible ON creator_corpus_retrieval_index(retrieval_eligible)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_is_current_version ON creator_corpus_retrieval_index(is_current_version)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_updated_at ON creator_corpus_retrieval_index(updated_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_created_at ON creator_corpus_retrieval_index(created_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_retrieval_index_version_created_at ON creator_corpus_retrieval_index(version_created_at)")
+    connection.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS creator_corpus_retrieval_fts USING fts5(
+            search_text,
+            content='creator_corpus_retrieval_index',
+            content_rowid='id',
+            tokenize='unicode61 remove_diacritics 2'
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS creator_corpus_retrieval_index_ai
+        AFTER INSERT ON creator_corpus_retrieval_index
+        BEGIN
+            INSERT INTO creator_corpus_retrieval_fts(rowid, search_text)
+            VALUES (new.id, new.search_text);
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS creator_corpus_retrieval_index_ad
+        AFTER DELETE ON creator_corpus_retrieval_index
+        BEGIN
+            INSERT INTO creator_corpus_retrieval_fts(creator_corpus_retrieval_fts, rowid, search_text)
+            VALUES('delete', old.id, old.search_text);
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS creator_corpus_retrieval_index_au
+        AFTER UPDATE ON creator_corpus_retrieval_index
+        BEGIN
+            INSERT INTO creator_corpus_retrieval_fts(creator_corpus_retrieval_fts, rowid, search_text)
+            VALUES('delete', old.id, old.search_text);
+            INSERT INTO creator_corpus_retrieval_fts(rowid, search_text)
+            VALUES (new.id, new.search_text);
+        END
+        """
+    )
+
+
 def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
     return {str(row[1]) for row in rows}
@@ -9204,6 +9303,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=31, name="ai_runtime_and_provider_orchestration_foundation"),
     Migration(version=32, name="component_manager_and_local_transcription_foundation"),
     Migration(version=33, name="creator_corpus_foundation"),
+    Migration(version=34, name="creator_corpus_retrieval_foundation"),
 )
 
 
@@ -9319,6 +9419,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_32(connection)
                 elif migration.version == 33:
                     migration_33(connection)
+                elif migration.version == 34:
+                    migration_34(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

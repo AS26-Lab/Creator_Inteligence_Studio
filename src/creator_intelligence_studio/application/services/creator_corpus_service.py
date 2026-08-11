@@ -332,6 +332,7 @@ class CreatorCorpusService:
             raise NotFoundError("El documento del corpus no existe.")
         if creator_id is not None and document.creator_id != creator_id:
             raise ValidationError("El documento no pertenece al creador activo.")
+        self.repository.refresh_retrieval_index_for_document(document.id)
         return document
 
     def mark_source_asset_missing(self, source_asset_id: str, *, creator_id: str | None = None) -> CorpusSourceAsset:
@@ -610,6 +611,7 @@ class CreatorCorpusService:
                 )
             edges = tuple(self.repository.list_provenance_edges(existing.id))
             stored_segments = tuple(self.repository.list_segments(existing.id))
+            self.repository.refresh_retrieval_index_for_document(document.id)
             return updated_document, existing, stored_segments, edges, False
         versions = self.repository.list_document_versions(document.id)
         next_version_number = versions[-1].version_number + 1 if versions else 1
@@ -686,6 +688,7 @@ class CreatorCorpusService:
                 updated_at=utc_now(),
             )
         )
+        self.repository.refresh_retrieval_index_for_document(document.id)
         return updated_document, stored_version, stored_segments, (stored_edge,), True
 
     def ingest_request(self, request: CorpusIngestionRequest) -> CreatorCorpusIngestionResult:

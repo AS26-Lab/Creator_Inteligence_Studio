@@ -9,7 +9,7 @@ This roadmap fixes the mandatory order for AI work. It prevents the project from
 1. AI Runtime and Provider Orchestration Foundation
 2. Component Manager and Local Transcription Foundation
 3. Creator Corpus Foundation
-4. Semantic Retrieval Foundation
+4. Explicit Local Retrieval Foundation
 5. Feedback Learning Foundation
 6. Creator Voice Workbench
 7. IA in existing modules
@@ -49,6 +49,14 @@ v33-B turns the corpus foundation into a deterministic ingestion and normalizati
 - repeated ingestion is idempotent
 - creator isolation is enforced on corpus mutation
 - retrieval remains paused; v33-B does not implement embeddings or ranking
+
+v33-C adds explicit local retrieval without semantic embeddings.
+
+- retrieval queries require `creator_id`
+- default results exclude archived and non-eligible corpus content
+- document, version, and segment hits are explainable and paginated
+- the retrieval index is derived data and can be rebuilt from canonical corpus tables
+- embeddings, vector search, and LLM retrieval remain paused
 
 ## Stage Gates
 

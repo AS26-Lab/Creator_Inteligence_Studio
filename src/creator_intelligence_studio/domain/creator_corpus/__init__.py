@@ -13,6 +13,13 @@ from .ingestion import (
     CorpusIngestionResult,
     CorpusTextNormalizationResult,
 )
+from .retrieval import (
+    CorpusRetrievalIndexHealth,
+    CorpusRetrievalQuery,
+    CorpusRetrievalResult,
+    CorpusRetrievalResultItem,
+    CorpusRetrievalSort,
+)
 from .repositories import CreatorCorpusRepository
 from .services import (
     build_corpus_identity_fingerprint,
@@ -42,6 +49,11 @@ __all__ = [
     "CorpusIngestionPolicy",
     "CorpusIngestionRequest",
     "CorpusIngestionResult",
+    "CorpusRetrievalIndexHealth",
+    "CorpusRetrievalQuery",
+    "CorpusRetrievalResult",
+    "CorpusRetrievalResultItem",
+    "CorpusRetrievalSort",
     "CorpusSegment",
     "CorpusSourceAsset",
     "CorpusSourceAssetStatus",

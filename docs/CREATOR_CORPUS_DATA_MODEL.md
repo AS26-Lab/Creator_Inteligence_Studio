@@ -111,6 +111,41 @@ Important fields:
 - `relation_type`
 - `metadata_json`
 
+### Corpus Retrieval Index
+
+Represents derived retrieval data used by the local query layer.
+
+Important fields:
+
+- `retrieval_key`
+- `creator_id`
+- `project_id`
+- `document_id`
+- `version_id`
+- `segment_id` optional
+- `row_kind`
+- `document_type`
+- `title`
+- `language`
+- `authorship_class`
+- `source_kind`
+- `source_asset_id`
+- `status`
+- `retrieval_eligible`
+- `voice_learning_eligible`
+- `is_current_version`
+- `version_number`
+- `content_text`
+- `search_text`
+- `provenance_summary`
+- `segment_start_seconds`
+- `segment_end_seconds`
+- `segment_confidence`
+- `segment_review_state`
+- `quality_flags_json`
+
+This index is derived data. The canonical corpus tables remain the source of truth and the index can be rebuilt from them.
+
 ## Integrity Rules
 
 - source asset dedupe is creator-scoped;
@@ -154,5 +189,5 @@ Current controlled relation types:
 
 ## Current Status
 
-This model is implemented as a local SQLite-backed foundation for v33-A and v33-B.
-It is not a retrieval model and it is not a learning model.
+This model is implemented as a local SQLite-backed foundation for v33-A, v33-B, and v33-C.
+It is not a learning model and it is not a semantic retrieval model.

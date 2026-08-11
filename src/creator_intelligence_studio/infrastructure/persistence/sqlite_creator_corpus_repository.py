@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import re
+from functools import lru_cache
 from uuid import uuid4
 
 from creator_intelligence_studio.domain.creator_corpus.entities import (
@@ -14,6 +16,12 @@ from creator_intelligence_studio.domain.creator_corpus.entities import (
     CorpusSourceAsset,
 )
 from creator_intelligence_studio.domain.creator_corpus.ingestion import CorpusEligibility
+from creator_intelligence_studio.domain.creator_corpus.normalization import normalize_corpus_text
+from creator_intelligence_studio.domain.creator_corpus.retrieval import (
+    CorpusRetrievalIndexHealth,
+    CorpusRetrievalQuery,
+    CorpusRetrievalSort,
+)
 from creator_intelligence_studio.domain.creator_corpus.repositories import CreatorCorpusRepository
 from creator_intelligence_studio.domain.creator_corpus.value_objects import (
     CorpusAuthorshipClass,
@@ -46,6 +54,41 @@ def _json_loads(value: str | None, fallback):
 def _metadata_dict(value: str | None) -> dict[str, object]:
     loaded = _json_loads(value, {})
     return loaded if isinstance(loaded, dict) else {}
+
+
+@lru_cache(maxsize=1)
+def _supports_fts5() -> bool:
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.execute("CREATE VIRTUAL TABLE temp.creator_corpus_fts5_probe USING fts5(search_text)")
+        return True
+    except sqlite3.Error:
+        return False
+    finally:
+        connection.close()
+
+
+def _normalize_like_text(value: str | None) -> str:
+    return normalize_corpus_text(value).lower()
+
+
+def _build_search_tokens(query_text: str | None) -> tuple[str, ...]:
+    normalized = normalize_corpus_text(query_text).lower()
+    tokens = tuple(token for token in re.findall(r"(?u)[\w]+", normalized) if token)
+    return tokens
+
+
+def _build_fts_query(query_text: str | None) -> str | None:
+    tokens = _build_search_tokens(query_text)
+    if not tokens:
+        normalized = normalize_corpus_text(query_text).strip()
+        return normalized or None
+    return " AND ".join('"' + token.replace('"', '""') + '"' for token in tokens)
+
+
+def _search_text(*parts: str | None) -> str:
+    values = [normalize_corpus_text(part) for part in parts if part]
+    return "\n".join(part for part in values if part).strip()
 
 
 def _row_to_source_asset(row: sqlite3.Row) -> CorpusSourceAsset:
@@ -420,7 +463,9 @@ class SQLiteCreatorCorpusRepository(CreatorCorpusRepository):
             created_at=current.created_at,
             updated_at=utc_now(),
         )
-        return self.upsert_document(updated)
+        stored = self.upsert_document(updated)
+        self.refresh_retrieval_index_for_document(document_id)
+        return stored
 
     def mark_source_asset_missing(self, source_asset_id: str) -> CorpusSourceAsset | None:
         current = self.get_source_asset(source_asset_id)
@@ -443,3 +488,332 @@ class SQLiteCreatorCorpusRepository(CreatorCorpusRepository):
             updated_at=utc_now(),
         )
         return self.upsert_source_asset(updated)
+
+    def supports_fts5(self) -> bool:
+        return _supports_fts5()
+
+    def _delete_retrieval_rows_for_document(self, connection: sqlite3.Connection, document_id: str) -> None:
+        connection.execute(
+            "DELETE FROM creator_corpus_retrieval_index WHERE document_id = ?",
+            (document_id,),
+        )
+
+    def _upsert_retrieval_row(self, connection: sqlite3.Connection, payload: dict[str, object]) -> None:
+        connection.execute(
+            """
+            INSERT INTO creator_corpus_retrieval_index (
+                retrieval_key, creator_id, project_id, document_id, version_id, segment_id,
+                row_kind, document_type, title, language, authorship_class, source_kind,
+                source_asset_id, status, retrieval_eligible, voice_learning_eligible,
+                is_current_version, version_number, content_text, search_text,
+                provenance_summary, segment_start_seconds, segment_end_seconds,
+                segment_confidence, segment_review_state, quality_flags_json,
+                created_at, updated_at, version_created_at, document_updated_at
+            ) VALUES (
+                :retrieval_key, :creator_id, :project_id, :document_id, :version_id, :segment_id,
+                :row_kind, :document_type, :title, :language, :authorship_class, :source_kind,
+                :source_asset_id, :status, :retrieval_eligible, :voice_learning_eligible,
+                :is_current_version, :version_number, :content_text, :search_text,
+                :provenance_summary, :segment_start_seconds, :segment_end_seconds,
+                :segment_confidence, :segment_review_state, :quality_flags_json,
+                :created_at, :updated_at, :version_created_at, :document_updated_at
+            )
+            ON CONFLICT(retrieval_key) DO UPDATE SET
+                project_id = excluded.project_id,
+                document_id = excluded.document_id,
+                version_id = excluded.version_id,
+                segment_id = excluded.segment_id,
+                row_kind = excluded.row_kind,
+                document_type = excluded.document_type,
+                title = excluded.title,
+                language = excluded.language,
+                authorship_class = excluded.authorship_class,
+                source_kind = excluded.source_kind,
+                source_asset_id = excluded.source_asset_id,
+                status = excluded.status,
+                retrieval_eligible = excluded.retrieval_eligible,
+                voice_learning_eligible = excluded.voice_learning_eligible,
+                is_current_version = excluded.is_current_version,
+                version_number = excluded.version_number,
+                content_text = excluded.content_text,
+                search_text = excluded.search_text,
+                provenance_summary = excluded.provenance_summary,
+                segment_start_seconds = excluded.segment_start_seconds,
+                segment_end_seconds = excluded.segment_end_seconds,
+                segment_confidence = excluded.segment_confidence,
+                segment_review_state = excluded.segment_review_state,
+                quality_flags_json = excluded.quality_flags_json,
+                updated_at = excluded.updated_at,
+                version_created_at = excluded.version_created_at,
+                document_updated_at = excluded.document_updated_at
+            """,
+            payload,
+        )
+
+    def refresh_retrieval_index_for_document(self, document_id: str) -> int:
+        document = self.get_document(document_id)
+        if document is None:
+            return 0
+        versions = self.list_document_versions(document_id)
+        if not versions:
+            with self._database.connect() as connection:
+                self._delete_retrieval_rows_for_document(connection, document_id)
+            return 0
+        provenance_by_version = {version.id: self.list_provenance_edges(version.id) for version in versions}
+        segments_by_version = {version.id: self.list_segments(version.id) for version in versions}
+        document_updated_at = document.updated_at.isoformat()
+        indexed_rows = 0
+        with self._database.connect() as connection:
+            self._delete_retrieval_rows_for_document(connection, document_id)
+            for version in versions:
+                metadata = _metadata_dict(version.metadata_json)
+                provenance_summary = "; ".join(
+                    f"{edge.relation_type.value}:{edge.parent_type}:{edge.parent_id[:12]}"
+                    for edge in provenance_by_version.get(version.id, ())
+                )
+                content_text = str(metadata.get("normalized_content", version.normalized_content or version.content or ""))
+                search_text = _search_text(document.title, content_text, provenance_summary)
+                payload = {
+                    "retrieval_key": f"{document.id}:document:{version.id}",
+                    "creator_id": document.creator_id,
+                    "project_id": document.project_id,
+                    "document_id": document.id,
+                    "version_id": version.id,
+                    "segment_id": None,
+                    "row_kind": "document",
+                    "document_type": document.document_type.value,
+                    "title": document.title,
+                    "language": version.language or document.language,
+                    "authorship_class": version.authorship_class.value,
+                    "source_kind": version.source_kind.value,
+                    "source_asset_id": version.source_asset_id,
+                    "status": document.status.value,
+                    "retrieval_eligible": 1 if version.retrieval_eligible else 0,
+                    "voice_learning_eligible": 1 if version.voice_learning_eligible else 0,
+                    "is_current_version": 1 if document.current_version_id == version.id else 0,
+                    "version_number": version.version_number,
+                    "content_text": content_text,
+                    "search_text": search_text,
+                    "provenance_summary": provenance_summary,
+                    "segment_start_seconds": None,
+                    "segment_end_seconds": None,
+                    "segment_confidence": None,
+                    "segment_review_state": None,
+                    "quality_flags_json": version.metadata_json,
+                    "created_at": version.created_at.isoformat(),
+                    "updated_at": document.updated_at.isoformat(),
+                    "version_created_at": version.created_at.isoformat(),
+                    "document_updated_at": document_updated_at,
+                }
+                self._upsert_retrieval_row(connection, payload)
+                indexed_rows += 1
+                for segment in segments_by_version.get(version.id, ()):
+                    segment_metadata = _metadata_dict(segment.metadata_json)
+                    segment_search_text = _search_text(document.title, segment.text, provenance_summary)
+                    segment_payload = {
+                        "retrieval_key": f"{document.id}:segment:{segment.id}",
+                        "creator_id": document.creator_id,
+                        "project_id": document.project_id,
+                        "document_id": document.id,
+                        "version_id": version.id,
+                        "segment_id": segment.id,
+                        "row_kind": "segment",
+                        "document_type": document.document_type.value,
+                        "title": document.title,
+                        "language": version.language or document.language,
+                        "authorship_class": version.authorship_class.value,
+                        "source_kind": version.source_kind.value,
+                        "source_asset_id": version.source_asset_id,
+                        "status": document.status.value,
+                        "retrieval_eligible": 1 if segment.retrieval_eligible and version.retrieval_eligible else 0,
+                        "voice_learning_eligible": 1 if segment.voice_learning_eligible and version.voice_learning_eligible else 0,
+                        "is_current_version": 1 if document.current_version_id == version.id else 0,
+                        "version_number": version.version_number,
+                        "content_text": segment.text,
+                        "search_text": segment_search_text,
+                        "provenance_summary": provenance_summary,
+                        "segment_start_seconds": segment.start_seconds,
+                        "segment_end_seconds": segment.end_seconds,
+                        "segment_confidence": segment.confidence,
+                        "segment_review_state": segment.review_state,
+                        "quality_flags_json": _json_dumps(
+                            {
+                                **segment_metadata,
+                                "raw_text": segment.raw_text,
+                                "normalization_version": segment.normalization_version,
+                                "quality_flags": list(segment.quality_flags),
+                            }
+                        ),
+                        "created_at": segment.created_at.isoformat(),
+                        "updated_at": document.updated_at.isoformat(),
+                        "version_created_at": version.created_at.isoformat(),
+                        "document_updated_at": document_updated_at,
+                    }
+                    self._upsert_retrieval_row(connection, segment_payload)
+                    indexed_rows += 1
+        return indexed_rows
+
+    def rebuild_retrieval_index(self, creator_id: str | None = None) -> int:
+        if creator_id is not None:
+            documents = self.list_documents(creator_id)
+        else:
+            with self._database.connect() as connection:
+                rows = connection.execute("SELECT * FROM creator_corpus_documents ORDER BY created_at ASC").fetchall()
+            documents = [_row_to_document(row) for row in rows]
+        total = 0
+        for document in documents:
+            total += self.refresh_retrieval_index_for_document(document.id)
+        return total
+
+    def search_retrieval_rows(self, query: CorpusRetrievalQuery) -> tuple[list[dict[str, object]], int]:
+        if query.limit <= 0:
+            return [], 0
+        normalized_query = _normalize_like_text(query.query_text) if query.query_text else ""
+        search_tokens = _build_search_tokens(query.query_text) if query.query_text else ()
+        where_clauses = ["idx.creator_id = ?"]
+        params: list[object] = [query.creator_id]
+        if query.project_id is not None:
+            where_clauses.append("IFNULL(idx.project_id, '') = IFNULL(?, '')")
+            params.append(query.project_id)
+        if query.document_id is not None:
+            where_clauses.append("idx.document_id = ?")
+            params.append(query.document_id)
+        if query.segment_id is not None:
+            where_clauses.append("idx.segment_id = ?")
+            params.append(query.segment_id)
+        if query.source_asset_id is not None:
+            where_clauses.append("idx.source_asset_id = ?")
+            params.append(query.source_asset_id)
+        if query.retrieval_eligible_only:
+            where_clauses.append("idx.retrieval_eligible = 1")
+        if query.current_versions_only:
+            where_clauses.append("idx.is_current_version = 1")
+        if query.document_types:
+            where_clauses.append(f"idx.document_type IN ({', '.join('?' for _ in query.document_types)})")
+            params.extend(item.value if hasattr(item, "value") else str(item) for item in query.document_types)
+        if query.authorship_classes:
+            where_clauses.append(f"idx.authorship_class IN ({', '.join('?' for _ in query.authorship_classes)})")
+            params.extend(item.value if hasattr(item, "value") else str(item) for item in query.authorship_classes)
+        if query.languages:
+            where_clauses.append(f"idx.language IN ({', '.join('?' for _ in query.languages)})")
+            params.extend(query.languages)
+        if query.statuses:
+            where_clauses.append(f"idx.status IN ({', '.join('?' for _ in query.statuses)})")
+            params.extend(item.value if hasattr(item, "value") else str(item) for item in query.statuses)
+        else:
+            where_clauses.append("idx.status = 'active'")
+        if query.date_from is not None:
+            where_clauses.append("idx.version_created_at >= ?")
+            params.append(query.date_from.isoformat())
+        if query.date_to is not None:
+            where_clauses.append("idx.version_created_at <= ?")
+            params.append(query.date_to.isoformat())
+        select_score = "0.0 AS relevance_score"
+        order_clause = "idx.updated_at DESC, idx.title ASC, idx.version_number DESC"
+        score_params: list[object] = []
+        if query.query_text and normalized_query:
+            if search_tokens:
+                where_clauses.append(
+                    "(" + " AND ".join("instr(lower(idx.search_text), lower(?)) > 0" for _ in search_tokens) + ")"
+                )
+                params.extend(search_tokens)
+            else:
+                where_clauses.append("instr(lower(idx.search_text), lower(?)) > 0")
+                params.append(normalized_query)
+            select_score = (
+                "("
+                "CASE WHEN lower(idx.title) = lower(?) THEN 250.0 ELSE 0.0 END + "
+                "CASE WHEN instr(lower(idx.title), lower(?)) > 0 THEN 120.0 ELSE 0.0 END + "
+                "CASE WHEN instr(lower(idx.content_text), lower(?)) > 0 THEN 80.0 ELSE 0.0 END + "
+                "CASE WHEN instr(lower(idx.provenance_summary), lower(?)) > 0 THEN 10.0 ELSE 0.0 END + "
+                "CASE WHEN idx.is_current_version = 1 THEN 15.0 ELSE 0.0 END + "
+                "CASE WHEN IFNULL(idx.project_id, '') = IFNULL(?, '') THEN 5.0 ELSE 0.0 END"
+                ") AS relevance_score"
+            )
+            score_params = [normalized_query, normalized_query, normalized_query, normalized_query, query.project_id or ""]
+            order_clause = "relevance_score DESC, idx.updated_at DESC, idx.title ASC"
+        elif query.sort == CorpusRetrievalSort.UPDATED_DESC:
+            order_clause = "idx.updated_at DESC, idx.title ASC"
+        elif query.sort == CorpusRetrievalSort.CREATED_DESC:
+            order_clause = "idx.created_at DESC, idx.title ASC"
+        elif query.sort == CorpusRetrievalSort.TITLE:
+            order_clause = "idx.title ASC, idx.updated_at DESC"
+        query_sql = f"""
+            SELECT idx.*, {select_score}
+            FROM creator_corpus_retrieval_index AS idx
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY {order_clause}
+            LIMIT ? OFFSET ?
+        """
+        count_sql = f"""
+            SELECT COUNT(*)
+            FROM creator_corpus_retrieval_index AS idx
+            WHERE {' AND '.join(where_clauses)}
+        """
+        count_params = list(params)
+        query_params = score_params + list(params) + [int(query.limit), int(query.offset)]
+        with self._database.connect() as connection:
+            total = int(connection.execute(count_sql, count_params).fetchone()[0])
+            rows = connection.execute(query_sql, query_params).fetchall()
+        return [dict(row) for row in rows], total
+
+    def get_retrieval_index_health(self, creator_id: str | None = None) -> CorpusRetrievalIndexHealth:
+        if creator_id is None:
+            creator_filter = ""
+            params: list[object] = []
+        else:
+            creator_filter = "WHERE creator_id = ?"
+            params = [creator_id]
+        with self._database.connect() as connection:
+            document_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_documents {creator_filter}",
+                    params,
+                ).fetchone()[0]
+            )
+            version_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_document_versions WHERE document_id IN (SELECT id FROM creator_corpus_documents {creator_filter})",
+                    params,
+                ).fetchone()[0]
+            )
+            segment_count = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_segments WHERE document_version_id IN (SELECT id FROM creator_corpus_document_versions WHERE document_id IN (SELECT id FROM creator_corpus_documents {creator_filter}))",
+                    params,
+                ).fetchone()[0]
+            )
+            indexed_rows = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_retrieval_index {creator_filter}",
+                    params,
+                ).fetchone()[0]
+            )
+            indexed_document_rows = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_retrieval_index WHERE row_kind = 'document' {'AND creator_id = ?' if creator_id is not None else ''}",
+                    params,
+                ).fetchone()[0]
+            )
+            indexed_segment_rows = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM creator_corpus_retrieval_index WHERE row_kind = 'segment' {'AND creator_id = ?' if creator_id is not None else ''}",
+                    params,
+                ).fetchone()[0]
+            )
+        expected_rows = version_count + segment_count
+        missing_rows = max(0, expected_rows - indexed_rows)
+        stale_rows = max(0, indexed_rows - expected_rows)
+        return CorpusRetrievalIndexHealth(
+            creator_id=creator_id,
+            supports_fts5=self.supports_fts5(),
+            document_count=document_count,
+            version_count=version_count,
+            segment_count=segment_count,
+            indexed_row_count=indexed_rows,
+            indexed_document_row_count=indexed_document_rows,
+            indexed_segment_row_count=indexed_segment_rows,
+            expected_row_count=expected_rows,
+            missing_row_count=missing_rows,
+            stale_row_count=stale_rows,
+        )
