@@ -92,6 +92,7 @@ Included in product scope:
 - strategy;
 - briefs;
 - scripts;
+- creator corpus identity, provenance, ingestion, versioning, and lifecycle;
 - outlines;
 - hooks;
 - titles;
@@ -186,7 +187,7 @@ If a feature is ambiguous, classify it as paused until the next approved contrac
 - `docs/LOCAL_COMPONENTS_AND_TRANSCRIPTION.md` defines local installation, FFmpeg, transcription, and onboarding.
 - `docs/COLLECTIVE_INTELLIGENCE_AND_PRIVACY.md` defines collective sharing and privacy.
 - `docs/AI_IMPLEMENTATION_ROADMAP.md` defines the order and exit gates for AI work.
-- `docs/CURRENT_IMPLEMENTATION_REALITY.md` describes the real state of the repository through v30.
+- `docs/CURRENT_IMPLEMENTATION_REALITY.md` describes the real state of the repository through the current inspected slice.
 - `docs/ORIGINAL_VISION_TRACEABILITY.md` maps the original vision to the current codebase.
 - `docs/DECISION_REGISTER.md` keeps the canonical decisions and replacements.
 

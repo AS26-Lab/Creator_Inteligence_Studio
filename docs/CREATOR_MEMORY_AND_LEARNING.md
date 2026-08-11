@@ -3,6 +3,7 @@
 ## Purpose
 
 This document defines the approved memory, corpus, retrieval, and learning model for creator-specific intelligence.
+v33-A now implements the local Creator Corpus foundation for identity, provenance, ingestion, deduplication, versioning, and lifecycle. Retrieval and embeddings remain future layers.
 
 ## Corpus Strategy
 
@@ -10,6 +11,11 @@ By default, the application does not permanently duplicate MP4 files.
 
 Persist:
 
+- corpus source assets;
+- corpus documents;
+- document versions;
+- provenance edges;
+- transcript segments;
 - transcripts;
 - timestamps;
 - metadata;
@@ -194,5 +200,4 @@ Also track:
 
 ## Discrepancy Note
 
-Current repository modules labeled memory or personalization are structural foundations. They are not yet the semantic retrieval layer described here.
-
+Current repository modules labeled memory, personalization, or corpus are structural foundations. The corpus foundation is now implemented locally, but it is still not the semantic retrieval layer described here.

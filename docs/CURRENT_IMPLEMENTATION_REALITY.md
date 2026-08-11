@@ -2,12 +2,12 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v32-F slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v33-A slice. It is not a wish list.
 
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v32`
+- current migration ceiling: `v33`
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
@@ -192,7 +192,6 @@ Status: `requires_ml`
 
 ## What Is Not Started
 
-- Creator Corpus Foundation
 - Semantic Retrieval Foundation
 - Feedback Learning Foundation
 - Creator Voice Workbench
@@ -200,6 +199,19 @@ Status: `requires_ml`
 - automatic video editing
 
 Status: `not_started`
+
+## Creator Corpus v33-A Foundation
+
+- local creator corpus storage is implemented as a creator-scoped SQLite-backed foundation
+- source assets, documents, versions, provenance edges, and transcript segments are represented explicitly
+- text ingestion is idempotent and versioned
+- transcription ingestion bridges the local transcription stack into corpus documents and preserves provenance
+- same-content deduplication is creator-scoped
+- source assets can be marked missing without deleting derived text
+- documents can be archived without erasing previous versions
+- migration `v33` adds the corpus schema additively
+
+Status: `implemented`
 
 ## Component Manager v32-D Resumable Download Manager Foundation
 

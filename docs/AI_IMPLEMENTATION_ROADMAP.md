@@ -36,6 +36,12 @@ v32-L hardens the runtime distribution boundary and downloader resource cleanup.
 - HTTP/TLS response ownership is now deterministic so SSL sockets close on success, failure, pause, cancel, redirect, and retry
 - runtime and model productive sources remain disabled
 
+v33-A opens the Creator Corpus foundation as a local-only storage and ingestion layer.
+
+- creator-scoped corpus identity, provenance, deduplication, versioning, and lifecycle are now implemented
+- transcription-derived documents can be ingested into the corpus without introducing retrieval or embeddings
+- semantic retrieval, feedback learning, and creator voice work remain paused for later phases
+
 ## Stage Gates
 
 Every stage must define:

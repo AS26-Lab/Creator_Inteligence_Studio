@@ -71,6 +71,10 @@ from creator_intelligence_studio.application.services.experiment_service import 
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
+from creator_intelligence_studio.application.services.creator_corpus_service import (
+    CreatorCorpusService,
+    build_creator_corpus_service,
+)
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
     build_creator_language_service,
@@ -190,6 +194,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_experiment_re
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_memory_repository import (
     SQLiteCreatorMemoryRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_corpus_repository import (
+    SQLiteCreatorCorpusRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_language_repository import (
     SQLiteCreatorLanguageRepository,
 )
@@ -225,6 +232,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_production_pr
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_strategic_planning_repository import (
     SQLiteStrategicPlanningRepository,
+)
+from creator_intelligence_studio.infrastructure.persistence.sqlite_project_repository import (
+    SQLiteProjectRepository,
 )
 from creator_intelligence_studio.infrastructure.persistence.sqlite_transcription_repository import (
     SQLiteTranscriptionRepository,
@@ -268,6 +278,7 @@ class ServiceContext(BootstrapContext):
     analytics_lab_service: AnalyticsLabService | None = None
     experiment_service: ExperimentService | None = None
     creator_memory_service: CreatorMemoryService | None = None
+    creator_corpus_service: CreatorCorpusService | None = None
     creator_language_service: CreatorLanguageService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
@@ -453,10 +464,20 @@ def _load_service_context() -> ServiceContext:
         paths=context.paths,
         logger=context.logger,
     )
+    project_repository = SQLiteProjectRepository(database)
     creator_memory_service = CreatorMemoryService(
         settings=context.settings,
         paths=context.paths,
         repository=SQLiteCreatorMemoryRepository(database),
+        logger=context.logger,
+    )
+    creator_corpus_service = build_creator_corpus_service(
+        settings=context.settings,
+        paths=context.paths,
+        repository=SQLiteCreatorCorpusRepository(database),
+        project_repository=project_repository,
+        video_repository=video_repository,
+        transcription_repository=transcription_repository,
         logger=context.logger,
     )
     creator_language_service = build_creator_language_service(
@@ -661,6 +682,7 @@ def _load_service_context() -> ServiceContext:
         analytics_lab_service=analytics_lab_service,
         experiment_service=experiment_service,
         creator_memory_service=creator_memory_service,
+        creator_corpus_service=creator_corpus_service,
         creator_language_service=creator_language_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,

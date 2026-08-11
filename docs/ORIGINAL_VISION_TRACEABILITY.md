@@ -10,7 +10,7 @@ This document maps original product intent to the current repository state. It i
 |---|---|---|---|---|---|
 | Creator strategic and creative copilot | `docs/PROJECT_BIBLE.md` | partial | no AI runtime yet | keep as north star | AI Runtime and Provider Orchestration Foundation |
 | Strong script capability | `docs/SCRIPT_OUTLINE_AND_PRODUCTION_PREPARATION_FOUNDATION.md` | implemented as preparation | no human-guided drafting yet | outlines and prep are the current script-adjacent base | Creator Voice Workbench, then scripting loop |
-| Voice, tone, rhythm, humor, narrative understanding | `docs/CREATOR_MEMORY.md`, `docs/CREATOR_LANGUAGE_ANALYSIS.md` | infrastructure_only | semantic understanding missing | preserve local creator profiles and rules | Creator Corpus, Semantic Retrieval, Feedback Learning |
+| Voice, tone, rhythm, humor, narrative understanding | `docs/CREATOR_MEMORY.md`, `docs/CREATOR_LANGUAGE_ANALYSIS.md` | infrastructure_only | semantic understanding missing; corpus foundation is now implemented but retrieval is still absent | preserve local creator profiles and rules | Creator Corpus, Semantic Retrieval, Feedback Learning |
 | No automatic video editor | `docs/PROJECT_BIBLE.md` | implemented as a non-goal | none | keep paused | remains out of scope |
 | Strategic intelligence with analytics and experiments | `docs/ANALYTICS_LAB.md`, `docs/EXPERIMENTS_AND_LEARNING.md` | implemented structurally | no AI layer on top | retain evidence-led foundations | IA in existing modules |
 | No viral promise | `docs/PROJECT_BIBLE.md` | implemented as policy | none | hard rule | all future AI stages |

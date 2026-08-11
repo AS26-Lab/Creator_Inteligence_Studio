@@ -8880,6 +8880,165 @@ def migration_32(connection: sqlite3.Connection) -> None:
         )
 
 
+def migration_33(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_source_assets (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            source_type TEXT NOT NULL CHECK (
+                source_type IN (
+                    'video',
+                    'audio',
+                    'transcript',
+                    'script',
+                    'caption',
+                    'note',
+                    'imported_text',
+                    'manual_text',
+                    'future_document'
+                )
+            ),
+            original_name TEXT NOT NULL,
+            local_path TEXT,
+            content_hash TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            mime_type TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'missing', 'archived')),
+            source_metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            UNIQUE (creator_id, content_hash)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_documents (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            source_asset_id TEXT,
+            project_id TEXT,
+            document_type TEXT NOT NULL CHECK (document_type IN ('transcript', 'script', 'caption', 'note', 'imported_text')),
+            title TEXT NOT NULL,
+            language TEXT,
+            current_version_id TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'deleted')),
+            document_identity_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_asset_id) REFERENCES creator_corpus_source_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (current_version_id) REFERENCES creator_corpus_document_versions(id) ON DELETE SET NULL,
+            UNIQUE (creator_id, document_identity_hash)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_document_versions (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            source_kind TEXT NOT NULL CHECK (
+                source_kind IN (
+                    'original',
+                    'transcription',
+                    'user_edit',
+                    'ai_generated',
+                    'ai_rewrite',
+                    'import'
+                )
+            ),
+            source_asset_id TEXT,
+            parent_version_id TEXT,
+            language TEXT,
+            created_by TEXT,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES creator_corpus_documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_asset_id) REFERENCES creator_corpus_source_assets(id) ON DELETE SET NULL,
+            FOREIGN KEY (parent_version_id) REFERENCES creator_corpus_document_versions(id) ON DELETE SET NULL,
+            UNIQUE (document_id, version_number),
+            UNIQUE (document_id, content_hash)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_segments (
+            id TEXT PRIMARY KEY,
+            document_version_id TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            start_seconds REAL,
+            end_seconds REAL,
+            text TEXT NOT NULL,
+            confidence REAL,
+            review_state TEXT,
+            source_reference_type TEXT,
+            source_reference_id TEXT,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (document_version_id) REFERENCES creator_corpus_document_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            UNIQUE (document_version_id, sequence)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_corpus_provenance_edges (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            parent_type TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            child_version_id TEXT NOT NULL,
+            relation_type TEXT NOT NULL CHECK (
+                relation_type IN (
+                    'derived_from',
+                    'transcribed_from',
+                    'edited_from',
+                    'generated_from',
+                    'imported_from'
+                )
+            ),
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (child_version_id) REFERENCES creator_corpus_document_versions(id) ON DELETE CASCADE,
+            UNIQUE (child_version_id, parent_type, parent_id, relation_type)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_source_assets_creator_id ON creator_corpus_source_assets(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_source_assets_project_id ON creator_corpus_source_assets(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_source_assets_content_hash ON creator_corpus_source_assets(content_hash)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_source_assets_status ON creator_corpus_source_assets(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_documents_creator_id ON creator_corpus_documents(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_documents_project_id ON creator_corpus_documents(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_documents_source_asset_id ON creator_corpus_documents(source_asset_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_documents_type ON creator_corpus_documents(document_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_documents_status ON creator_corpus_documents(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_document_versions_document_id ON creator_corpus_document_versions(document_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_document_versions_creator_id ON creator_corpus_document_versions(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_document_versions_content_hash ON creator_corpus_document_versions(content_hash)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_segments_document_version_id ON creator_corpus_segments(document_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_segments_creator_id ON creator_corpus_segments(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_provenance_edges_child_version_id ON creator_corpus_provenance_edges(child_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_provenance_edges_creator_id ON creator_corpus_provenance_edges(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_corpus_provenance_edges_parent_id ON creator_corpus_provenance_edges(parent_id)")
+
+
 def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
     return {str(row[1]) for row in rows}
@@ -9044,6 +9203,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=30, name="script_outline_and_production_preparation_foundation"),
     Migration(version=31, name="ai_runtime_and_provider_orchestration_foundation"),
     Migration(version=32, name="component_manager_and_local_transcription_foundation"),
+    Migration(version=33, name="creator_corpus_foundation"),
 )
 
 
@@ -9157,6 +9317,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_31(connection)
                 elif migration.version == 32:
                     migration_32(connection)
+                elif migration.version == 33:
+                    migration_33(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

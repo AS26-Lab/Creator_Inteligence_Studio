@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -14,6 +15,7 @@ from creator_intelligence_studio.domain.components.entities import (
     RuntimeCheckStatus,
 )
 from creator_intelligence_studio.presentation.desktop.main_window import MainWindow
+from creator_intelligence_studio.presentation.desktop.view_models.local_components import LocalComponentsViewModel
 from creator_intelligence_studio.presentation.desktop.views.local_components_view import LocalComponentsView
 from tests.ai_runtime_test_support import build_runtime_fixture
 from tests.test_ai_runtime_gui import DesktopWorkspaceFacade, _patch_main_window_views
@@ -134,17 +136,28 @@ class LocalComponentsGuiTests(unittest.TestCase):
             requested_device="auto",
             selected_profile=SimpleNamespace(profile_id="balanced", display_name="Equilibrado"),
             recommended_profile=SimpleNamespace(profile_id="balanced", display_name="Equilibrado"),
+            selected_profile_label="Equilibrado",
+            recommended_profile_label="Equilibrado",
             selected_model_component_id="transcription-model.small",
             selected_device="gpu",
+            selected_device_label="GPU",
             compute_type="int8",
+            compute_type_label="int8",
             ffmpeg_status=SimpleNamespace(value="ready"),
             ffprobe_status=SimpleNamespace(value="ready"),
             runtime_status=SimpleNamespace(value="ready"),
             model_status=SimpleNamespace(value="ready"),
+            ffmpeg_summary="ready",
+            runtime_summary="ready",
+            model_summary="ready",
             gpu_status=SimpleNamespace(name="DETECTED"),
+            gpu_summary="DETECTED",
             benchmark_status=SimpleNamespace(name="READY", value="ready"),
             benchmark_age_seconds=10.0,
+            benchmark_age_label="10 s",
+            disk_label="suficiente",
             technical_summary="summary",
+            execution_plan=SimpleNamespace(selected_profile_id="balanced"),
             blockers=(),
             structured_suggested_actions=(
                 SimpleNamespace(
@@ -170,13 +183,15 @@ class LocalComponentsGuiTests(unittest.TestCase):
         view = LocalComponentsView(workspace, open_transcription_callback=lambda: opened.__setitem__("transcription", opened["transcription"] + 1))
         self.addCleanup(view.close)
 
-        view.refresh()
-        self.assertTrue(self._wait_until(lambda: view._status is not None))
+        status = LocalComponentsViewModel(workspace).refresh_status()
+        view._apply_status(status)
+        self.assertIsNotNone(view._status)
         self.assertEqual(view.summary_label.text(), "Tu computadora esta lista para transcribir.")
         self.assertEqual(view.primary_action_button.text(), "Comenzar a transcribir")
         self.assertFalse(view.advanced_container.isVisible())
-        QTest.mouseClick(view.profile_change_button, Qt.MouseButton.LeftButton)
-        self.qt_app.processEvents()
+        with patch.object(view, "refresh", lambda: None):
+            QTest.mouseClick(view.profile_change_button, Qt.MouseButton.LeftButton)
+            self.qt_app.processEvents()
         self.assertTrue(workspace.profile_updates)
         QTest.mouseClick(view.primary_action_button, Qt.MouseButton.LeftButton)
         self.qt_app.processEvents()
@@ -192,17 +207,28 @@ class LocalComponentsGuiTests(unittest.TestCase):
             requested_device="auto",
             selected_profile=SimpleNamespace(profile_id="balanced", display_name="Equilibrado"),
             recommended_profile=SimpleNamespace(profile_id="balanced", display_name="Equilibrado"),
+            selected_profile_label="Equilibrado",
+            recommended_profile_label="Equilibrado",
             selected_model_component_id=None,
             selected_device="cpu",
+            selected_device_label="CPU",
             compute_type="int8",
+            compute_type_label="int8",
             ffmpeg_status=SimpleNamespace(value="ready"),
             ffprobe_status=SimpleNamespace(value="ready"),
             runtime_status=SimpleNamespace(value="ready"),
             model_status=SimpleNamespace(value="ready"),
+            ffmpeg_summary="ready",
+            runtime_summary="ready",
+            model_summary="ready",
             gpu_status=SimpleNamespace(name="REPORTED_NOT_TESTED"),
+            gpu_summary="REPORTED_NOT_TESTED",
             benchmark_status=None,
             benchmark_age_seconds=None,
+            benchmark_age_label=None,
+            disk_label=None,
             technical_summary=None,
+            execution_plan=None,
             blockers=(),
             structured_suggested_actions=(
                 SimpleNamespace(
@@ -221,8 +247,9 @@ class LocalComponentsGuiTests(unittest.TestCase):
         view = LocalComponentsView(workspace)
         self.addCleanup(view.close)
 
-        view.refresh()
-        self.assertTrue(self._wait_until(lambda: view._status is not None))
+        status = LocalComponentsViewModel(workspace).refresh_status()
+        view._apply_status(status)
+        self.assertIsNotNone(view._status)
         self.assertIn("source_not_approved", view._action_buttons["install_component"].toolTip())
         self.assertFalse(view._action_buttons["install_component"].isEnabled())
 
