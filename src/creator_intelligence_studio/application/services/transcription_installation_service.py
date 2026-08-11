@@ -704,7 +704,16 @@ class ManagedTranscriptionModelInstaller:
             if install_root.exists():
                 shutil.rmtree(install_root, ignore_errors=True)
             temp_active = install_root.with_name(f".{install_root.name}.active-{uuid4().hex}")
-            staging_root.replace(temp_active)
+            snapshot_root = staging_root / f"models--Systran--faster-whisper-{self._component_name(component_id)}" / "snapshots" / revision
+            activation_source = snapshot_root if snapshot_root.exists() else staging_root
+            if not self.model_manager._root_has_required_files(activation_source):
+                repo_cache_dir = staging_root / f"models--Systran--faster-whisper-{self._component_name(component_id)}"
+                snapshot_dir = self.model_manager._snapshot_dir(repo_cache_dir) if repo_cache_dir.exists() else None
+                if snapshot_dir is not None:
+                    activation_source = snapshot_dir
+            if not self.model_manager._root_has_required_files(activation_source):
+                raise TranscriptionBackendError("El modelo local no pudo materializarse en una raiz valida.")
+            copy_directory_tree(activation_source, temp_active)
             final_result = self.model_manager.activate_managed_model(
                 model_name=self._component_name(component_id),
                 revision=revision,

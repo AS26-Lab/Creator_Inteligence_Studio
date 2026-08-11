@@ -583,3 +583,19 @@ The validated boundary is:
 - models remain separate;
 - runtime manifests determine `application_bundled` classification;
 - clean-machine startup does not require user Python or user `pip`.
+
+## v32-O First Productive Transcription Model
+
+The first productive transcription model source is now part of the catalog as a single explicit product source.
+
+Design constraints:
+
+- only one productive transcription model source for this phase
+- the source is a multi-file manifest, not a floating snapshot helper
+- download != install
+- no `snapshot_download()`
+- no provider fallback
+- no automatic model substitution
+- no `migration_33`
+
+The selected source is `transcription-model.small`, pinned to `Systran/faster-whisper-small` revision `536b0662742c02347bc0e980a01041f333bce120`.

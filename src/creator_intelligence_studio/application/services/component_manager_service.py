@@ -37,6 +37,10 @@ from creator_intelligence_studio.application.services.transcription_installation
     ManagedTranscriptionRuntimeInstaller,
     TranscriptionInstallResult,
 )
+from creator_intelligence_studio.application.services.transcription_model_source_service import (
+    ProductModelDownloadResult,
+    TranscriptionModelProductSourceService,
+)
 from creator_intelligence_studio.infrastructure.transcription.model_manager import TranscriptionModelManager
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -98,6 +102,12 @@ class ComponentManagerService:
         )
         self.transcription_runtime_installer = ManagedTranscriptionRuntimeInstaller(paths=paths, repository=repository, logger=self.logger)
         self.transcription_model_installer = ManagedTranscriptionModelInstaller(paths=paths, repository=repository, model_manager=self.model_manager, logger=self.logger)
+        self.transcription_model_source_service = TranscriptionModelProductSourceService(
+            paths=paths,
+            repository=repository,
+            download_service=self.download_service,
+            logger=self.logger,
+        )
         self.tool_locator = MediaToolLocator(project_root=paths.project_root)
         self.hardware_service = HardwareCapabilityService(paths=paths, repository=repository, logger=self.logger)
         self.resolver = TranscriptionCapabilityResolver(
@@ -115,6 +125,7 @@ class ComponentManagerService:
             hardware_service=self.hardware_service,
             logger=self.logger,
         )
+        self._verified_model_artifacts: dict[str, VerifiedComponentArtifact] = {}
 
     def resolve_media_tools(self, *, prefer_external: bool = False):
         return self.ffmpeg_service.resolve_media_tools(prefer_external=prefer_external)
@@ -180,6 +191,42 @@ class ComponentManagerService:
         if request is None:
             raise ValueError("La fuente productiva no esta disponible para este componente.")
         return self.download_start(request)
+
+    def start_product_model_download(self, component_id: str, *, cancellation_token=None, progress_callback=None) -> ProductModelDownloadResult:
+        result = self.transcription_model_source_service.download(
+            component_id,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
+        )
+        if result.verified_artifact is not None:
+            self._verified_model_artifacts[component_id.strip().lower()] = result.verified_artifact
+        return result
+
+    def register_verified_model_artifact(self, artifact: VerifiedComponentArtifact) -> VerifiedComponentArtifact:
+        self._verified_model_artifacts[artifact.component_id.strip().lower()] = artifact
+        return artifact
+
+    def latest_verified_model_artifact(self, component_id: str, artifact_id: str | None = None) -> VerifiedComponentArtifact | None:
+        artifact = self._verified_model_artifacts.get(component_id.strip().lower())
+        if artifact is None:
+            normalized = component_id.strip().lower()
+            records = [
+                record
+                for record in self.download_service.list_downloads()
+                if record.component_id.strip().lower() == normalized and record.status.value == "completed" and record.verified_sha256 and record.verified_size_bytes is not None
+            ]
+            if not records:
+                return None
+            latest = max(
+                records,
+                key=lambda record: record.verified_at or record.completed_at or record.updated_at or record.created_at,
+            )
+            artifact = self.download_service.verified_artifact(latest.download_id)
+            if artifact is None:
+                return None
+        if artifact_id is not None and artifact.download_id != artifact_id:
+            return None
+        return artifact
 
     def latest_verified_artifact(self, component_id: str) -> VerifiedComponentArtifact | None:
         if self.download_service is None:

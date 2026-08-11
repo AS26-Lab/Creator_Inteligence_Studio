@@ -809,6 +809,8 @@ class TranscriptionCapabilityResolver:
             else:
                 if fallback_profile is None:
                     blockers.append("El modelo no esta instalado. Usa Componentes locales para instalarlo.")
+                    if self._product_source_available(selected_model_component, hardware_profile=hardware_profile):
+                        suggested_actions.append(CapabilitySuggestedAction("download_model_product", "download_product_source", selected_model_component_id, target_profile=requested_key, blocking=True, display_label="Descargar", description="Descarga la fuente productiva aprobada del modelo seleccionado y la verifica antes de instalarla.", priority=0, available_now=True, reason="product_source_approved", requires_network_future=True, requires_user_confirmation=True))
                     suggested_actions.append(CapabilitySuggestedAction("install_model", "install_component", selected_model_component_id, target_profile=requested_key, blocking=True, display_label="Instalar modelo", description="Instala el modelo local desde una fuente local.", priority=1, available_now=True, reason="missing_component", requires_user_confirmation=True))
                 else:
                     degraded_reasons.append("requested_model_missing")

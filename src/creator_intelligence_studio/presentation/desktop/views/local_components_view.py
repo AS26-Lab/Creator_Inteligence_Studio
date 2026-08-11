@@ -369,7 +369,9 @@ class LocalComponentsView(QWidget):
         parts = []
         if entry.source_provider:
             parts.append(entry.source_provider)
-        if entry.release_tag:
+        if entry.source_identifier:
+            parts.append(entry.source_identifier)
+        elif entry.release_tag:
             parts.append(entry.release_tag)
         if entry.asset_name:
             parts.append(entry.asset_name)

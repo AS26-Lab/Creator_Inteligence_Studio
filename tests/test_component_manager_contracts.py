@@ -367,7 +367,7 @@ class ComponentCatalogContractTests(unittest.TestCase):
         self.assertIn("transcription-model.medium", component_ids)
         self.assertEqual(catalog.catalog_version, 1)
 
-    def test_ffmpeg_is_the_only_product_source_in_default_catalog(self) -> None:
+    def test_default_catalog_has_approved_product_sources_for_ffmpeg_and_first_transcription_model(self) -> None:
         catalog = build_default_component_catalog()
         ffmpeg = catalog.get_entry("ffmpeg")
         self.assertIsNotNone(ffmpeg)
@@ -388,9 +388,19 @@ class ComponentCatalogContractTests(unittest.TestCase):
 
         model = catalog.get_entry("transcription-model.small")
         self.assertIsNotNone(model)
-        self.assertIsNone(model.source_url)
-        self.assertIsNone(model.expected_sha256)
-        self.assertNotEqual(model.source_type, "approved_product_source")
+        self.assertEqual(model.source_type, "approved_product_source")
+        self.assertEqual(model.source_provider, "huggingface")
+        self.assertEqual(model.upstream_project, "Systran/faster-whisper-small")
+        self.assertEqual(model.source_identifier, "huggingface/Systran/faster-whisper-small@536b0662742c02347bc0e980a01041f333bce120")
+        self.assertEqual(model.revision, "1")
+        self.assertEqual(model.build_revision, "536b0662742c02347bc0e980a01041f333bce120")
+        self.assertEqual(model.license_variant, "mit")
+        self.assertEqual(model.license_name, "MIT")
+        self.assertEqual(model.allowed_domains, ("huggingface.co", "hf.co"))
+        self.assertIsNotNone(model.source_url)
+        self.assertIsNotNone(model.expected_sha256)
+        self.assertIsNotNone(model.expected_download_bytes)
+        self.assertGreater(model.expected_download_bytes or 0, 0)
 
     def test_default_profiles_include_balanced_as_provisional_default(self) -> None:
         profiles = build_default_transcription_profiles()

@@ -174,6 +174,9 @@ class TranscriptionModelManager:
             return False
         return bool(vocabulary_candidates & present)
 
+    def _root_has_required_files(self, root: Path) -> bool:
+        return self._snapshot_has_required_files(root)
+
     def _evaluate_root(
         self,
         root: Path,
@@ -198,6 +201,43 @@ class TranscriptionModelManager:
                 notes="La ruta del modelo no es un directorio valido.",
                 error_code="model_corrupt",
                 error_message="La ruta del modelo no es un directorio valido.",
+                size_bytes=self._directory_size(root),
+            )
+        if self._root_has_required_files(root):
+            if allow_verification:
+                try:
+                    from faster_whisper import WhisperModel
+
+                    WhisperModel(
+                        model_name,
+                        device="cpu",
+                        compute_type="int8",
+                        download_root=str(root),
+                    )
+                except Exception as exc:
+                    message = str(exc)
+                    if any(keyword in message.lower() for keyword in ("compute", "unsupported", "incompatible")):
+                        return _BundleInspection(
+                            status=TranscriptionModelStatus.INCOMPATIBLE,
+                            notes="El modelo no es compatible con el backend local.",
+                            error_code="model_incompatible",
+                            error_message=message,
+                            size_bytes=self._directory_size(root),
+                        )
+                    return _BundleInspection(
+                        status=TranscriptionModelStatus.CORRUPT,
+                        notes="El snapshot existe pero no puede cargarse.",
+                        error_code="model_corrupt",
+                        error_message=message,
+                        size_bytes=self._directory_size(root),
+                    )
+            status = TranscriptionModelStatus.LEGACY_CACHE if installation_type == "legacy_cache" else TranscriptionModelStatus.INSTALLED
+            notes = "Modelo disponible en cachÃ© local." if installation_type == "legacy_cache" else "Modelo instalado y verificado localmente."
+            return _BundleInspection(
+                status=status,
+                notes=notes,
+                error_code=None,
+                error_message=None,
                 size_bytes=self._directory_size(root),
             )
         repo_cache_dir = self._repo_cache_dir(root, model_name)

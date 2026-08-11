@@ -127,8 +127,12 @@ class LocalComponentActionService:
         return None
 
     def _task_title(self, request: ComponentActionRequest) -> str:
+        component_id = (request.component_id or "").strip().lower()
+        if request.action_type == "download_product_source" and component_id.startswith("transcription-model."):
+            return "Descargar modelo de transcripcion"
         label = {
             "download_product_source": "Descargar componente multimedia",
+            "download_product_model": "Descargar modelo de transcripcion",
             "verify_component": "Comprobar componente",
             "run_gpu_benchmark": "Probar GPU",
             "install_component": "Instalar componente",
@@ -147,7 +151,9 @@ class LocalComponentActionService:
             "component_changed": "El componente cambió y la accion se revalido.",
             "component_in_use": "El componente esta siendo utilizado por otra tarea.",
             "download_source_unavailable": "La fuente productiva no esta disponible para este componente.",
+            "model_source_unavailable": "La fuente productiva del modelo no esta disponible.",
             "cached_artifact_unavailable": "No se encontro el artefacto verificado en cache.",
+            "cached_model_artifact_unavailable": "No se encontro el artefacto verificado del modelo en cache.",
             "source_required": "Se necesita un archivo o carpeta local para continuar.",
             "operation_not_supported": "Esta accion no esta soportada para este componente.",
             "repair_source_unavailable": "Se necesita el archivo de instalacion para reparar este componente.",
@@ -290,7 +296,7 @@ class LocalComponentActionService:
 
         component_id = (request.component_id or (action.target_component if action else None) or "").strip().lower() or None
         if request.action_type == "download_product_source":
-            if component_id != "ffmpeg" or self.component_manager_service is None:
+            if self.component_manager_service is None:
                 safe_error = self._safe_error("download_source_unavailable", "La fuente productiva no esta disponible para este componente.")
                 return ComponentActionExecution(
                     action_id=request.request_id,
@@ -308,7 +314,100 @@ class LocalComponentActionService:
                     progress_percent=0.0,
                 )
             try:
-                record = self.component_manager_service.start_product_download(component_id)
+                if component_id == "ffmpeg":
+                    record = self.component_manager_service.start_product_download(component_id)
+                    return ComponentActionExecution(
+                        action_id=request.request_id,
+                        task_id=record.download_id,
+                        status="completed",
+                        component_id=component_id,
+                        operation=request.action_type,
+                        started_at=_now(),
+                        finished_at=_now(),
+                        terminal_result=record.to_dict(),
+                        safe_error=None,
+                        suggested_next_action="install_component",
+                        cancellable=False,
+                        task_status=record.status.value,
+                        progress_percent=100.0 if record.status.value == "completed" else 0.0,
+                    )
+                if component_id and component_id.startswith("transcription-model."):
+                    task_id = self._register_task(request, cancellable=True)
+                    token = self._token_for(task_id)
+                    self._update_task(task_id, stage_name="preparing", progress_percent=5.0, message="Preparando la descarga verificable del modelo.")
+
+                    def _progress(progress) -> None:
+                        payload = progress.to_dict() if hasattr(progress, "to_dict") else {}
+                        completed_files = int(payload.get("completed_files") or 0)
+                        total_files = int(payload.get("total_files") or 1)
+                        downloaded_bytes = int(payload.get("downloaded_bytes") or 0)
+                        total_bytes = int(payload.get("total_bytes") or 1)
+                        ratio = 5.0 + (90.0 * downloaded_bytes / total_bytes if total_bytes else 0.0)
+                        self._update_task(
+                            task_id,
+                            stage_name="downloading",
+                            progress_percent=min(95.0, ratio),
+                            message=f"Descargando archivo {completed_files}/{total_files}.",
+                            cancellable=True,
+                        )
+
+                    result = self.component_manager_service.start_product_model_download(
+                        component_id,
+                        cancellation_token=token,
+                        progress_callback=_progress,
+                    )
+                    if result.verified_artifact is not None:
+                        self.component_manager_service.register_verified_model_artifact(result.verified_artifact)
+                    if result.status == "completed":
+                        self._finish_task(task_id, message="La descarga del modelo quedo verificada.")
+                        return ComponentActionExecution(
+                            action_id=request.request_id,
+                            task_id=task_id,
+                            status="completed",
+                            component_id=component_id,
+                            operation=request.action_type,
+                            started_at=_now(),
+                            finished_at=_now(),
+                            terminal_result=result.to_dict(),
+                            safe_error=None,
+                            suggested_next_action="install_component",
+                            cancellable=True,
+                            task_status="completed",
+                            progress_percent=100.0,
+                        )
+                    safe_error = self._safe_error("model_source_unavailable", result.reason or "La descarga del modelo no pudo completarse.")
+                    self._finish_task(task_id, message=safe_error, status="failed")
+                    return ComponentActionExecution(
+                        action_id=request.request_id,
+                        task_id=task_id,
+                        status="failed",
+                        component_id=component_id,
+                        operation=request.action_type,
+                        started_at=_now(),
+                        finished_at=_now(),
+                        terminal_result=result.to_dict(),
+                        safe_error=safe_error,
+                        suggested_next_action=None,
+                        cancellable=True,
+                        task_status="failed",
+                        progress_percent=100.0,
+                    )
+                safe_error = self._safe_error("download_source_unavailable", "La fuente productiva no esta disponible para este componente.")
+                return ComponentActionExecution(
+                    action_id=request.request_id,
+                    task_id=request.request_id,
+                    status="failed",
+                    component_id=component_id,
+                    operation=request.action_type,
+                    started_at=_now(),
+                    finished_at=_now(),
+                    terminal_result=None,
+                    safe_error=safe_error,
+                    suggested_next_action=None,
+                    cancellable=False,
+                    task_status="failed",
+                    progress_percent=0.0,
+                )
             except Exception as exc:
                 safe_error = self._safe_error("download_source_unavailable", str(exc))
                 return ComponentActionExecution(
@@ -326,21 +425,6 @@ class LocalComponentActionService:
                     task_status="failed",
                     progress_percent=0.0,
                 )
-            return ComponentActionExecution(
-                action_id=request.request_id,
-                task_id=record.download_id,
-                status="completed",
-                component_id=component_id,
-                operation=request.action_type,
-                started_at=_now(),
-                finished_at=_now(),
-                terminal_result=record.to_dict(),
-                safe_error=None,
-                suggested_next_action="install_component",
-                cancellable=False,
-                task_status=record.status.value,
-                progress_percent=100.0 if record.status.value == "completed" else 0.0,
-            )
         current_installation = self._current_installation(component_id)
         if request.action_type in {"repair_component", "remove_component"} and current_installation is not None and not current_installation.managed:
             safe_error = self._safe_error("operation_not_supported", "Esta accion no esta soportada para este componente.")
@@ -451,6 +535,11 @@ class LocalComponentActionService:
                     artifact = self.component_manager_service.download_service.verified_artifact(request.artifact_id)
                     if artifact is None:
                         safe_error = self._safe_error("cached_artifact_unavailable", "No se encontro el artefacto verificado en cache.")
+                        raise FileNotFoundError(safe_error)
+                if request.artifact_id and component_id and component_id.startswith("transcription-model."):
+                    artifact = self.component_manager_service.latest_verified_model_artifact(component_id, request.artifact_id)
+                    if artifact is None:
+                        safe_error = self._safe_error("cached_model_artifact_unavailable", "No se encontro el artefacto verificado del modelo en cache.")
                         raise FileNotFoundError(safe_error)
                 if artifact is None and not request.local_source:
                     safe_error = self._safe_error("source_required", "Se necesita un archivo o carpeta local para continuar.")

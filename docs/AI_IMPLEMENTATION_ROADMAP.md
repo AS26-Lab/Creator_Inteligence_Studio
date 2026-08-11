@@ -188,6 +188,24 @@ It should:
 - keep models separate
 - keep FFmpeg separate
 
+## v32-O
+
+The first productive transcription model source is now the next narrow follow-up inside the local components stack.
+
+It should:
+
+- qualify exactly one transcription model source
+- pin exact upstream revision and file manifest
+- keep download and install separate
+- persist verified artifacts for offline rehydration
+
+It should not:
+
+- enable multiple model sources
+- call `snapshot_download()`
+- allow floating source identities
+- enable remote transcription
+
 It should not:
 
 - claim proof for all Windows machines from one test host

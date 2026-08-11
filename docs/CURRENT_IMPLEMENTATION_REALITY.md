@@ -440,3 +440,13 @@ Status: `implemented` and `real_call_validated` on `2026-08-10` with the retaine
 - Whisper models remain separate and still do not have a productive source
 - FFmpeg remains separate and still uses the managed product source
 - the bundle is proven on the current test machine only, not all Windows machines
+
+## v32-O First Productive Transcription Model
+
+- `transcription-model.small` is now the first approved productive transcription model source in the catalog
+- the source is pinned to `Systran/faster-whisper-small` revision `536b0662742c02347bc0e980a01041f333bce120`
+- the source is treated as a multi-file manifest with explicit per-file hashes and byte counts
+- download and install stay separate
+- the verified model artifact is persisted through the download repository so it can be rehydrated after restart
+- unit tests cover the manifest and cached-artifact rehydration path
+- a full real packaged transcription validation with this model source has not yet been exercised in this turn

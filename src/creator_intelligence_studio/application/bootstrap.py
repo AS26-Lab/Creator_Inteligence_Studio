@@ -632,7 +632,6 @@ def _load_service_context() -> ServiceContext:
         media_service=media_service,
         audio_service=audio_service,
         transcription_service=transcription_service,
-        component_manager_service=component_manager_service,
         acoustic_service=acoustic_service,
         visual_service=visual_service,
         multimodal_service=multimodal_service,

@@ -220,6 +220,12 @@ def _pick_action(
     return None
 
 
+def _component_key(component_id: str | None) -> str | None:
+    if component_id is None:
+        return None
+    return component_id.strip().lower() or None
+
+
 def _active_task_for_component(tasks, component_id: str | None):
     if not component_id:
         return None
@@ -312,6 +318,8 @@ class LocalComponentsViewModel:
         ffmpeg_install_action = _pick_action(report, component_id="ffmpeg", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
         ffmpeg_download_action = _pick_action(report, component_id="ffmpeg", action_types=("download_product_source",))
         ffmpeg_cached_download = self._latest_verified_download("ffmpeg")
+        model_download_action = _pick_action(report, component_id=capability.selected_model_component_id if capability else None, action_types=("download_product_source",), target_profile=report.requested_profile if report else None)
+        model_cached_download = self._latest_verified_model_artifact(capability.selected_model_component_id if capability else None)
         runtime_action = _pick_action(report, component_id="transcription-runtime.faster-whisper", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
         if runtime_action is None:
             runtime_action = _pick_action(report, component_id="transcription-runtime.ctranslate2", action_types=("repair_component", "install_component", "verify_component", "remove_component"))
@@ -368,12 +376,22 @@ class LocalComponentsViewModel:
             ffmpeg_details.append("Fuente productiva aprobada disponible para descarga.")
         runtime_details = (str(getattr(runtime_task, "message", "") or "La operacion sigue en curso."),) if runtime_task is not None else ()
         model_details = (str(getattr(model_task, "message", "") or "La operacion sigue en curso."),) if model_task is not None else ()
+        if model_cached_download is not None:
+            model_details = (*model_details, f"Artefacto verificado: {model_cached_download.download_id}")
+        elif model_download_action is not None:
+            model_details = (*model_details, "Fuente productiva aprobada disponible para descarga.")
         if ffmpeg_cached_download is not None and ffmpeg_install_action is not None:
             ffmpeg_primary_action = ffmpeg_install_action
         elif ffmpeg_download_action is not None:
             ffmpeg_primary_action = ffmpeg_download_action
         else:
             ffmpeg_primary_action = ffmpeg_install_action
+        if model_cached_download is not None and model_action is not None:
+            model_primary_action = model_action
+        elif model_download_action is not None:
+            model_primary_action = model_download_action
+        else:
+            model_primary_action = model_action
         return (
             _component_card_from_installation(
                 key="ffmpeg",
@@ -398,8 +416,8 @@ class LocalComponentsViewModel:
                 title="Modelo de transcripcion",
                 description="Convierte la voz del video en texto.",
                 installation=model,
-                primary_action_label="Ver Task Center" if model_task is not None else _action_display_label(model_action),
-                primary_action_id="open_task_center" if model_task is not None else getattr(model_action, "action_id", None),
+                primary_action_label="Ver Task Center" if model_task is not None else _action_display_label(model_primary_action),
+                primary_action_id="open_task_center" if model_task is not None else getattr(model_primary_action, "action_id", None),
                 details=model_details,
             ),
             gpu_card,
@@ -468,8 +486,20 @@ class LocalComponentsViewModel:
             return None
         return max(records, key=lambda record: _latest_timestamp(getattr(record, "verified_at", None), getattr(record, "completed_at", None), getattr(record, "updated_at", None), getattr(record, "created_at", None)))
 
+    def _latest_verified_model_artifact(self, component_id: str | None):
+        component_manager_service = getattr(self.workspace, "component_manager_service", None)
+        normalized = _component_key(component_id)
+        if component_manager_service is None or normalized is None:
+            return None
+        return component_manager_service.latest_verified_model_artifact(normalized)
+
     def has_cached_verified_artifact(self, component_id: str) -> bool:
-        return self._latest_verified_download(component_id) is not None
+        normalized = _component_key(component_id)
+        if normalized is None:
+            return False
+        if normalized.startswith("transcription-model."):
+            return self._latest_verified_model_artifact(normalized) is not None
+        return self._latest_verified_download(normalized) is not None
 
     def build_action_request(
         self,
@@ -495,6 +525,11 @@ class LocalComponentsViewModel:
             if cached_download is not None:
                 artifact_id = cached_download.download_id
                 source_context = source_context or "verified_download"
+        if action.action_type == "install_component" and (action.target_component or "").strip().lower().startswith("transcription-model.") and local_source is None:
+            cached_model = self._latest_verified_model_artifact(action.target_component)
+            if cached_model is not None:
+                artifact_id = cached_model.download_id
+                source_context = source_context or "verified_model_download"
         return ComponentActionRequest(
             action_type=action.action_type,
             component_id=action.target_component,

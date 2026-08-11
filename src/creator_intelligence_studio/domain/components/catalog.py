@@ -15,6 +15,9 @@ from creator_intelligence_studio.domain.transcription.profiles import (
     TranscriptionProfileDefinition,
     TranscriptionProfileStatus,
 )
+from creator_intelligence_studio.domain.transcription.model_sources import (
+    get_transcription_model_source_manifest,
+)
 
 DEFAULT_COMPONENT_CATALOG_VERSION = 1
 FFMPEG_PRODUCT_RELEASE_TAG = "autobuild-2026-07-31-14-10"
@@ -26,6 +29,7 @@ FFMPEG_PRODUCT_SOURCE_URL = (
 FFMPEG_PRODUCT_EXPECTED_SHA256 = "089e4169e93b2b3f3acbfced3c0704d24276a225641bdda04d796d28b07a2a38"
 FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES = 145349121
 FFMPEG_PRODUCT_SOURCE_REFERENCE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-07-31-14-10"
+SMALL_MODEL_SOURCE_MANIFEST = get_transcription_model_source_manifest("transcription-model.small")
 
 
 def _reviewed_now() -> datetime:
@@ -151,11 +155,11 @@ def build_default_component_catalog(*, reviewed_at: datetime | None = None) -> C
             category=ComponentCategory.TRANSCRIPTION_MODEL,
             version="base",
             revision="1",
-            platform="huggingface",
-            architecture="any",
+            platform="windows",
+            architecture="x86_64",
             source_type="huggingface_snapshot",
             source_identifier="Systran/faster-whisper-base",
-            allowed_domains=("huggingface.co",),
+            allowed_domains=("huggingface.co", "hf.co"),
             capabilities_enabled=("local_transcription",),
             install_strategy="model_directory_activate",
             health_check="local_model_presence",
@@ -172,11 +176,25 @@ def build_default_component_catalog(*, reviewed_at: datetime | None = None) -> C
             category=ComponentCategory.TRANSCRIPTION_MODEL,
             version="small",
             revision="1",
-            platform="huggingface",
-            architecture="any",
-            source_type="huggingface_snapshot",
-            source_identifier="Systran/faster-whisper-small",
-            allowed_domains=("huggingface.co",),
+            platform="windows",
+            architecture="x86_64",
+            source_type="approved_product_source",
+            source_identifier=f"{SMALL_MODEL_SOURCE_MANIFEST.source_provider}/{SMALL_MODEL_SOURCE_MANIFEST.repository}@{SMALL_MODEL_SOURCE_MANIFEST.revision}" if SMALL_MODEL_SOURCE_MANIFEST else "huggingface/Systran/faster-whisper-small",
+            source_provider=SMALL_MODEL_SOURCE_MANIFEST.source_provider if SMALL_MODEL_SOURCE_MANIFEST else "huggingface",
+            upstream_project=SMALL_MODEL_SOURCE_MANIFEST.repository if SMALL_MODEL_SOURCE_MANIFEST else "Systran/faster-whisper-small",
+            source_url=SMALL_MODEL_SOURCE_MANIFEST.source_page if SMALL_MODEL_SOURCE_MANIFEST else "https://huggingface.co/Systran/faster-whisper-small/tree/main",
+            expected_sha256=SMALL_MODEL_SOURCE_MANIFEST.expected_sha256 if SMALL_MODEL_SOURCE_MANIFEST else None,
+            upstream_version="small",
+            build_revision=SMALL_MODEL_SOURCE_MANIFEST.revision if SMALL_MODEL_SOURCE_MANIFEST else None,
+            license_variant=SMALL_MODEL_SOURCE_MANIFEST.license if SMALL_MODEL_SOURCE_MANIFEST else "mit",
+            source_page_reference=SMALL_MODEL_SOURCE_MANIFEST.source_page if SMALL_MODEL_SOURCE_MANIFEST else "https://huggingface.co/Systran/faster-whisper-small/tree/main",
+            verified_at=reviewed_at,
+            allowed_domains=("huggingface.co", "hf.co"),
+            expected_download_bytes=SMALL_MODEL_SOURCE_MANIFEST.total_expected_bytes if SMALL_MODEL_SOURCE_MANIFEST else None,
+            expected_installed_bytes=SMALL_MODEL_SOURCE_MANIFEST.total_expected_bytes if SMALL_MODEL_SOURCE_MANIFEST else None,
+            temporary_space_bytes=SMALL_MODEL_SOURCE_MANIFEST.total_expected_bytes if SMALL_MODEL_SOURCE_MANIFEST else None,
+            license_name="MIT",
+            license_url=SMALL_MODEL_SOURCE_MANIFEST.source_page if SMALL_MODEL_SOURCE_MANIFEST else "https://huggingface.co/Systran/faster-whisper-small/tree/main",
             capabilities_enabled=("local_transcription",),
             install_strategy="model_directory_activate",
             health_check="local_model_presence",

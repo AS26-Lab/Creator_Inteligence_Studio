@@ -164,3 +164,18 @@ That means:
 - model sources remain separate and still missing by default;
 - FFmpeg remains separate and still uses the managed product-source flow;
 - GPU acceleration remains optional.
+
+## v32-O First Productive Transcription Model
+
+The first productive transcription model source is now qualified in the catalog as `transcription-model.small`.
+
+Documented properties:
+
+- upstream repository: `Systran/faster-whisper-small`
+- pinned revision: `536b0662742c02347bc0e980a01041f333bce120`
+- license: `MIT`
+- required files: `config.json`, `tokenizer.json`, `vocabulary.txt`, `model.bin`
+
+The source is treated as a multi-file manifest, downloaded through the Download Manager, verified file-by-file, and installed explicitly from a verified artifact.
+
+The catalog now exposes a single productive transcription model source. Other transcription models remain non-productive catalog entries.

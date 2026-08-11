@@ -500,3 +500,33 @@ That closes the packaging foundation path for this workspace, while keeping the 
 - no FFmpeg bundling;
 - no second packaging stack;
 - no user runtime `pip`.
+
+## v32-O - First Productive Transcription Model
+
+Objective:
+
+- enable the first productive transcription model source
+- keep the source explicit, pinned, and multi-file
+- preserve download != install
+- keep legacy cache read-only
+- keep all other model product sources disabled
+
+Files:
+
+- component catalog metadata
+- transcription model source manifest
+- model download orchestration
+- model installer integration
+- licensing and qualification docs
+
+Tests:
+
+- exact model revision and file manifest
+- no floating main or snapshot fallback
+- verified artifact persistence
+- download/install separation
+- offline rehydration of the cached verified artifact
+
+Gate:
+
+- one productive transcription model source only, with explicit upstream identity and hash-qualified files
