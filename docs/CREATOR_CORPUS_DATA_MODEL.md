@@ -59,8 +59,15 @@ Important fields:
 - `document_id`
 - `creator_id`
 - `version_number`
-- `content`
-- `content_hash`
+- `content` raw content
+- `normalized_content`
+- `content_hash` normalized hash
+- `raw_content_hash`
+- `normalization_version`
+- `authorship_class`
+- `retrieval_eligible`
+- `voice_learning_eligible`
+- `quality_flags`
 - `source_kind`
 - `source_asset_id`
 - `parent_version_id`
@@ -80,7 +87,12 @@ Important fields:
 - `sequence`
 - `start_seconds`
 - `end_seconds`
-- `text`
+- `text` normalized segment text
+- `raw_text`
+- `normalization_version`
+- `retrieval_eligible`
+- `voice_learning_eligible`
+- `quality_flags`
 - `confidence`
 - `review_state`
 - source reference metadata
@@ -103,10 +115,32 @@ Important fields:
 
 - source asset dedupe is creator-scoped;
 - document identity is creator-scoped;
+- document identity uses the normalized content hash so repeated ingestion is idempotent;
 - version history is immutable;
 - provenance edges are additive;
 - segments belong to one version only;
 - archive and missing-state changes do not cascade-delete derived text.
+
+## Ingestion And Normalization
+
+The current ingestion layer keeps both the raw and normalized representations.
+
+- raw content is preserved exactly as received;
+- normalized content is derived deterministically and versioned with `text-normalizer-v1`;
+- duplicate detection uses the normalized representation;
+- source assets continue to use source-specific hashes for identity;
+- transcript segment text is normalized independently from source audio/video metadata.
+
+## Authorship And Eligibility
+
+The corpus now stores explicit forward-looking metadata:
+
+- `authorship_class`
+- `retrieval_eligible`
+- `voice_learning_eligible`
+- `quality_flags`
+
+These are not retrieval or learning systems. They are durable signals for future phases.
 
 ## Provenance Relation Types
 
@@ -120,5 +154,5 @@ Current controlled relation types:
 
 ## Current Status
 
-This model is implemented as a local SQLite-backed foundation for v33-A.
+This model is implemented as a local SQLite-backed foundation for v33-A and v33-B.
 It is not a retrieval model and it is not a learning model.

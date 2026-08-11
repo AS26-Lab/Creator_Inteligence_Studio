@@ -42,6 +42,14 @@ v33-A opens the Creator Corpus foundation as a local-only storage and ingestion 
 - transcription-derived documents can be ingested into the corpus without introducing retrieval or embeddings
 - semantic retrieval, feedback learning, and creator voice work remain paused for later phases
 
+v33-B turns the corpus foundation into a deterministic ingestion and normalization pipeline.
+
+- raw and normalized content are stored separately
+- authorship class and eligibility signals are explicit
+- repeated ingestion is idempotent
+- creator isolation is enforced on corpus mutation
+- retrieval remains paused; v33-B does not implement embeddings or ranking
+
 ## Stage Gates
 
 Every stage must define:

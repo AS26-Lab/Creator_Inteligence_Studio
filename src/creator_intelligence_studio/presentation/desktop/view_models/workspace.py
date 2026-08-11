@@ -851,6 +851,8 @@ class WorkspaceViewModel:
         )
         self.selected_video_id = video_id
         self.activity_log.insert(0, f"Transcripcion: {report.status.value}")
+        if getattr(report, "corpus_ingestion_message", None):
+            self.activity_log.insert(0, f"Corpus: {report.corpus_ingestion_message}")
         return report
 
     def component_manager_status(self, *, profile: str = "balanced", preferred_device: str = "auto") -> ComponentManagerStatus | None:

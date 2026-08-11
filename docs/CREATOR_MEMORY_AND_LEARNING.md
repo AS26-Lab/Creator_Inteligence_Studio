@@ -16,23 +16,17 @@ Persist:
 - document versions;
 - provenance edges;
 - transcript segments;
-- transcripts;
+- raw content;
+- normalized content;
 - timestamps;
 - metadata;
 - hashes;
-- narrative structure;
-- segments;
-- results;
-- metrics;
 - titles;
-- copy;
 - captions;
-- feedback;
-- versions;
-- corrections;
-- embeddings;
-- compressed thumbnails;
-- essential frames;
+- notes;
+- script text;
+- imported plain text;
+- corpus-quality flags;
 - references to original files while they remain available.
 
 Temporary artifacts:
@@ -64,6 +58,17 @@ Never confuse:
 - external content.
 
 Everything is isolated by `creator_id`.
+
+## Corpus Ingestion Reality
+
+The current corpus implementation now distinguishes:
+
+- raw content vs normalized content;
+- creator-authored vs transcribed vs AI-generated content;
+- retrieval eligibility vs voice-learning eligibility;
+- source-asset identity vs document-version identity.
+
+The ingestion layer is still local-only and does not send corpus text to OpenAI, Anthropic, Supabase, Hugging Face, or any other remote service.
 
 ## Memory Dimensions
 
@@ -133,6 +138,12 @@ Approved decisions:
 - hybrid retrieval with filters, text search, semantic search, and diversity;
 - strict separation by `creator_id`;
 - no mixing vectors from different models.
+
+Important current reality:
+
+- embeddings are still not implemented in the running corpus layer;
+- retrieval remains a future phase;
+- the corpus now only stores eligibility metadata for that future work.
 
 Benchmark candidates:
 

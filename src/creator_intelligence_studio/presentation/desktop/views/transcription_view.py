@@ -238,7 +238,10 @@ class TranscriptionView(QWidget):
         self.cancel_button.setEnabled(running)
 
     def _set_report(self, report) -> None:
-        self.status_label.setText(f"Estado: {report.status.value}")
+        status_text = f"Estado: {report.status.value}"
+        if getattr(report, "corpus_ingestion_message", None):
+            status_text = f"{status_text} · {report.corpus_ingestion_message}"
+        self.status_label.setText(status_text)
         self.phase_label.setText(report.progress_message or ("Stale" if report.is_stale else "Listo"))
         self.full_text.setPlainText(report.transcription.full_text if report.transcription else "")
         self.segment_table.setRowCount(0)

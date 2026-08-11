@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from creator_intelligence_studio.domain.audio.entities import PreparedAudioAsset, PreparedAudioStatus
 from creator_intelligence_studio.domain.errors import ConflictError, NotFoundError
+from creator_intelligence_studio.application.services.creator_corpus_service import CreatorCorpusService
 from creator_intelligence_studio.domain.transcription.entities import (
     Transcription,
     TranscriptionSegment,
@@ -85,6 +86,7 @@ class TranscriptionReport:
     warnings: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
     progress_message: str | None = None
+    corpus_ingestion_message: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -99,6 +101,7 @@ class TranscriptionReport:
             "warnings": list(self.warnings),
             "errors": list(self.errors),
             "progress_message": self.progress_message,
+            "corpus_ingestion_message": self.corpus_ingestion_message,
         }
 
 
@@ -135,6 +138,7 @@ class TranscriptionService:
         transcription_repository: TranscriptionRepository,
         model_manager: TranscriptionModelManager,
         capability_resolver: TranscriptionCapabilityResolver | None = None,
+        creator_corpus_service: CreatorCorpusService | None = None,
         engine: FasterWhisperEngine | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -145,6 +149,7 @@ class TranscriptionService:
         self.transcription_repository = transcription_repository
         self.model_manager = model_manager
         self.capability_resolver = capability_resolver
+        self.creator_corpus_service = creator_corpus_service
         self.engine = engine or FasterWhisperEngine(model_manager=model_manager, logger=logger)
         self.logger = logger or logging.getLogger("creator_intelligence_studio.transcription")
         self._active_jobs: dict[str, threading.Event] = {}
@@ -272,6 +277,7 @@ class TranscriptionService:
         warnings: tuple[str, ...] = (),
         errors: tuple[str, ...] = (),
         progress_message: str | None = None,
+        corpus_ingestion_message: str | None = None,
     ) -> TranscriptionReport:
         if segments is not None:
             segment_values = tuple(segments)
@@ -292,6 +298,7 @@ class TranscriptionService:
             warnings=warnings,
             errors=errors,
             progress_message=progress_message,
+            corpus_ingestion_message=corpus_ingestion_message,
         )
 
     def verify_transcription_backend(self) -> TranscriptionVerificationResult:
@@ -633,6 +640,13 @@ class TranscriptionService:
             persisted = self.transcription_repository.upsert(transcription, segments)
             if progress_callback is not None:
                 progress_callback("Guardando resultado", 0.95)
+            corpus_ingestion_message = None
+            if self.creator_corpus_service is not None:
+                try:
+                    corpus_result = self.creator_corpus_service.ingest_transcription(video.id)
+                    corpus_ingestion_message = corpus_result.corpus_message
+                except Exception as exc:  # pragma: no cover - defensive boundary
+                    corpus_ingestion_message = f"No se pudo guardar en el corpus: {exc}"
             return self._report(
                 video=video,
                 prepared_audio=prepared_audio,
@@ -645,6 +659,7 @@ class TranscriptionService:
                 warnings=result.warnings,
                 errors=result.errors,
                 progress_message="Completado",
+                corpus_ingestion_message=corpus_ingestion_message,
             )
         except TranscriptionBackendError as exc:
             status = TranscriptionStatus.CANCELLED if cancellation_event.is_set() else TranscriptionStatus.BACKEND_UNAVAILABLE
@@ -763,6 +778,7 @@ def build_transcription_service(
     prepared_audio_repository: SQLitePreparedAudioRepository,
     transcription_repository: TranscriptionRepository,
     capability_resolver: TranscriptionCapabilityResolver | None = None,
+    creator_corpus_service: CreatorCorpusService | None = None,
     logger: logging.Logger | None = None,
 ) -> TranscriptionService:
     """Construye el servicio formal de transcripcion."""
@@ -777,6 +793,7 @@ def build_transcription_service(
         transcription_repository=transcription_repository,
         model_manager=model_manager,
         capability_resolver=capability_resolver,
+        creator_corpus_service=creator_corpus_service,
         engine=engine,
         logger=logger,
     )

@@ -480,6 +480,7 @@ def _load_service_context() -> ServiceContext:
         transcription_repository=transcription_repository,
         logger=context.logger,
     )
+    transcription_service.creator_corpus_service = creator_corpus_service
     creator_language_service = build_creator_language_service(
         settings=context.settings,
         paths=context.paths,

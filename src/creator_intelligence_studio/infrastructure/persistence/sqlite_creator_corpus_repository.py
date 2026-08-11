@@ -13,14 +13,17 @@ from creator_intelligence_studio.domain.creator_corpus.entities import (
     CorpusSegment,
     CorpusSourceAsset,
 )
+from creator_intelligence_studio.domain.creator_corpus.ingestion import CorpusEligibility
 from creator_intelligence_studio.domain.creator_corpus.repositories import CreatorCorpusRepository
 from creator_intelligence_studio.domain.creator_corpus.value_objects import (
+    CorpusAuthorshipClass,
     CorpusDocumentStatus,
     CorpusDocumentType,
     CorpusProvenanceRelationType,
     CorpusSourceAssetStatus,
     CorpusSourceType,
     CorpusVersionSourceKind,
+    TEXT_NORMALIZATION_VERSION,
 )
 from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
 from creator_intelligence_studio.shared.dates import from_iso_z, utc_now
@@ -38,6 +41,11 @@ def _json_loads(value: str | None, fallback):
         return parsed if parsed is not None else fallback
     except json.JSONDecodeError:
         return fallback
+
+
+def _metadata_dict(value: str | None) -> dict[str, object]:
+    loaded = _json_loads(value, {})
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _row_to_source_asset(row: sqlite3.Row) -> CorpusSourceAsset:
@@ -77,6 +85,7 @@ def _row_to_document(row: sqlite3.Row) -> CorpusDocument:
 
 
 def _row_to_version(row: sqlite3.Row) -> CorpusDocumentVersion:
+    metadata = _metadata_dict(row["metadata_json"])
     return CorpusDocumentVersion(
         id=row["id"],
         document_id=row["document_id"],
@@ -84,6 +93,14 @@ def _row_to_version(row: sqlite3.Row) -> CorpusDocumentVersion:
         version_number=int(row["version_number"]),
         content=row["content"],
         content_hash=row["content_hash"],
+        raw_content=str(metadata.get("raw_content", row["content"] or "")),
+        normalized_content=str(metadata.get("normalized_content", row["content"] or "")),
+        raw_content_hash=str(metadata.get("raw_content_hash", "")),
+        normalization_version=str(metadata.get("normalization_version", TEXT_NORMALIZATION_VERSION)),
+        authorship_class=CorpusAuthorshipClass(str(metadata.get("authorship_class", CorpusAuthorshipClass.IMPORTED_UNKNOWN.value))),
+        retrieval_eligible=bool(metadata.get("retrieval_eligible", True)),
+        voice_learning_eligible=bool(metadata.get("voice_learning_eligible", False)),
+        quality_flags=tuple(metadata.get("quality_flags", ())),
         source_kind=CorpusVersionSourceKind(row["source_kind"]),
         source_asset_id=row["source_asset_id"],
         parent_version_id=row["parent_version_id"],
@@ -95,6 +112,7 @@ def _row_to_version(row: sqlite3.Row) -> CorpusDocumentVersion:
 
 
 def _row_to_segment(row: sqlite3.Row) -> CorpusSegment:
+    metadata = _metadata_dict(row["metadata_json"])
     return CorpusSegment(
         id=row["id"],
         document_version_id=row["document_version_id"],
@@ -103,8 +121,13 @@ def _row_to_segment(row: sqlite3.Row) -> CorpusSegment:
         start_seconds=row["start_seconds"],
         end_seconds=row["end_seconds"],
         text=row["text"],
+        raw_text=str(metadata.get("raw_text", row["text"] or "")),
         confidence=row["confidence"],
         review_state=row["review_state"],
+        normalization_version=str(metadata.get("normalization_version", TEXT_NORMALIZATION_VERSION)),
+        retrieval_eligible=bool(metadata.get("retrieval_eligible", True)),
+        voice_learning_eligible=bool(metadata.get("voice_learning_eligible", True)),
+        quality_flags=tuple(metadata.get("quality_flags", ())),
         source_reference_type=row["source_reference_type"],
         source_reference_id=row["source_reference_id"],
         metadata_json=row["metadata_json"],

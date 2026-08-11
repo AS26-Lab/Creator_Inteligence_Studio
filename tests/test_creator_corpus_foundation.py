@@ -302,6 +302,7 @@ class CreatorCorpusFoundationTests(unittest.TestCase):
             )
             result_v2 = corpus.append_document_version(
                 document_id=result_v1.document.id,
+                creator_id=creator.id,
                 content="hola mundo corregido",
                 source_kind=CorpusVersionSourceKind.USER_EDIT,
                 language="es",

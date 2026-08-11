@@ -462,3 +462,16 @@ Status: `implemented` and `real_call_validated` on `2026-08-10` with the retaine
 - the verified model artifact is persisted through the download repository so it can be rehydrated after restart
 - unit tests cover the manifest and cached-artifact rehydration path
 - a full real packaged transcription validation with this model source has not yet been exercised in this turn
+
+## v33-B Creator Corpus Ingestion And Normalization
+
+- the creator corpus now preserves raw content and normalized content separately
+- normalization is deterministic and versioned as `text-normalizer-v1`
+- ingestion now records explicit authorship classes and eligibility flags
+- transcript ingestion is bridged automatically from successful local transcription
+- repeated ingestion of the same normalized content is idempotent
+- creator isolation is enforced on source reuse and version append operations
+- minimal UX now reflects that transcription results are saved to the corpus
+- retrieval and embeddings remain paused
+
+Status: `implemented`

@@ -9,6 +9,7 @@ from typing import Any
 from creator_intelligence_studio.shared.dates import to_iso_z
 
 from .value_objects import (
+    CorpusAuthorshipClass,
     CorpusDocumentStatus,
     CorpusDocumentType,
     CorpusProvenanceRelationType,
@@ -94,6 +95,14 @@ class CorpusDocumentVersion:
     version_number: int
     content: str
     content_hash: str
+    raw_content: str
+    normalized_content: str
+    raw_content_hash: str
+    normalization_version: str
+    authorship_class: CorpusAuthorshipClass
+    retrieval_eligible: bool
+    voice_learning_eligible: bool
+    quality_flags: tuple[str, ...]
     source_kind: CorpusVersionSourceKind
     source_asset_id: str | None
     parent_version_id: str | None
@@ -110,6 +119,14 @@ class CorpusDocumentVersion:
             "version_number": self.version_number,
             "content": self.content,
             "content_hash": self.content_hash,
+            "raw_content": self.raw_content,
+            "normalized_content": self.normalized_content,
+            "raw_content_hash": self.raw_content_hash,
+            "normalization_version": self.normalization_version,
+            "authorship_class": self.authorship_class.value,
+            "retrieval_eligible": self.retrieval_eligible,
+            "voice_learning_eligible": self.voice_learning_eligible,
+            "quality_flags": list(self.quality_flags),
             "source_kind": self.source_kind.value,
             "source_asset_id": self.source_asset_id,
             "parent_version_id": self.parent_version_id,
@@ -129,8 +146,13 @@ class CorpusSegment:
     start_seconds: float | None
     end_seconds: float | None
     text: str
+    raw_text: str
     confidence: float | None
     review_state: str | None
+    normalization_version: str
+    retrieval_eligible: bool
+    voice_learning_eligible: bool
+    quality_flags: tuple[str, ...]
     source_reference_type: str | None
     source_reference_id: str | None
     metadata_json: str
@@ -145,8 +167,13 @@ class CorpusSegment:
             "start_seconds": self.start_seconds,
             "end_seconds": self.end_seconds,
             "text": self.text,
+            "raw_text": self.raw_text,
             "confidence": self.confidence,
             "review_state": self.review_state,
+            "normalization_version": self.normalization_version,
+            "retrieval_eligible": self.retrieval_eligible,
+            "voice_learning_eligible": self.voice_learning_eligible,
+            "quality_flags": list(self.quality_flags),
             "source_reference_type": self.source_reference_type,
             "source_reference_id": self.source_reference_id,
             "metadata_json": self.metadata_json,
