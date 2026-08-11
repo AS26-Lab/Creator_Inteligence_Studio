@@ -94,6 +94,7 @@ class CorpusRetrievalResultItem:
     created_at: datetime
     updated_at: datetime
     version_created_at: datetime
+    source_segment_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +103,7 @@ class CorpusRetrievalResultItem:
             "document_id": self.document_id,
             "version_id": self.version_id,
             "segment_id": self.segment_id,
+            "source_segment_ids": list(self.source_segment_ids),
             "row_kind": self.row_kind,
             "document_type": self.document_type.value,
             "title": self.title,

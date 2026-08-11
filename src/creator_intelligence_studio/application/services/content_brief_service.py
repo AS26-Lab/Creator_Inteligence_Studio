@@ -42,6 +42,11 @@ from creator_intelligence_studio.domain.content_briefs import (
     SectionType,
     build_brief_fingerprint,
 )
+from creator_intelligence_studio.application.services.creator_context_assembly_service import (
+    CreatorContextAssemblyService,
+    CreatorContextRequest,
+    CreatorContextTaskType,
+)
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.shared.dates import to_iso_z, utc_now
 from creator_intelligence_studio.shared.paths import ProjectPaths
@@ -162,6 +167,7 @@ class ContentBriefService:
         content_library_service: Any | None = None,
         creator_memory_service: Any | None = None,
         creator_language_service: Any | None = None,
+        creator_context_assembly_service: CreatorContextAssemblyService | None = None,
         audience_service: Any | None = None,
         analytics_service: Any | None = None,
         analytics_lab_service: Any | None = None,
@@ -180,6 +186,7 @@ class ContentBriefService:
         self.content_library_service = content_library_service
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
+        self.creator_context_assembly_service = creator_context_assembly_service
         self.audience_service = audience_service
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
@@ -550,6 +557,35 @@ class ContentBriefService:
         platform_snapshot_id = self._snapshot_identifier(self.platform_service, ("list_reports", "list_integrations", "list_connections"), creator_id)
         packaging_snapshot_id = self._snapshot_identifier(self.packaging_service, ("list_concepts", "list_versions", "list_reports"), creator_id)
         recommendation_payload = self._load_reference_payload(creator_id)
+        creator_context_bundle = None
+        creator_context_package: dict[str, object] = {}
+        creator_context_prompt: str | None = None
+        if self.creator_context_assembly_service is not None:
+            brief_request_text = " | ".join(
+                part
+                for part in (
+                    roadmap_item_id,
+                    strategic_plan_id,
+                    recommendation_candidate_id,
+                    experiment_id,
+                    internal_content_id,
+                    str((recommendation_payload.get("approved") or [{}])[0].get("title") if recommendation_payload.get("approved") else ""),
+                    str((recommendation_payload.get("items") or [{}])[0].get("summary") if recommendation_payload.get("items") else ""),
+                )
+                if part
+            ) or "Content brief context"
+            creator_context_request = CreatorContextRequest(
+                creator_id=creator_id,
+                user_request=brief_request_text,
+                task_type=CreatorContextTaskType.CONTENT_IDEATION,
+                max_context_items=6,
+                context_budget=900,
+                include_provenance=True,
+                include_historical_versions=False,
+            )
+            creator_context_bundle = self.creator_context_assembly_service.assemble(creator_context_request)
+            creator_context_package = self.creator_context_assembly_service.build_context_package(creator_context_bundle)
+            creator_context_prompt = self.creator_context_assembly_service.render_prompt(creator_context_bundle)
         payload = {
             "creator_id": creator_id,
             "context_version": self.ENGINE_VERSION,
@@ -565,6 +601,9 @@ class ContentBriefService:
             "missing_data": missing_data or [],
             "contradictions": contradictions or [],
             "recommendations": recommendation_payload,
+            "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
+            "creator_context_package": creator_context_package,
+            "creator_context_prompt": creator_context_prompt,
             "snapshot_ids": {
                 "creator_memory_snapshot_id": creator_memory_snapshot_id,
                 "creator_language_snapshot_id": creator_language_snapshot_id,
@@ -1440,6 +1479,7 @@ def build_content_brief_service(
     content_library_service: Any | None = None,
     creator_memory_service: Any | None = None,
     creator_language_service: Any | None = None,
+    creator_context_assembly_service: CreatorContextAssemblyService | None = None,
     audience_service: Any | None = None,
     analytics_service: Any | None = None,
     analytics_lab_service: Any | None = None,
@@ -1459,6 +1499,7 @@ def build_content_brief_service(
         content_library_service=content_library_service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creator_context_assembly_service=creator_context_assembly_service,
         audience_service=audience_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,

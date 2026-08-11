@@ -78,6 +78,7 @@ from creator_intelligence_studio.application.services.creator_corpus_service imp
 from creator_intelligence_studio.application.services.creator_corpus_retrieval_service import (
     CreatorCorpusRetrievalService,
 )
+from creator_intelligence_studio.application.services.creator_context_assembly_service import build_creator_context_assembly_service
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
     build_creator_language_service,
@@ -490,6 +491,10 @@ def _load_service_context() -> ServiceContext:
         repository=creator_corpus_repository,
         logger=context.logger,
     )
+    creator_context_assembly_service = build_creator_context_assembly_service(
+        retrieval_service=creator_corpus_retrieval_service,
+        logger=context.logger,
+    )
     creator_language_service = build_creator_language_service(
         settings=context.settings,
         paths=context.paths,
@@ -615,6 +620,7 @@ def _load_service_context() -> ServiceContext:
         content_library_service=service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creator_context_assembly_service=creator_context_assembly_service,
         audience_service=audience_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,

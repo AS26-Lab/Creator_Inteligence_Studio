@@ -58,6 +58,13 @@ v33-C adds explicit local retrieval without semantic embeddings.
 - the retrieval index is derived data and can be rebuilt from canonical corpus tables
 - embeddings, vector search, and LLM retrieval remain paused
 
+v33-D adds creator context assembly and prompt grounding.
+
+- retrieval results are converted into structured context bundles
+- corpus text remains untrusted data during prompt rendering
+- context budgets, provenance, authorship, and categories are explicit
+- the first safe integration point is the content brief snapshot workflow
+
 ## Stage Gates
 
 Every stage must define:

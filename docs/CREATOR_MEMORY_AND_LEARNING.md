@@ -115,7 +115,7 @@ Rejected material works as a negative signal, not as a positive example.
 
 ## Creator Context Builder
 
-The Creator Context Builder is a central future component.
+The Creator Context Builder is now implemented as the Creator Context Assembly boundary.
 
 Responsibilities:
 
@@ -135,6 +135,13 @@ Responsibilities:
 - preserve critical constraints;
 - record exactly what context was sent;
 - support reproducibility.
+
+Current implementation reality:
+
+- structured retrieval results are assembled into bounded context bundles
+- corpus text is treated as untrusted data
+- the content brief snapshot workflow consumes the bundle for a safe first integration
+- semantic retrieval, embeddings, and learning remain future phases
 
 ## Embeddings And Search
 

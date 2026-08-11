@@ -187,4 +187,5 @@ class CreatorCorpusRetrievalService:
             created_at=created_at or version_created_at or from_iso_z(str(row.get("document_updated_at"))) or from_iso_z("1970-01-01T00:00:00Z"),
             updated_at=updated_at or created_at or version_created_at or from_iso_z("1970-01-01T00:00:00Z"),
             version_created_at=version_created_at or created_at or from_iso_z("1970-01-01T00:00:00Z"),
+            source_segment_ids=(str(row.get("segment_id")),) if row.get("segment_id") is not None else (),
         )

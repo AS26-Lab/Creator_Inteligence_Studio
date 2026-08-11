@@ -213,6 +213,16 @@ Status: `not_started`
 
 Status: `implemented`
 
+## Creator Corpus v33-D Context Assembly
+
+- deterministic creator context assembly is implemented on top of local corpus retrieval
+- retrieval results are converted into bounded prompt context with explicit categories and provenance
+- AI-generated corpus material remains labeled as AI-generated context
+- corpus content is treated as untrusted data when rendered into prompt text
+- the first integrated workflow is the content brief snapshot path
+
+Status: `implemented`
+
 ## Component Manager v32-D Resumable Download Manager Foundation
 
 - resumable download manager exists as a filesystem-backed foundation

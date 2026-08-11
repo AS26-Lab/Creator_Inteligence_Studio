@@ -65,6 +65,20 @@ The retrieval index exposes health metrics:
 - missing rows
 - stale rows
 
+## Context Assembly
+
+Retrieval results feed the separate Creator Context Assembly layer.
+
+That layer is responsible for:
+
+- deterministic item deduplication
+- segment grouping
+- budget enforcement
+- authorship/category labeling
+- prompt grounding with corpus text treated as data
+
+Retrieval itself stays local, deterministic, and creator-scoped. Context assembly does not add embeddings or semantic search.
+
 The index can be rebuilt deterministically from canonical corpus tables.
 
 ## Security
