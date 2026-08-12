@@ -23,6 +23,10 @@ from creator_intelligence_studio.domain.creator_corpus.value_objects import (
 )
 from creator_intelligence_studio.domain.errors import ValidationError
 from creator_intelligence_studio.shared.dates import from_iso_z
+from creator_intelligence_studio.application.services.creator_corpus_semantic_index_service import (
+    CreatorCorpusSemanticIndexService,
+    SemanticIndexSearchResult,
+)
 
 
 def _normalize_query_text(value: str | None) -> str:
@@ -68,19 +72,32 @@ def _enum_values(values):
 @dataclass(frozen=True, slots=True)
 class CreatorCorpusRetrievalService:
     repository: CreatorCorpusRepository
+    semantic_index_service: CreatorCorpusSemanticIndexService | None = None
     logger: logging.Logger | None = None
 
-    def search(self, query: CorpusRetrievalQuery | dict[str, object]) -> CorpusRetrievalResult:
+    def search(self, query: CorpusRetrievalQuery | dict[str, object], *, retrieval_mode: str = "lexical") -> CorpusRetrievalResult:
         normalized_query = self._normalize_query(query)
         rows, total = self.repository.search_retrieval_rows(normalized_query)
         matches = tuple(self._row_to_result_item(row, normalized_query) for row in rows)
         index_health = self.repository.get_retrieval_index_health(normalized_query.creator_id)
+        retrieval_mode_used = "lexical"
+        if retrieval_mode != "lexical" and self.semantic_index_service is not None:
+            semantic_ranked = self.semantic_index_service.search(normalized_query, limit=normalized_query.limit)
+            if semantic_ranked.used_mode == "semantic" and semantic_ranked.results:
+                fused_matches = self._hybrid_rank(matches, semantic_ranked)
+                if fused_matches:
+                    matches = fused_matches
+                    total = len(fused_matches)
+                    retrieval_mode_used = "hybrid"
+            elif semantic_ranked.used_mode == "lexical_fallback":
+                retrieval_mode_used = "lexical_fallback"
         return CorpusRetrievalResult(
             query=normalized_query,
             total_count=total,
             returned_count=len(matches),
             results=matches,
             index_health=index_health,
+            retrieval_mode_used=retrieval_mode_used,
         )
 
     def rebuild_index(self, creator_id: str | None = None) -> CorpusRetrievalIndexHealth:
@@ -189,3 +206,34 @@ class CreatorCorpusRetrievalService:
             version_created_at=version_created_at or created_at or from_iso_z("1970-01-01T00:00:00Z"),
             source_segment_ids=(str(row.get("segment_id")),) if row.get("segment_id") is not None else (),
         )
+
+    def _hybrid_rank(
+        self,
+        lexical_ranked: tuple[CorpusRetrievalResultItem, ...],
+        semantic_ranked: SemanticIndexSearchResult,
+    ) -> tuple[CorpusRetrievalResultItem, ...]:
+        lexical_ids = [item.document_id for item in lexical_ranked]
+        semantic_ids = []
+        seen_semantic: set[str] = set()
+        for item in semantic_ranked.results:
+            if item.document_id in seen_semantic:
+                continue
+            seen_semantic.add(item.document_id)
+            semantic_ids.append(item.document_id)
+        fused_scores: dict[str, float] = {}
+        for ranking in (lexical_ids, semantic_ids):
+            for position, document_id in enumerate(ranking, start=1):
+                fused_scores[document_id] = fused_scores.get(document_id, 0.0) + 1.0 / (60 + position)
+        lookup = {item.document_id: item for item in lexical_ranked}
+        for item in semantic_ranked.results:
+            lookup.setdefault(item.document_id, item)
+        ranked_ids = sorted(
+            fused_scores,
+            key=lambda document_id: (
+                -fused_scores[document_id],
+                0 if lookup.get(document_id) and lookup[document_id].status == CorpusDocumentStatus.ACTIVE else 1,
+                lookup.get(document_id).title.lower() if lookup.get(document_id) else "",
+                document_id,
+            ),
+        )
+        return tuple(lookup[document_id] for document_id in ranked_ids if document_id in lookup)

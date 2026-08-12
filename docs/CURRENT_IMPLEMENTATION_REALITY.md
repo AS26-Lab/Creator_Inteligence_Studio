@@ -7,11 +7,12 @@ This document records what is actually implemented in the repository through the
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v34`
+- current migration ceiling: `v35`
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
+- Creator Corpus now spans v33-A through v33-G: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, and an optional product semantic lifecycle.
 
 ## What Is Implemented
 
@@ -198,7 +199,7 @@ Status: `requires_ml`
 - Human-Guided Script Drafting Foundation
 - automatic video editing
 
-Status: `not_started`
+Status: `semantic retrieval adoption is optional; feedback learning and later phases remain not started`
 
 ## Creator Corpus v33-A Foundation
 
@@ -242,6 +243,18 @@ Status: `implemented`
 - no external embedding API or vector database was introduced
 
 Status: `evaluated`, not adopted
+
+## Creator Corpus v33-G Product Semantic Retrieval Lifecycle
+
+- the semantic embedding model is now represented as a managed component catalog entry
+- the selected universal artifact is `onnx/model.onnx`
+- the AVX512/VNNI artifact is retained as a non-universal accelerator variant
+- `CreatorCorpusEmbeddingService` loads the local model, tokenizes, embeds, normalizes, and validates health
+- `CreatorCorpusSemanticIndexService` stores derived vectors locally in SQLite and keeps searches creator-scoped
+- `CreatorCorpusRetrievalService` can fuse lexical and semantic candidates with explicit fallback reporting
+- semantic capability remains optional and never blocks lexical retrieval
+
+Status: `implemented as optional capability`
 
 ## Component Manager v32-D Resumable Download Manager Foundation
 

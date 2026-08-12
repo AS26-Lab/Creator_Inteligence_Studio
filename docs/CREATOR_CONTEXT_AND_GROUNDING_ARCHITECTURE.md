@@ -58,3 +58,13 @@ The current implementation integrates the boundary into content brief, productio
 This proves the boundary without coupling it to provider-specific request code.
 
 Retrieval can remain lexical, or later become hybrid, without changing the context assembly contract.
+
+## v33-G Compatibility
+
+The context assembly contract does not need to know whether retrieval came from:
+
+- lexical
+- hybrid_if_available
+- lexical_fallback
+
+It consumes bounded, creator-scoped corpus items and keeps model/vector details outside the grounding layer.

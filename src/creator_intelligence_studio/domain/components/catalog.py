@@ -18,6 +18,9 @@ from creator_intelligence_studio.domain.transcription.profiles import (
 from creator_intelligence_studio.domain.transcription.model_sources import (
     get_transcription_model_source_manifest,
 )
+from creator_intelligence_studio.domain.semantic_embedding.model_sources import (
+    get_semantic_embedding_model_manifest,
+)
 
 DEFAULT_COMPONENT_CATALOG_VERSION = 1
 FFMPEG_PRODUCT_RELEASE_TAG = "autobuild-2026-07-31-14-10"
@@ -30,6 +33,7 @@ FFMPEG_PRODUCT_EXPECTED_SHA256 = "089e4169e93b2b3f3acbfced3c0704d24276a225641bdd
 FFMPEG_PRODUCT_EXPECTED_DOWNLOAD_BYTES = 145349121
 FFMPEG_PRODUCT_SOURCE_REFERENCE = "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-07-31-14-10"
 SMALL_MODEL_SOURCE_MANIFEST = get_transcription_model_source_manifest("transcription-model.small")
+SEMANTIC_MODEL_SOURCE_MANIFEST = get_semantic_embedding_model_manifest("creator-embedding-model.multilingual-e5-small")
 
 
 def _reviewed_now() -> datetime:
@@ -261,6 +265,41 @@ def build_default_component_catalog(*, reviewed_at: datetime | None = None) -> C
             capabilities_enabled=("local_transcription",),
             install_strategy="model_directory_activate",
             health_check="local_model_presence",
+            rollback_supported=False,
+            catalog_version=DEFAULT_COMPONENT_CATALOG_VERSION,
+            reviewed_at=reviewed_at,
+            status=ComponentCatalogStatus.PENDING_VERIFICATION,
+            created_at=reviewed_at,
+            updated_at=reviewed_at,
+        ),
+        ComponentCatalogEntry(
+            component_id="creator-embedding-model.multilingual-e5-small",
+            display_name="Búsqueda inteligente",
+            category=ComponentCategory.SEMANTIC_MODEL,
+            version="multilingual-e5-small",
+            revision=SEMANTIC_MODEL_SOURCE_MANIFEST.revision if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            platform="windows",
+            architecture="x86_64",
+            source_type="approved_product_source",
+            source_identifier=f"{SEMANTIC_MODEL_SOURCE_MANIFEST.source_provider}/{SEMANTIC_MODEL_SOURCE_MANIFEST.repository}@{SEMANTIC_MODEL_SOURCE_MANIFEST.revision}" if SEMANTIC_MODEL_SOURCE_MANIFEST else "huggingface/intfloat/multilingual-e5-small",
+            source_provider=SEMANTIC_MODEL_SOURCE_MANIFEST.source_provider if SEMANTIC_MODEL_SOURCE_MANIFEST else "huggingface",
+            upstream_project=SEMANTIC_MODEL_SOURCE_MANIFEST.repository if SEMANTIC_MODEL_SOURCE_MANIFEST else "intfloat/multilingual-e5-small",
+            source_url=SEMANTIC_MODEL_SOURCE_MANIFEST.source_page if SEMANTIC_MODEL_SOURCE_MANIFEST else "https://huggingface.co/intfloat/multilingual-e5-small/tree/614241f622f53c4eeff9890bdc4f31cfecc418b3",
+            expected_sha256=SEMANTIC_MODEL_SOURCE_MANIFEST.expected_sha256 if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            upstream_version="multilingual-e5-small",
+            build_revision=SEMANTIC_MODEL_SOURCE_MANIFEST.revision if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            license_variant=SEMANTIC_MODEL_SOURCE_MANIFEST.license if SEMANTIC_MODEL_SOURCE_MANIFEST else "mit",
+            source_page_reference=SEMANTIC_MODEL_SOURCE_MANIFEST.source_page if SEMANTIC_MODEL_SOURCE_MANIFEST else "https://huggingface.co/intfloat/multilingual-e5-small/tree/614241f622f53c4eeff9890bdc4f31cfecc418b3",
+            verified_at=reviewed_at,
+            allowed_domains=("huggingface.co", "hf.co"),
+            expected_download_bytes=SEMANTIC_MODEL_SOURCE_MANIFEST.selected_cpu_artifact.expected_bytes if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            expected_installed_bytes=SEMANTIC_MODEL_SOURCE_MANIFEST.total_expected_bytes if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            temporary_space_bytes=SEMANTIC_MODEL_SOURCE_MANIFEST.total_expected_bytes if SEMANTIC_MODEL_SOURCE_MANIFEST else None,
+            license_name="MIT",
+            license_url=SEMANTIC_MODEL_SOURCE_MANIFEST.source_page if SEMANTIC_MODEL_SOURCE_MANIFEST else "https://huggingface.co/intfloat/multilingual-e5-small/tree/614241f622f53c4eeff9890bdc4f31cfecc418b3",
+            capabilities_enabled=("semantic_retrieval", "hybrid_retrieval"),
+            install_strategy="model_directory_activate",
+            health_check="local_embedding_model_presence",
             rollback_supported=False,
             catalog_version=DEFAULT_COMPONENT_CATALOG_VERSION,
             reviewed_at=reviewed_at,

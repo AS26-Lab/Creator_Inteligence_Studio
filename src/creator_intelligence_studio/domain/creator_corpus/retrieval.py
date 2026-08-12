@@ -170,6 +170,7 @@ class CorpusRetrievalResult:
     returned_count: int
     results: tuple[CorpusRetrievalResultItem, ...]
     index_health: CorpusRetrievalIndexHealth | None
+    retrieval_mode_used: str = "lexical"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -178,4 +179,5 @@ class CorpusRetrievalResult:
             "returned_count": self.returned_count,
             "results": [item.to_dict() for item in self.results],
             "index_health": self.index_health.to_dict() if self.index_health else None,
+            "retrieval_mode_used": self.retrieval_mode_used,
         }

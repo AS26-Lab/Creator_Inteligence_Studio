@@ -116,7 +116,7 @@ class ComponentManagerMigrationTests(unittest.TestCase):
                 self.assertIn("uq_component_catalog_component_version", indexes)
                 self.assertIn("uq_transcription_profiles_profile_version", indexes)
                 self.assertIn("idx_component_events_created_at", indexes)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 35)
                 self.assertGreater(connection.execute("SELECT COUNT(*) FROM component_catalog").fetchone()[0], 0)
                 self.assertGreater(connection.execute("SELECT COUNT(*) FROM transcription_profiles").fetchone()[0], 0)
 
@@ -154,7 +154,7 @@ class ComponentManagerMigrationTests(unittest.TestCase):
                 second_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
 
                 self.assertEqual(first_count, second_count)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 35)
 
     def test_legacy_v32_database_without_product_columns_still_bootstraps(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -162,7 +162,7 @@ class ComponentManagerMigrationTests(unittest.TestCase):
             with db.connect() as connection:
                 _create_legacy_v32_schema(connection)
                 run_migrations(connection)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 34)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 35)
                 catalog_columns = _table_columns(connection, "component_catalog")
                 self.assertIn("source_provider", catalog_columns)
                 self.assertIn("source_url", catalog_columns)

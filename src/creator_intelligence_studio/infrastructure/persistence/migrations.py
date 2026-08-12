@@ -9138,6 +9138,121 @@ def migration_34(connection: sqlite3.Connection) -> None:
     )
 
 
+def migration_35(connection: sqlite3.Connection) -> None:
+    connection.execute("DROP TABLE IF EXISTS component_catalog_v35")
+    connection.execute(
+        """
+        CREATE TABLE component_catalog_v35 (
+            id TEXT PRIMARY KEY,
+            component_id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            category TEXT NOT NULL CHECK (category IN (
+                'ffmpeg',
+                'transcription_runtime',
+                'transcription_model',
+                'semantic_model',
+                'optional_support'
+            )),
+            version TEXT,
+            revision TEXT,
+            platform TEXT,
+            architecture TEXT,
+            source_type TEXT NOT NULL,
+            source_identifier TEXT,
+            source_provider TEXT,
+            upstream_project TEXT,
+            source_url TEXT,
+            release_tag TEXT,
+            asset_name TEXT,
+            expected_sha256 TEXT,
+            upstream_version TEXT,
+            build_revision TEXT,
+            license_variant TEXT,
+            source_page_reference TEXT,
+            verified_at TEXT,
+            allowed_domains_json TEXT NOT NULL DEFAULT '[]',
+            expected_download_bytes INTEGER,
+            expected_installed_bytes INTEGER,
+            temporary_space_bytes INTEGER,
+            sha256 TEXT,
+            license_name TEXT,
+            license_url TEXT,
+            attribution TEXT,
+            dependencies_json TEXT NOT NULL DEFAULT '[]',
+            capabilities_enabled_json TEXT NOT NULL DEFAULT '[]',
+            minimum_requirements_json TEXT NOT NULL DEFAULT '{}',
+            recommended_requirements_json TEXT NOT NULL DEFAULT '{}',
+            install_strategy TEXT,
+            health_check TEXT,
+            rollback_supported INTEGER NOT NULL DEFAULT 0,
+            catalog_version INTEGER NOT NULL,
+            reviewed_at TEXT,
+            status TEXT NOT NULL CHECK (status IN ('verified', 'pending_verification', 'legacy', 'unsupported', 'unknown')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    table_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'component_catalog'"
+    ).fetchone() is not None
+    existing_columns = _component_catalog_columns(connection) if table_exists else set()
+    new_columns = [
+        "id",
+        "component_id",
+        "display_name",
+        "category",
+        "version",
+        "revision",
+        "platform",
+        "architecture",
+        "source_type",
+        "source_identifier",
+        "source_provider",
+        "upstream_project",
+        "source_url",
+        "release_tag",
+        "asset_name",
+        "expected_sha256",
+        "upstream_version",
+        "build_revision",
+        "license_variant",
+        "source_page_reference",
+        "verified_at",
+        "allowed_domains_json",
+        "expected_download_bytes",
+        "expected_installed_bytes",
+        "temporary_space_bytes",
+        "sha256",
+        "license_name",
+        "license_url",
+        "attribution",
+        "dependencies_json",
+        "capabilities_enabled_json",
+        "minimum_requirements_json",
+        "recommended_requirements_json",
+        "install_strategy",
+        "health_check",
+        "rollback_supported",
+        "catalog_version",
+        "reviewed_at",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
+    copy_columns = [column for column in new_columns if column in existing_columns]
+    if copy_columns:
+        column_sql = ", ".join(copy_columns)
+        connection.execute(
+            f"INSERT INTO component_catalog_v35 ({column_sql}) SELECT {column_sql} FROM component_catalog"
+        )
+    connection.execute("DROP TABLE IF EXISTS component_catalog")
+    connection.execute("ALTER TABLE component_catalog_v35 RENAME TO component_catalog")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_component_catalog_component_version ON component_catalog(component_id, catalog_version)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_component_catalog_component_id ON component_catalog(component_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_component_catalog_category_status ON component_catalog(category, status)")
+
+
 def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
     return {str(row[1]) for row in rows}
@@ -9304,6 +9419,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=32, name="component_manager_and_local_transcription_foundation"),
     Migration(version=33, name="creator_corpus_foundation"),
     Migration(version=34, name="creator_corpus_retrieval_foundation"),
+    Migration(version=35, name="creator_semantic_index_foundation"),
 )
 
 
@@ -9421,6 +9537,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_33(connection)
                 elif migration.version == 34:
                     migration_34(connection)
+                elif migration.version == 35:
+                    migration_35(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

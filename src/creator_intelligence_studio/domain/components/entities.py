@@ -16,6 +16,7 @@ class ComponentCategory(str, Enum):
     FFMPEG = "ffmpeg"
     TRANSCRIPTION_RUNTIME = "transcription_runtime"
     TRANSCRIPTION_MODEL = "transcription_model"
+    SEMANTIC_MODEL = "semantic_model"
     OPTIONAL_SUPPORT = "optional_support"
 
 

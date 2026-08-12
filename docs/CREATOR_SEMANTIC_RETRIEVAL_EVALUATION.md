@@ -48,3 +48,12 @@ Future adoption should still require:
 - packaging review
 - size and update impact review
 - a production-grade scorer/index path, not only a synthetic harness
+
+## Product Relevance After v33-G
+
+The product lifecycle now exists in code, but the evaluation result still matters:
+
+- lexical stays the safe baseline
+- semantic improvement is useful but optional
+- hybrid should only activate when the embedding component and derived index are healthy
+- the regression benchmark should continue to compare lexical versus hybrid_product behavior on the same fixture set

@@ -47,6 +47,15 @@ SQLite FTS5 is provisioned as derived infrastructure, but v33-C does not require
 
 v33-F adds an evaluation-only local semantic foundation for later comparison. It does not replace lexical retrieval or become the default product path.
 
+v33-G adds an optional hybrid path when the local semantic capability is healthy.
+
+Product retrieval modes now conceptually include:
+
+- `lexical`
+- `hybrid_if_available`
+
+The semantic path must never be used as a hidden prefilter before creator scoping. Creator filters remain mandatory before any semantic result is exposed.
+
 ## Ranking
 
 Ranking is intentionally simple and explainable:
@@ -67,6 +76,14 @@ The retrieval index exposes health metrics:
 - missing rows
 - stale rows
 
+The semantic index exposes a separate derived-health boundary for:
+
+- model revision
+- chunking version
+- vector integrity
+- creator-scoped activation
+- fallback readiness
+
 ## Context Assembly
 
 Retrieval results feed the separate Creator Context Assembly layer.
@@ -82,6 +99,8 @@ That layer is responsible for:
 Retrieval itself stays local, deterministic, and creator-scoped. Context assembly does not add embeddings or semantic search.
 
 The index can be rebuilt deterministically from canonical corpus tables.
+
+Semantic retrieval is only used when the local embedding component and the derived semantic index are ready. Otherwise retrieval remains lexical and reports lexical fallback.
 
 ## Security
 

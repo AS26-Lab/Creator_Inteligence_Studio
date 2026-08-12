@@ -38,6 +38,10 @@ Temporary artifacts:
 
 Temporary artifacts should be removed after processing unless the user explicitly decides otherwise.
 
+Embeddings and semantic vectors are also creator data.
+
+They must remain local, creator-scoped, and purgeable with the rest of the creator-owned derived data.
+
 ## Sample Classes
 
 Samples are classified as:
@@ -159,6 +163,12 @@ v33-F evaluation reality:
 - no external embedding API was introduced
 - the semantic path remains evaluation-only pending a product adoption decision
 
+v33-G product reality:
+
+- the semantic capability is optional
+- lexical retrieval remains the fallback and baseline
+- no feedback-learning loop has been introduced yet
+
 ## Embeddings And Search
 
 Approved decisions:
@@ -217,6 +227,8 @@ Store:
 - later result.
 
 Do not convert an isolated correction into a rule.
+
+Feedback learning remains paused until the approved learning phase.
 
 Separate:
 

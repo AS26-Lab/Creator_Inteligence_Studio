@@ -52,3 +52,14 @@ The repository now has a local semantic retrieval foundation and a deterministic
 It does not yet adopt semantic retrieval as the production path.
 
 Production retrieval remains lexical with the semantic layer available for evaluation and future controlled adoption.
+
+## v33-G Handoff
+
+v33-G turns the evaluation result into an optional product capability:
+
+- the semantic model is managed and versioned
+- the universal CPU artifact is preferred over the AVX512-only artifact
+- lexical fallback stays mandatory
+- hybrid retrieval is only used when semantic capability is healthy
+
+The v33-F evaluation remains the benchmark reference for later regressions.

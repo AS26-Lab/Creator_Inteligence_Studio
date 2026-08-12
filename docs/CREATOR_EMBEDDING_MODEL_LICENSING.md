@@ -36,6 +36,29 @@ Local SHA-256 values captured during evaluation:
 - `config.json`: `69137736CAB8B8903A07FE8AFAAFDDA25AAC55415A12A55D1BFFA9F581ABF959`
 - `tokenizer_config.json`: `A1D6BC8734A6F635DC158508BEF000F8E2E5A759C7D92F984B2C86E5FF53425B`
 
+## Product Manifest Outcome
+
+For product adoption, the universal CPU artifact is selected as the default managed asset:
+
+- selected artifact: `onnx/model.onnx`
+- selected artifact sha256: `ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665`
+- selected artifact bytes: `470681649`
+
+The AVX512/VNNI artifact remains an accelerator-specific variant:
+
+- `onnx/model_qint8_avx512_vnni.onnx`
+- sha256: `DD476DD0C2514E9B9BE83AEB3853FAC0763E0BDF4A71645407587D77C48A2D88`
+- bytes: `118346824`
+
+Required local files for offline embedding include:
+
+- `onnx/model.onnx`
+- `onnx/config.json`
+- `onnx/tokenizer.json`
+- `onnx/tokenizer_config.json`
+- `onnx/special_tokens_map.json`
+- `onnx/sentencepiece.bpe.model`
+
 ## Provenance
 
 The model revision was obtained from Hugging Face primary metadata and validated locally with ONNX Runtime.

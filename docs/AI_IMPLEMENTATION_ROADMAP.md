@@ -80,6 +80,16 @@ v33-F evaluates local semantic/hybrid retrieval without replacing lexical retrie
 - the semantic layer stays evaluation-only until a product adoption decision is approved
 - no external embedding API or vector database is introduced
 
+v33-G adds the optional product lifecycle for the semantic layer.
+
+- the semantic embedding model is managed and versioned as a local component
+- the universal CPU artifact is selected as the default product asset
+- the AVX512/VNNI artifact remains an accelerator-specific variant
+- the derived semantic index is rebuildable and creator-scoped
+- lexical fallback remains first-class
+- hybrid retrieval is only used when the semantic capability is ready
+- no external vector database, Supabase integration, or remote embedding API is introduced
+
 ## Stage Gates
 
 Every stage must define:

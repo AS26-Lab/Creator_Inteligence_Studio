@@ -78,6 +78,7 @@ from creator_intelligence_studio.application.services.creator_corpus_service imp
 from creator_intelligence_studio.application.services.creator_corpus_retrieval_service import (
     CreatorCorpusRetrievalService,
 )
+from creator_intelligence_studio.application.services.creator_corpus_semantic_index_service import CreatorCorpusSemanticIndexService
 from creator_intelligence_studio.application.services.creator_context_assembly_service import build_creator_context_assembly_service
 from creator_intelligence_studio.application.services.creator_context_policy import build_default_creator_context_policy_registry
 from creator_intelligence_studio.application.services.creator_language_service import (
@@ -488,8 +489,14 @@ def _load_service_context() -> ServiceContext:
         logger=context.logger,
     )
     transcription_service.creator_corpus_service = creator_corpus_service
+    creator_corpus_semantic_index_service = CreatorCorpusSemanticIndexService(
+        paths=context.paths,
+        corpus_repository=creator_corpus_repository,
+        logger=context.logger,
+    )
     creator_corpus_retrieval_service = CreatorCorpusRetrievalService(
         repository=creator_corpus_repository,
+        semantic_index_service=creator_corpus_semantic_index_service,
         logger=context.logger,
     )
     creator_context_assembly_service = build_creator_context_assembly_service(
