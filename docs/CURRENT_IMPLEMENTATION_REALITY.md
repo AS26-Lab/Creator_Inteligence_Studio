@@ -233,6 +233,16 @@ Status: `implemented`
 
 Status: `implemented`
 
+## Creator Corpus v33-F Semantic Retrieval Evaluation
+
+- a local multilingual ONNX candidate was evaluated against the lexical baseline
+- the candidate was `intfloat/multilingual-e5-small` revision `614241f622f53c4eeff9890bdc4f31cfecc418b3`
+- the evaluation harness showed better paraphrase handling and preserved exact-match behavior under hybrid fusion
+- lexical retrieval remains the production default and fallback
+- no external embedding API or vector database was introduced
+
+Status: `evaluated`, not adopted
+
 ## Component Manager v32-D Resumable Download Manager Foundation
 
 - resumable download manager exists as a filesystem-backed foundation

@@ -151,6 +151,14 @@ v33-E grounded workflow reality:
 - context-off mode is explicit for testing and diagnostics
 - corpus context remains separate from primary source artifacts and conversation history
 
+v33-F evaluation reality:
+
+- a local multilingual ONNX candidate was evaluated against the lexical baseline
+- semantic and hybrid retrieval improved paraphrase-style queries in the local harness
+- lexical retrieval remains the product default and fallback
+- no external embedding API was introduced
+- the semantic path remains evaluation-only pending a product adoption decision
+
 ## Embeddings And Search
 
 Approved decisions:

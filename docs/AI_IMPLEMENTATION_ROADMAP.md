@@ -73,6 +73,13 @@ v33-E validates grounded AI workflows and centralizes context policy.
 - corpus context remains separate from conversation history and primary user artifacts
 - empty corpus and context-off modes remain valid for the approved workflows
 
+v33-F evaluates local semantic/hybrid retrieval without replacing lexical retrieval.
+
+- the lexical retrieval baseline remains the production truth
+- a local multilingual ONNX candidate can improve paraphrase-style retrieval in evaluation
+- the semantic layer stays evaluation-only until a product adoption decision is approved
+- no external embedding API or vector database is introduced
+
 ## Stage Gates
 
 Every stage must define:

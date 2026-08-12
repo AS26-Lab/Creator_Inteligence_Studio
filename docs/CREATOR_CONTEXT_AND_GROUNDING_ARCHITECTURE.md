@@ -56,3 +56,5 @@ The renderer must:
 The current implementation integrates the boundary into content brief, production preparation, and strategic planning as controlled grounded workflows.
 
 This proves the boundary without coupling it to provider-specific request code.
+
+Retrieval can remain lexical, or later become hybrid, without changing the context assembly contract.

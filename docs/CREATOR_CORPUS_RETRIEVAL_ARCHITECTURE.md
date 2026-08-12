@@ -45,6 +45,8 @@ The implemented search path is deterministic and local:
 
 SQLite FTS5 is provisioned as derived infrastructure, but v33-C does not require semantic text search, embeddings, or a model-backed retriever.
 
+v33-F adds an evaluation-only local semantic foundation for later comparison. It does not replace lexical retrieval or become the default product path.
+
 ## Ranking
 
 Ranking is intentionally simple and explainable:
