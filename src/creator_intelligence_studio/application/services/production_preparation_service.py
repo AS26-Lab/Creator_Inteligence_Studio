@@ -10,6 +10,11 @@ from typing import Any, Callable
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from creator_intelligence_studio.application.services.content_brief_service import ContentBriefService
+from creator_intelligence_studio.application.services.creator_context_assembly_service import CreatorContextAssemblyService
+from creator_intelligence_studio.application.services.creator_context_policy import (
+    CreatorContextPolicyRegistry,
+    build_default_creator_context_policy_registry,
+)
 from creator_intelligence_studio.domain.content_briefs import (
     BriefRecord,
     BriefStatus,
@@ -138,6 +143,8 @@ class ProductionPreparationService:
         content_library_service: Any | None = None,
         creator_memory_service: Any | None = None,
         creator_language_service: Any | None = None,
+        creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+        creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         platform_service: Any | None = None,
         packaging_service: Any | None = None,
@@ -154,6 +161,8 @@ class ProductionPreparationService:
         self.content_library_service = content_library_service
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
+        self.creator_context_assembly_service = creator_context_assembly_service
+        self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.platform_service = platform_service
         self.packaging_service = packaging_service
@@ -331,10 +340,12 @@ class ProductionPreparationService:
         missing_data: list[str] | None = None,
         stale_data: list[str] | None = None,
         contradictions: list[dict[str, object]] | None = None,
+        use_creator_context: bool = True,
     ) -> ProductionRecord:
         self._validate_creator(creator_id)
         brief = self._load_brief(creator_id, content_brief_id)
         created_at = created_at or _now()
+        context_policy = self.creator_context_policy_registry.get_by_workflow("production_preparation")
         creator_memory_snapshot_id = self._snapshot_identifier(self.creator_memory_service, ("create_profile_snapshot", "get_profile_snapshot", "list_profile_snapshots", "list_snapshots"), creator_id)
         creator_language_snapshot_id = self._snapshot_identifier(self.creator_language_service, ("create_profile_snapshot", "get_profile_snapshot", "list_profile_snapshots", "list_snapshots"), creator_id)
         audience_snapshot_id = self._snapshot_identifier(self.audience_service, ("build_profile", "get_profile", "list_profiles"), creator_id)
@@ -355,20 +366,74 @@ class ProductionPreparationService:
             "audience_snapshot_id": audience_snapshot_id,
             "platform_snapshot_id": platform_snapshot_id,
             "packaging_snapshot_id": packaging_snapshot_id,
-            "source_fingerprint": build_production_fingerprint(
-                {
-                    "creator_id": creator_id,
-                    "brief": brief.to_dict(),
-                    "preferences": dict(preferences or self.preferences),
-                    "constraints": constraints or [],
-                    "resources": resources or [],
-                    "missing_data": missing_data or [],
-                    "stale_data": stale_data or [],
-                    "contradictions": contradictions or [],
-                    "brief_context": self._load_brief_context_payload(brief),
-                }
-            ),
-            "context_json": _json_dumps({
+            "created_at": created_at,
+        }
+        creator_context_bundle = None
+        creator_context_package: dict[str, object] = {}
+        creator_context_prompt: str | None = None
+        creator_context_usage: dict[str, object] = {
+            "enabled": False,
+            "policy_id": None if context_policy is None else context_policy.policy_id,
+            "grounding_mode": None if context_policy is None else context_policy.grounding_mode.value,
+            "item_count": 0,
+            "estimated_tokens": 0,
+            "estimated_characters": 0,
+            "truncated": False,
+        }
+        if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
+            script_request_text = " | ".join(
+                part
+                for part in (
+                    brief.title,
+                    brief.primary_objective,
+                    brief.audience_summary,
+                    brief.content_promise,
+                    brief.core_message,
+                )
+                if part
+            ) or "Production preparation context"
+            creator_context_request = context_policy.build_request(
+                creator_id=creator_id,
+                user_request=script_request_text,
+                query_text=script_request_text,
+            )
+            creator_context_bundle = self.creator_context_assembly_service.assemble(creator_context_request)
+            creator_context_package = self.creator_context_assembly_service.build_context_package(creator_context_bundle)
+            creator_context_prompt = self.creator_context_assembly_service.render_prompt(creator_context_bundle)
+            creator_context_usage = {
+                "enabled": True,
+                "policy_id": context_policy.policy_id,
+                "grounding_mode": context_policy.grounding_mode.value,
+                "item_count": len(creator_context_bundle.items),
+                "estimated_tokens": creator_context_bundle.total_estimated_tokens,
+                "estimated_characters": creator_context_bundle.total_estimated_characters,
+                "truncated": creator_context_bundle.truncated,
+            }
+        context_details = {
+            "creator_context_enabled": bool(creator_context_usage["enabled"]),
+            "creator_context_policy_id": creator_context_usage["policy_id"],
+            "creator_context_grounding_mode": creator_context_usage["grounding_mode"],
+            "creator_context_usage": creator_context_usage,
+            "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
+            "creator_context_package": creator_context_package,
+            "creator_context_prompt": creator_context_prompt,
+        }
+        payload["source_fingerprint"] = build_production_fingerprint(
+            {
+                "creator_id": creator_id,
+                "brief": brief.to_dict(),
+                "preferences": dict(preferences or self.preferences),
+                "constraints": constraints or [],
+                "resources": resources or [],
+                "missing_data": missing_data or [],
+                "stale_data": stale_data or [],
+                "contradictions": contradictions or [],
+                "brief_context": self._load_brief_context_payload(brief),
+                "creator_context_usage": creator_context_usage,
+            }
+        )
+        payload["context_json"] = _json_dumps(
+            {
                 "brief": brief.to_dict(),
                 "brief_context": self._load_brief_context_payload(brief),
                 "preferences": dict(preferences or self.preferences),
@@ -377,9 +442,10 @@ class ProductionPreparationService:
                 "missing_data": missing_data or [],
                 "stale_data": stale_data or [],
                 "contradictions": contradictions or [],
-            }),
-            "created_at": created_at,
-        }
+                "creator_context_usage": creator_context_usage,
+                **context_details,
+            }
+        )
         payload["id"] = _stable_id("production-context", creator_id, content_brief_id, str(brief_version), payload["source_fingerprint"])
         existing = self._fetch("production_context_snapshots", where="creator_id = ? AND source_fingerprint = ?", params=(creator_id, payload["source_fingerprint"]))
         if existing:
@@ -1618,6 +1684,8 @@ def build_production_preparation_service(
     content_library_service: Any | None = None,
     creator_memory_service: Any | None = None,
     creator_language_service: Any | None = None,
+    creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+    creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
     audience_service: Any | None = None,
     platform_service: Any | None = None,
     packaging_service: Any | None = None,
@@ -1635,6 +1703,8 @@ def build_production_preparation_service(
         content_library_service=content_library_service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creator_context_assembly_service=creator_context_assembly_service,
+        creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         platform_service=platform_service,
         packaging_service=packaging_service,

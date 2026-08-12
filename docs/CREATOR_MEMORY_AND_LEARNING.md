@@ -143,6 +143,14 @@ Current implementation reality:
 - the content brief snapshot workflow consumes the bundle for a safe first integration
 - semantic retrieval, embeddings, and learning remain future phases
 
+v33-E grounded workflow reality:
+
+- workflow policies centralize which AI tasks receive creator context
+- content brief, production preparation, and strategic planning share the same grounding boundary
+- provider diagnostics remain context-free
+- context-off mode is explicit for testing and diagnostics
+- corpus context remains separate from primary source artifacts and conversation history
+
 ## Embeddings And Search
 
 Approved decisions:

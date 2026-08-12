@@ -223,6 +223,16 @@ Status: `implemented`
 
 Status: `implemented`
 
+## Creator Corpus v33-E Grounded Workflows
+
+- creator context policies are centralized instead of being duplicated across workflow services
+- grounded workflows currently include content brief, production preparation, and strategic planning
+- provider diagnostics are explicitly marked as context not allowed
+- grounded workflows can still run with context disabled or empty context when policy allows it
+- corpus context stays separated from conversation history and from primary user artifacts
+
+Status: `implemented`
+
 ## Component Manager v32-D Resumable Download Manager Foundation
 
 - resumable download manager exists as a filesystem-backed foundation

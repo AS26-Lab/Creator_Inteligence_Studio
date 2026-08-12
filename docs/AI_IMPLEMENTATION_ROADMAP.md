@@ -65,6 +65,14 @@ v33-D adds creator context assembly and prompt grounding.
 - context budgets, provenance, authorship, and categories are explicit
 - the first safe integration point is the content brief snapshot workflow
 
+v33-E validates grounded AI workflows and centralizes context policy.
+
+- workflow-specific policies classify when grounding is required, preferred, optional, or forbidden
+- content brief, production preparation, and strategic planning now use the shared context boundary
+- provider diagnostics remain context free
+- corpus context remains separate from conversation history and primary user artifacts
+- empty corpus and context-off modes remain valid for the approved workflows
+
 ## Stage Gates
 
 Every stage must define:

@@ -44,8 +44,10 @@ from creator_intelligence_studio.domain.content_briefs import (
 )
 from creator_intelligence_studio.application.services.creator_context_assembly_service import (
     CreatorContextAssemblyService,
-    CreatorContextRequest,
-    CreatorContextTaskType,
+)
+from creator_intelligence_studio.application.services.creator_context_policy import (
+    CreatorContextPolicyRegistry,
+    build_default_creator_context_policy_registry,
 )
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.shared.dates import to_iso_z, utc_now
@@ -168,6 +170,7 @@ class ContentBriefService:
         creator_memory_service: Any | None = None,
         creator_language_service: Any | None = None,
         creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+        creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         analytics_service: Any | None = None,
         analytics_lab_service: Any | None = None,
@@ -187,6 +190,7 @@ class ContentBriefService:
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
         self.creator_context_assembly_service = creator_context_assembly_service
+        self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.analytics_service = analytics_service
         self.analytics_lab_service = analytics_lab_service
@@ -546,9 +550,11 @@ class ContentBriefService:
         stale_data: list[str] | None = None,
         missing_data: list[str] | None = None,
         contradictions: list[dict[str, object]] | None = None,
+        use_creator_context: bool = True,
     ) -> BriefRecord:
         self._validate_creator(creator_id)
         created_at = created_at or _now()
+        context_policy = self.creator_context_policy_registry.get_by_workflow("content_brief")
         creator_memory_snapshot_id = self._snapshot_identifier(self.creator_memory_service, ("create_profile_snapshot", "get_profile_snapshot", "list_profile_snapshots", "list_snapshots"), creator_id)
         creator_language_snapshot_id = self._snapshot_identifier(self.creator_language_service, ("create_profile_snapshot", "get_profile_snapshot", "list_profile_snapshots", "list_snapshots"), creator_id)
         audience_snapshot_id = self._snapshot_identifier(self.audience_service, ("build_profile", "get_profile", "list_profiles"), creator_id)
@@ -560,7 +566,16 @@ class ContentBriefService:
         creator_context_bundle = None
         creator_context_package: dict[str, object] = {}
         creator_context_prompt: str | None = None
-        if self.creator_context_assembly_service is not None:
+        creator_context_usage: dict[str, object] = {
+            "enabled": False,
+            "policy_id": None if context_policy is None else context_policy.policy_id,
+            "grounding_mode": None if context_policy is None else context_policy.grounding_mode.value,
+            "item_count": 0,
+            "estimated_tokens": 0,
+            "estimated_characters": 0,
+            "truncated": False,
+        }
+        if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
             brief_request_text = " | ".join(
                 part
                 for part in (
@@ -574,18 +589,23 @@ class ContentBriefService:
                 )
                 if part
             ) or "Content brief context"
-            creator_context_request = CreatorContextRequest(
+            creator_context_request = context_policy.build_request(
                 creator_id=creator_id,
                 user_request=brief_request_text,
-                task_type=CreatorContextTaskType.CONTENT_IDEATION,
-                max_context_items=6,
-                context_budget=900,
-                include_provenance=True,
-                include_historical_versions=False,
+                query_text=brief_request_text,
             )
             creator_context_bundle = self.creator_context_assembly_service.assemble(creator_context_request)
             creator_context_package = self.creator_context_assembly_service.build_context_package(creator_context_bundle)
             creator_context_prompt = self.creator_context_assembly_service.render_prompt(creator_context_bundle)
+            creator_context_usage = {
+                "enabled": True,
+                "policy_id": context_policy.policy_id,
+                "grounding_mode": context_policy.grounding_mode.value,
+                "item_count": len(creator_context_bundle.items),
+                "estimated_tokens": creator_context_bundle.total_estimated_tokens,
+                "estimated_characters": creator_context_bundle.total_estimated_characters,
+                "truncated": creator_context_bundle.truncated,
+            }
         payload = {
             "creator_id": creator_id,
             "context_version": self.ENGINE_VERSION,
@@ -601,9 +621,6 @@ class ContentBriefService:
             "missing_data": missing_data or [],
             "contradictions": contradictions or [],
             "recommendations": recommendation_payload,
-            "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
-            "creator_context_package": creator_context_package,
-            "creator_context_prompt": creator_context_prompt,
             "snapshot_ids": {
                 "creator_memory_snapshot_id": creator_memory_snapshot_id,
                 "creator_language_snapshot_id": creator_language_snapshot_id,
@@ -614,7 +631,16 @@ class ContentBriefService:
                 "packaging_snapshot_id": packaging_snapshot_id,
             },
         }
-        fingerprint = build_brief_fingerprint(payload)
+        context_details = {
+            "creator_context_enabled": bool(creator_context_usage["enabled"]),
+            "creator_context_policy_id": creator_context_usage["policy_id"],
+            "creator_context_grounding_mode": creator_context_usage["grounding_mode"],
+            "creator_context_usage": creator_context_usage,
+            "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
+            "creator_context_package": creator_context_package,
+            "creator_context_prompt": creator_context_prompt,
+        }
+        fingerprint = build_brief_fingerprint({**payload, **context_details})
         existing = self._fetch("brief_context_snapshots", where="creator_id = ? AND source_fingerprint = ?", params=(creator_id, fingerprint))
         if existing:
             return _row_to_entity(existing)
@@ -635,7 +661,7 @@ class ContentBriefService:
             platform_snapshot_id=platform_snapshot_id,
             packaging_snapshot_id=packaging_snapshot_id,
             source_fingerprint=fingerprint,
-            context_json=_json_dumps(payload),
+            context_json=_json_dumps({**payload, **context_details}),
             created_at=created_at,
         )
         return _row_to_entity(self._upsert("brief_context_snapshots", record.to_dict()))
@@ -1480,6 +1506,7 @@ def build_content_brief_service(
     creator_memory_service: Any | None = None,
     creator_language_service: Any | None = None,
     creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+    creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
     audience_service: Any | None = None,
     analytics_service: Any | None = None,
     analytics_lab_service: Any | None = None,
@@ -1500,6 +1527,7 @@ def build_content_brief_service(
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,

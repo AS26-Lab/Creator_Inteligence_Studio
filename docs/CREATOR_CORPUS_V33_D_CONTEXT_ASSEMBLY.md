@@ -55,6 +55,16 @@ That path now captures:
 
 This is intentionally narrow. The same boundary can be reused by future AI request builders without coupling corpus retrieval to provider implementations.
 
+## v33-E Policy Expansion
+
+The grounded workflow policy registry now centralizes additional safe integrations:
+
+- content brief
+- production preparation
+- strategic planning
+
+Technical diagnostics remain context-free. The policy registry also preserves explicit empty-context and context-off behavior for the approved workflows.
+
 ## Security Boundary
 
 Corpus content is treated as data, not instructions.

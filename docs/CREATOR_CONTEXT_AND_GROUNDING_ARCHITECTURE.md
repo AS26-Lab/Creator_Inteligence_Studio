@@ -8,6 +8,8 @@ Flow:
 
 `Corpus retrieval` -> `CreatorContextAssemblyService` -> `AI runtime request`
 
+v33-E adds a policy layer before assembly so workflows can declare whether context is required, preferred, optional, or not allowed.
+
 ## Contract
 
 The request must carry:
@@ -30,6 +32,8 @@ The output is a structured bundle that contains:
 - omission count
 - estimated size
 
+The same boundary also supports an explicit context-off mode for diagnostics and tests.
+
 ## Grounding Rules
 
 - creator context is not global
@@ -49,6 +53,6 @@ The renderer must:
 
 ## Integration Point
 
-The current implementation integrates the boundary into the content brief snapshot workflow as a safe first step.
+The current implementation integrates the boundary into content brief, production preparation, and strategic planning as controlled grounded workflows.
 
 This proves the boundary without coupling it to provider-specific request code.

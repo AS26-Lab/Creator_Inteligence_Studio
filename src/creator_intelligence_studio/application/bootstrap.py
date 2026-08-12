@@ -79,6 +79,7 @@ from creator_intelligence_studio.application.services.creator_corpus_retrieval_s
     CreatorCorpusRetrievalService,
 )
 from creator_intelligence_studio.application.services.creator_context_assembly_service import build_creator_context_assembly_service
+from creator_intelligence_studio.application.services.creator_context_policy import build_default_creator_context_policy_registry
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageService,
     build_creator_language_service,
@@ -495,6 +496,7 @@ def _load_service_context() -> ServiceContext:
         retrieval_service=creator_corpus_retrieval_service,
         logger=context.logger,
     )
+    creator_context_policy_registry = build_default_creator_context_policy_registry()
     creator_language_service = build_creator_language_service(
         settings=context.settings,
         paths=context.paths,
@@ -601,6 +603,8 @@ def _load_service_context() -> ServiceContext:
         recommendation_service=recommendation_service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creator_context_assembly_service=creator_context_assembly_service,
+        creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,
@@ -621,6 +625,7 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,
         analytics_lab_service=analytics_lab_service,
@@ -640,6 +645,8 @@ def _load_service_context() -> ServiceContext:
         content_library_service=service,
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
+        creator_context_assembly_service=creator_context_assembly_service,
+        creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         platform_service=platform_service,
         packaging_service=creative_packaging_service,
