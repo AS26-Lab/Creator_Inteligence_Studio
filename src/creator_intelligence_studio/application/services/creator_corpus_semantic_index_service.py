@@ -547,12 +547,27 @@ class CreatorCorpusSemanticIndexService:
                 (generation_id, query.creator_id),
             ).fetchall()
         candidates = []
+        corrupted = False
         for row in rows:
-            vector = np.frombuffer(row["vector_blob"], dtype=np.float32).reshape(1, self.manifest.embedding_dimension)
+            try:
+                vector = np.frombuffer(row["vector_blob"], dtype=np.float32).reshape(1, self.manifest.embedding_dimension)
+            except Exception:
+                corrupted = True
+                break
             score = float(np.dot(query_vector[0], vector[0]))
             candidate = dict(row)
             candidate["score"] = score
             candidates.append(candidate)
+        if corrupted:
+            return SemanticIndexSearchResult(
+                creator_id=query.creator_id,
+                query_text=query_text,
+                used_mode="lexical_fallback",
+                generation_id=generation_id,
+                results=(),
+                scores=(),
+                health=health,
+            )
         if query.project_id is not None:
             candidates = [row for row in candidates if str(row.get("project_id") or "") == query.project_id]
         if query.document_id is not None:
@@ -645,7 +660,11 @@ class CreatorCorpusSemanticIndexService:
             if not isinstance(vector_blob, (bytes, bytearray, memoryview)):
                 corrupted += 1
                 continue
-            vector = np.frombuffer(bytes(vector_blob), dtype=np.float32)
+            try:
+                vector = np.frombuffer(bytes(vector_blob), dtype=np.float32)
+            except ValueError:
+                corrupted += 1
+                continue
             if vector.size != self.manifest.embedding_dimension or not np.isfinite(vector).all():
                 corrupted += 1
                 continue

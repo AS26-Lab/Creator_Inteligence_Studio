@@ -2,7 +2,7 @@
 
 ## Status
 
-`implemented as an optional local capability`, while lexical retrieval remains the baseline and fallback.
+`adopted as an optional local capability`, while lexical retrieval remains the baseline and fallback.
 
 ## Decision
 
@@ -85,9 +85,6 @@ This phase proved:
 - creator-scoped semantic index build and search
 - lexical fallback when semantic capability is absent
 - hybrid retrieval wiring into the canonical retrieval service
-
-Still pending for a fully shipped product qualification:
-
 - real model download and install in a clean product environment
 - packaged Windows runtime validation against the installed model
 - a real corpus E2E on the fully installed product path
@@ -97,3 +94,4 @@ Still pending for a fully shipped product qualification:
 Keep lexical as the first-class fallback.
 
 Use hybrid only when the embedding model and derived index are healthy and explicitly installed.
+The semantic layer is optional and locally managed; it does not replace lexical retrieval.

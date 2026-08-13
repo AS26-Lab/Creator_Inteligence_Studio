@@ -31,6 +31,7 @@ from creator_intelligence_studio.domain.components.entities import (
     RuntimeCheckRecord,
     RuntimeCheckStatus,
 )
+from creator_intelligence_studio.domain.semantic_embedding.model_sources import build_default_semantic_embedding_model_manifest
 from creator_intelligence_studio.domain.components.repositories import ComponentManagerRepository
 from creator_intelligence_studio.domain.hardware.entities import (
     DiskVolumeSummary,
@@ -365,6 +366,7 @@ class ComponentCatalogContractTests(unittest.TestCase):
         self.assertIn("transcription-runtime.faster-whisper", component_ids)
         self.assertIn("transcription-model.small", component_ids)
         self.assertIn("transcription-model.medium", component_ids)
+        self.assertIn("creator-embedding-model.multilingual-e5-small", component_ids)
         self.assertEqual(catalog.catalog_version, 1)
 
     def test_default_catalog_has_approved_product_sources_for_ffmpeg_and_first_transcription_model(self) -> None:
@@ -401,6 +403,20 @@ class ComponentCatalogContractTests(unittest.TestCase):
         self.assertIsNotNone(model.expected_sha256)
         self.assertIsNotNone(model.expected_download_bytes)
         self.assertGreater(model.expected_download_bytes or 0, 0)
+
+        semantic = catalog.get_entry("creator-embedding-model.multilingual-e5-small")
+        self.assertIsNotNone(semantic)
+        semantic_manifest = build_default_semantic_embedding_model_manifest()
+        self.assertEqual(semantic.source_type, "approved_product_source")
+        self.assertEqual(semantic.source_provider, "huggingface")
+        self.assertEqual(semantic.upstream_project, "intfloat/multilingual-e5-small")
+        self.assertEqual(semantic.source_identifier, "huggingface/intfloat/multilingual-e5-small@614241f622f53c4eeff9890bdc4f31cfecc418b3")
+        self.assertEqual(semantic.revision, semantic_manifest.revision)
+        self.assertEqual(semantic.license_variant, "mit")
+        self.assertEqual(semantic.license_name, "MIT")
+        self.assertEqual(semantic.display_name, "Búsqueda inteligente")
+        self.assertEqual(semantic.expected_download_bytes, semantic_manifest.selected_cpu_artifact.expected_bytes)
+        self.assertEqual(semantic.expected_installed_bytes, semantic_manifest.total_expected_bytes)
 
     def test_default_profiles_include_balanced_as_provisional_default(self) -> None:
         profiles = build_default_transcription_profiles()

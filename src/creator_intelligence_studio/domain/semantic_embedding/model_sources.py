@@ -176,8 +176,8 @@ def build_default_semantic_embedding_model_manifest() -> SemanticEmbeddingModelM
             SemanticEmbeddingArtifact(
                 relative_path="onnx/config.json",
                 source_url=f"https://huggingface.co/{SEMANTIC_MODEL_REPOSITORY}/resolve/{SEMANTIC_MODEL_REVISION}/onnx/config.json",
-                expected_sha256="69137736CAB8B8903A07FE8AFAAFDDA25AAC55415A12A55D1BFFA9F581ABF959",
-                expected_bytes=655,
+                expected_sha256="bbb7c1333fc4b3e27fbc9cd5d2070aabcc1d4dfb99917c3633e772f97545a6b6",
+                expected_bytes=653,
             ),
             selected_cpu_artifact,
             SemanticEmbeddingArtifact(
@@ -189,7 +189,7 @@ def build_default_semantic_embedding_model_manifest() -> SemanticEmbeddingModelM
             SemanticEmbeddingArtifact(
                 relative_path="onnx/special_tokens_map.json",
                 source_url=f"https://huggingface.co/{SEMANTIC_MODEL_REPOSITORY}/resolve/{SEMANTIC_MODEL_REVISION}/onnx/special_tokens_map.json",
-                expected_sha256=None,
+                expected_sha256="d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7",
                 expected_bytes=167,
             ),
             SemanticEmbeddingArtifact(
@@ -201,7 +201,7 @@ def build_default_semantic_embedding_model_manifest() -> SemanticEmbeddingModelM
             SemanticEmbeddingArtifact(
                 relative_path="onnx/tokenizer_config.json",
                 source_url=f"https://huggingface.co/{SEMANTIC_MODEL_REPOSITORY}/resolve/{SEMANTIC_MODEL_REVISION}/onnx/tokenizer_config.json",
-                expected_sha256=None,
+                expected_sha256="a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b",
                 expected_bytes=443,
             ),
         ),

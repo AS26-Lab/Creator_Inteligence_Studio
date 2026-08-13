@@ -12,7 +12,7 @@ This document records what is actually implemented in the repository through the
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
-- Creator Corpus now spans v33-A through v33-G: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, and an optional product semantic lifecycle.
+- Creator Corpus now spans v33-A through v33-G: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, and an adopted optional product semantic lifecycle.
 
 ## What Is Implemented
 
@@ -254,7 +254,7 @@ Status: `evaluated`, not adopted
 - `CreatorCorpusRetrievalService` can fuse lexical and semantic candidates with explicit fallback reporting
 - semantic capability remains optional and never blocks lexical retrieval
 
-Status: `implemented as optional capability`
+Status: `adopted as optional capability`
 
 ## Component Manager v32-D Resumable Download Manager Foundation
 
