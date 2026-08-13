@@ -12,7 +12,7 @@ This document records what is actually implemented in the repository through the
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
-- Creator Corpus now spans v33-A through v33-G: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, and an adopted optional product semantic lifecycle.
+- Creator Corpus now spans v33-A through v33-H: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, and a creator-scoped feedback/learning-signal foundation with explicit diagnostic validation surfaces.
 
 ## What Is Implemented
 
@@ -255,6 +255,17 @@ Status: `evaluated`, not adopted
 - semantic capability remains optional and never blocks lexical retrieval
 
 Status: `adopted as optional capability`
+
+## Creator Corpus v33-H Feedback And Learning Signals Foundation
+
+- creator feedback is captured as explicit events with creator, project, workflow, artifact, and version lineage
+- learning signals are derived from feedback events and remain creator-scoped and local-only
+- acceptance, rejection, regeneration, adoption, supersession, and edit transitions are recorded without auto-applying learned preferences
+- repeated evidence can promote a conservative signal from observed to candidate, but confirmed preferences are not automatic
+- the packaged runtime exposes developer/diagnostic validation surfaces for planning context snapshot creation and edit-feedback recording so frozen validation can invoke the canonical services without adding normal-user product controls
+- feedback events, derived signals, and their evidence links are persisted in the existing SQLite store through the v36 schema
+
+Status: `implemented` and `frozen-runtime-validated`
 
 ## Component Manager v32-D Resumable Download Manager Foundation
 

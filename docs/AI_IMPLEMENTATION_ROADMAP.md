@@ -40,7 +40,7 @@ v33-A opens the Creator Corpus foundation as a local-only storage and ingestion 
 
 - creator-scoped corpus identity, provenance, deduplication, versioning, and lifecycle are now implemented
 - transcription-derived documents can be ingested into the corpus without introducing retrieval or embeddings
-- semantic retrieval, feedback learning, and creator voice work remain paused for later phases
+- semantic retrieval remains paused for later phases; feedback learning is now implemented as a local creator-scoped foundation
 
 v33-B turns the corpus foundation into a deterministic ingestion and normalization pipeline.
 
@@ -90,6 +90,15 @@ v33-G adds the optional product lifecycle for the semantic layer.
 - hybrid retrieval is only used when the semantic capability is ready
 - no external vector database, Supabase integration, or remote embedding API is introduced
 
+v33-H adds the local creator feedback and learning-signals foundation.
+
+- feedback is recorded as canonical local events
+- learning signals are derived conservatively from those events
+- repeated evidence can promote observed signals to candidate signals
+- confirmed preferences are not automatic
+- packaged validation surfaces may invoke the canonical services for frozen checks, but they are diagnostic/developer boundaries rather than normal-user product flows
+- prompt mutation, retrieval reranking, voice learning, and fine-tuning remain paused
+
 ## Stage Gates
 
 Every stage must define:
@@ -116,7 +125,8 @@ The following stay paused until approved by a later contract:
 - final file production;
 - automatic project creation for Premiere, Resolve, or Final Cut;
 - camera or hardware control;
-- foundation model training.
+- foundation model training;
+- automatic application of learned preferences to prompts or retrieval.
 
 ## Anti-Drift Rules
 

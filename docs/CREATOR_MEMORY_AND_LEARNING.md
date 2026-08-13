@@ -169,6 +169,15 @@ v33-G product reality:
 - lexical retrieval remains the fallback and baseline
 - no feedback-learning loop has been introduced yet
 
+v33-H product reality:
+
+- creator feedback is now captured as canonical local events
+- learning signals are derived conservatively from those events
+- feedback and learning remain creator-scoped and project/workflow-scoped where applicable
+- evidence and signals are auditable and rebuildable from canonical feedback rows
+- diagnostic validation surfaces exist for packaged frozen runtime checks, but they do not change normal-user workflows
+- feedback does not automatically mutate prompt grounding, retrieval ranking, or creator voice
+
 ## Embeddings And Search
 
 Approved decisions:
