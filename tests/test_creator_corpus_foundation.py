@@ -383,7 +383,7 @@ class CreatorCorpusFoundationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             _, _, database, _, _ = _build_context(temp_dir)
             with database.connect() as connection:
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 35)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 36)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = _settings()
@@ -393,7 +393,7 @@ class CreatorCorpusFoundationTests(unittest.TestCase):
             with database.connect() as connection:
                 _create_legacy_v32_schema(connection)
                 run_migrations(connection)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 35)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 36)
 
 
 if __name__ == "__main__":

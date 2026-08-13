@@ -216,6 +216,7 @@ class StrategicPlanningService:
         self.experiment_service = experiment_service
         self.content_library_service = content_library_service
         self.platform_service = platform_service
+        self.creator_feedback_service = None
         self.preferences = {**_default_preferences(), **(preferences or {})}
         self.logger = logger or logging.getLogger("creator_intelligence_studio.strategic_planning")
         self._reports_root = self.paths.data_directory / "planning" / "reports"
@@ -516,6 +517,22 @@ class StrategicPlanningService:
             reason=reason,
             reviewer=reviewer,
         )
+        plan = self.get_plan(plan_id)
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None and plan is not None:
+            feedback_service.record_acceptance(
+                creator_id=plan.creator_id,
+                workflow_type="strategic_planning",
+                artifact_type="strategic_plan",
+                artifact_id=plan.id,
+                project_id=None,
+                metadata={
+                    "reason": reason,
+                    "reviewer": reviewer,
+                    "review_type": "plan_review",
+                    "decision": ReviewDecision.APPROVE.value,
+                },
+            )
         return self.update_plan(plan_id, status=PlanStatus.APPROVED.value)
 
     def activate_plan(self, plan_id: str, *, reason: str = "manual_activation", reviewer: str | None = None) -> PlanningPlan:
@@ -582,6 +599,21 @@ class StrategicPlanningService:
         if old_plan is None:
             raise StrategicPlanningNotFoundError("El plan no existe.")
         self.update_plan(plan_id, status=PlanStatus.SUPERSEDED.value)
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None:
+            feedback_service.record_supersession(
+                creator_id=old_plan.creator_id,
+                workflow_type="strategic_planning",
+                artifact_type="strategic_plan",
+                artifact_id=old_plan.id,
+                project_id=None,
+                metadata={
+                    "reason": reason,
+                    "replacement_name": replacement_name,
+                    "previous_status": old_plan.status.value if hasattr(old_plan.status, "value") else str(old_plan.status),
+                    "new_status": PlanStatus.SUPERSEDED.value,
+                },
+            )
         return self.version_plan(plan_id, name=replacement_name, reason=reason)
 
     def record_review(

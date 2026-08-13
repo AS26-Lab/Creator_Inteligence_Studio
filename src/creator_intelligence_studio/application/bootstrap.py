@@ -85,6 +85,7 @@ from creator_intelligence_studio.application.services.creator_language_service i
     CreatorLanguageService,
     build_creator_language_service,
 )
+from creator_intelligence_studio.application.services.creator_feedback_service import CreatorFeedbackService
 from creator_intelligence_studio.application.services.creative_packaging_service import (
     CreativePackagingService,
     build_creative_packaging_service,
@@ -203,6 +204,9 @@ from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_memor
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_corpus_repository import (
     SQLiteCreatorCorpusRepository,
 )
+from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_feedback_repository import (
+    SQLiteCreatorFeedbackRepository,
+)
 from creator_intelligence_studio.infrastructure.persistence.sqlite_creator_language_repository import (
     SQLiteCreatorLanguageRepository,
 )
@@ -287,6 +291,7 @@ class ServiceContext(BootstrapContext):
     creator_corpus_service: CreatorCorpusService | None = None
     creator_corpus_retrieval_service: CreatorCorpusRetrievalService | None = None
     creator_language_service: CreatorLanguageService | None = None
+    creator_feedback_service: CreatorFeedbackService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
     instagram_service: InstagramIntegrationService | None = None
@@ -659,6 +664,18 @@ def _load_service_context() -> ServiceContext:
         packaging_service=creative_packaging_service,
         logger=context.logger,
     )
+    creator_feedback_service = CreatorFeedbackService(
+        repository=SQLiteCreatorFeedbackRepository(database),
+        project_repository=project_repository,
+        brief_service=brief_service,
+        production_service=production_service,
+        planning_service=planning_service,
+        ai_runtime_service=ai_runtime_service,
+        logger=context.logger,
+    )
+    brief_service.creator_feedback_service = creator_feedback_service
+    production_service.creator_feedback_service = creator_feedback_service
+    planning_service.creator_feedback_service = creator_feedback_service
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
         paths=context.paths,
@@ -715,6 +732,7 @@ def _load_service_context() -> ServiceContext:
         creator_corpus_service=creator_corpus_service,
         creator_corpus_retrieval_service=creator_corpus_retrieval_service,
         creator_language_service=creator_language_service,
+        creator_feedback_service=creator_feedback_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
         instagram_service=instagram_service,

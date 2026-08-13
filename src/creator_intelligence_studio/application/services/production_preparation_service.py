@@ -166,6 +166,7 @@ class ProductionPreparationService:
         self.audience_service = audience_service
         self.platform_service = platform_service
         self.packaging_service = packaging_service
+        self.creator_feedback_service = None
         self.preferences = {
             "default_outline_type": ScriptOutlineType.UNKNOWN.value,
             "default_platform": [],
@@ -1404,6 +1405,29 @@ class ProductionPreparationService:
             "created_at": _now(),
         }
         self._upsert("production_reviews", review)
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None:
+            feedback_kwargs = {
+                "creator_id": outline.creator_id,
+                "workflow_type": "production_preparation",
+                "artifact_type": "script_outline",
+                "artifact_id": outline.id,
+                "project_id": None,
+                "metadata": {
+                    "decision": decision,
+                    "reason": reason,
+                    "reviewer": reviewer,
+                    "review_type": "outline_review",
+                    "previous_status": outline.status.value if hasattr(outline.status, "value") else str(outline.status),
+                    "new_status": new_status.value,
+                },
+            }
+            if decision == "approve" or decision in {"approve_scene_planning", "approve_recording_preparation", "approve_recording_readiness"}:
+                feedback_service.record_acceptance(**feedback_kwargs)
+            elif decision == "reject":
+                feedback_service.record_rejection(**feedback_kwargs)
+            elif decision == "supersede":
+                feedback_service.record_supersession(**feedback_kwargs)
         return self.get_outline(outline_id) or outline
 
     def version_outline(self, outline_id: str, *, reason: str = "versioned_outline") -> ProductionRecord:
@@ -1439,6 +1463,21 @@ class ProductionPreparationService:
             self._upsert("script_outlines", {**outline.to_dict(), "status": ScriptOutlineStatus.SUPERSEDED.value, "updated_at": _now()})
             return replacement
         self._upsert("script_outlines", {**outline.to_dict(), "status": ScriptOutlineStatus.SUPERSEDED.value, "updated_at": _now()})
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None:
+            feedback_service.record_supersession(
+                creator_id=outline.creator_id,
+                workflow_type="production_preparation",
+                artifact_type="script_outline",
+                artifact_id=outline.id,
+                project_id=None,
+                metadata={
+                    "reason": reason,
+                    "replacement_id": replacement_id,
+                    "previous_status": outline.status.value if hasattr(outline.status, "value") else str(outline.status),
+                    "new_status": ScriptOutlineStatus.SUPERSEDED.value,
+                },
+            )
         children = self._entities(
             "script_outlines",
             where="creator_id = ? AND parent_outline_id = ?",

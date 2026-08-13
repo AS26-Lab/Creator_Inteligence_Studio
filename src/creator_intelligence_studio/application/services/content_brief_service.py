@@ -197,6 +197,7 @@ class ContentBriefService:
         self.market_service = market_service
         self.platform_service = platform_service
         self.packaging_service = packaging_service
+        self.creator_feedback_service = None
         self.preferences = {**_default_preferences(), **(preferences or {})}
         self.logger = logger or logging.getLogger("creator_intelligence_studio.content_briefs")
         self._reports_root = self.paths.data_directory / "briefs" / "reports"
@@ -1231,6 +1232,29 @@ class ContentBriefService:
             created_at=_now(),
         )
         self._upsert("brief_reviews", review.to_dict())
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None:
+            feedback_kwargs = {
+                "creator_id": brief.creator_id,
+                "workflow_type": "content_brief",
+                "artifact_type": "content_brief",
+                "artifact_id": brief.id,
+                "project_id": None,
+                "metadata": {
+                    "decision": decision,
+                    "reason": reason,
+                    "reviewer": reviewer,
+                    "review_type": "brief_review",
+                    "previous_status": brief.status.value if hasattr(brief.status, "value") else str(brief.status),
+                    "new_status": new_status.value,
+                },
+            }
+            if decision in {ReviewDecision.APPROVE.value, ReviewDecision.APPROVE_PREPRODUCTION.value, ReviewDecision.APPROVE_PRODUCTION_READINESS.value}:
+                feedback_service.record_acceptance(**feedback_kwargs)
+            elif decision == ReviewDecision.REJECT.value:
+                feedback_service.record_rejection(**feedback_kwargs)
+            elif decision == ReviewDecision.SUPERSEDE.value:
+                feedback_service.record_supersession(**feedback_kwargs)
         return self.get_brief(brief_id) or updated
 
     def version_brief(self, brief_id: str, *, reason: str = "versioned_brief") -> BriefRecord:
@@ -1272,6 +1296,21 @@ class ContentBriefService:
             self._upsert("content_briefs", {**brief.to_dict(), "status": BriefStatus.SUPERSEDED.value, "updated_at": _now()})
             return replacement
         self._upsert("content_briefs", {**brief.to_dict(), "status": BriefStatus.SUPERSEDED.value, "updated_at": _now()})
+        feedback_service = getattr(self, "creator_feedback_service", None)
+        if feedback_service is not None:
+            feedback_service.record_supersession(
+                creator_id=brief.creator_id,
+                workflow_type="content_brief",
+                artifact_type="content_brief",
+                artifact_id=brief.id,
+                project_id=None,
+                metadata={
+                    "reason": reason,
+                    "replacement_id": replacement_id,
+                    "previous_status": brief.status.value if hasattr(brief.status, "value") else str(brief.status),
+                    "new_status": BriefStatus.SUPERSEDED.value,
+                },
+            )
         existing_children = self._entities(
             "content_briefs",
             where="creator_id = ? AND parent_brief_id = ?",

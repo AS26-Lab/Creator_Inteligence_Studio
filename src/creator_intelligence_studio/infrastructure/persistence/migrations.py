@@ -9253,6 +9253,110 @@ def migration_35(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_component_catalog_category_status ON component_catalog(category, status)")
 
 
+def migration_36(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_feedback_events (
+            id TEXT PRIMARY KEY,
+            dedupe_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            workflow_type TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            source_version_id TEXT,
+            result_version_id TEXT,
+            ai_execution_id TEXT,
+            event_type TEXT NOT NULL CHECK (
+                event_type IN ('accepted', 'rejected', 'edited', 'regenerated', 'adopted', 'superseded')
+            ),
+            event_source TEXT NOT NULL CHECK (
+                event_source IN ('user_action', 'version_transition', 'workflow_action', 'system_observation')
+            ),
+            signal_explicitness TEXT NOT NULL CHECK (signal_explicitness IN ('explicit', 'behavioral')),
+            created_at TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (ai_execution_id) REFERENCES ai_executions(execution_uuid) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_creator_id ON creator_feedback_events(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_project_id ON creator_feedback_events(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_workflow_type ON creator_feedback_events(workflow_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_artifact_id ON creator_feedback_events(artifact_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_source_version_id ON creator_feedback_events(source_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_result_version_id ON creator_feedback_events(result_version_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_ai_execution_id ON creator_feedback_events(ai_execution_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_event_type ON creator_feedback_events(event_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_feedback_events_created_at ON creator_feedback_events(created_at)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_learning_signals (
+            id TEXT PRIMARY KEY,
+            signal_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            workflow_type TEXT,
+            scope TEXT NOT NULL CHECK (
+                scope IN ('creator_global', 'project_specific', 'workflow_specific')
+            ),
+            signal_type TEXT NOT NULL CHECK (
+                signal_type IN (
+                    'acceptance',
+                    'rejection',
+                    'regeneration',
+                    'edit_frequency',
+                    'length_change',
+                    'content_removed',
+                    'content_added',
+                    'version_adoption'
+                )
+            ),
+            signal_value TEXT NOT NULL,
+            polarity TEXT NOT NULL CHECK (polarity IN ('positive', 'negative', 'neutral')),
+            strength REAL NOT NULL,
+            confidence TEXT NOT NULL CHECK (confidence IN ('low', 'medium', 'high')),
+            evidence_count INTEGER NOT NULL,
+            supporting_event_count INTEGER NOT NULL,
+            contradicting_event_count INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('observed', 'candidate', 'confirmed', 'dismissed')),
+            first_observed_at TEXT NOT NULL,
+            last_observed_at TEXT NOT NULL,
+            algorithm_version TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signals_creator_id ON creator_learning_signals(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signals_project_id ON creator_learning_signals(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signals_workflow_type ON creator_learning_signals(workflow_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signals_signal_type ON creator_learning_signals(signal_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signals_status ON creator_learning_signals(status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_learning_signal_evidence (
+            id TEXT PRIMARY KEY,
+            signal_id TEXT NOT NULL,
+            feedback_event_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (signal_id) REFERENCES creator_learning_signals(id) ON DELETE CASCADE,
+            FOREIGN KEY (feedback_event_id) REFERENCES creator_feedback_events(id) ON DELETE CASCADE,
+            UNIQUE (signal_id, feedback_event_id)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signal_evidence_signal_id ON creator_learning_signal_evidence(signal_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signal_evidence_event_id ON creator_learning_signal_evidence(feedback_event_id)")
+
+
 def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
     return {str(row[1]) for row in rows}
@@ -9420,6 +9524,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=33, name="creator_corpus_foundation"),
     Migration(version=34, name="creator_corpus_retrieval_foundation"),
     Migration(version=35, name="creator_semantic_index_foundation"),
+    Migration(version=36, name="creator_feedback_and_learning_signals_foundation"),
 )
 
 
@@ -9539,6 +9644,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_34(connection)
                 elif migration.version == 35:
                     migration_35(connection)
+                elif migration.version == 36:
+                    migration_36(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(
