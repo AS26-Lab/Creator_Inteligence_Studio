@@ -251,6 +251,10 @@ from creator_intelligence_studio.presentation.cli.production_cli import (
     build_production_parser,
     handle_production_command,
 )
+from creator_intelligence_studio.presentation.cli.feedback_cli import (
+    build_feedback_parser,
+    handle_feedback_command,
+)
 from creator_intelligence_studio.presentation.cli.ai_runtime_cli import (
     build_ai_parser,
     handle_ai_command,
@@ -478,6 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_planning_parser(subparsers)
     build_briefs_parser(subparsers)
     build_production_parser(subparsers)
+    build_feedback_parser(subparsers)
     build_ai_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
@@ -5991,6 +5996,7 @@ def dispatch(
     planning_service=None,
     brief_service=None,
     production_service=None,
+    creator_feedback_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6095,6 +6101,19 @@ def dispatch(
             if production_service is None:
                 raise DomainError("El servicio de production no esta disponible.")
             return handle_production_command(args, service=production_service, stdout=stdout, stderr=stderr)
+        if args.entity == "feedback":
+            if creator_feedback_service is None:
+                raise DomainError("El servicio de feedback no esta disponible.")
+            return handle_feedback_command(
+                args,
+                service=creator_feedback_service,
+                stdout=stdout,
+                stderr=stderr,
+                catalog_service=service,
+                planning_service=planning_service,
+                brief_service=brief_service,
+                production_service=production_service,
+            )
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

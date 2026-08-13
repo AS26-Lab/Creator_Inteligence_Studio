@@ -14,6 +14,7 @@ from creator_intelligence_studio.application.commands.strategic_planning_command
     ReviewStrategicPlanCommand,
 )
 from creator_intelligence_studio.application.services.strategic_planning_service import StrategicPlanningService
+from creator_intelligence_studio.domain.errors import DomainError
 from creator_intelligence_studio.domain.strategic_planning.errors import StrategicPlanningNotFoundError
 from creator_intelligence_studio.domain.strategic_planning.entities import ContentPillar, Initiative, PlanningConflict, PlanningScenario, PlanningSnapshot, StrategicObjective, StrategyTheme
 
@@ -58,6 +59,12 @@ def build_planning_parser(subparsers) -> None:
     plan_show = planning_sub.add_parser("plan-show", help="Mostrar plan")
     plan_show.add_argument("--plan-id", required=True)
     plan_show.add_argument("--json", action="store_true")
+
+    context_snapshot_create = planning_sub.add_parser("context-snapshot-create", help="Crear snapshot de contexto estrategico")
+    context_snapshot_create.add_argument("--creator-id", required=True)
+    context_snapshot_create.add_argument("--project-id")
+    context_snapshot_create.add_argument("--recommendation-snapshot-id")
+    context_snapshot_create.add_argument("--json", action="store_true")
 
     plan_update = planning_sub.add_parser("plan-update", help="Actualizar plan")
     plan_update.add_argument("--plan-id", required=True)
@@ -355,7 +362,7 @@ def build_planning_parser(subparsers) -> None:
     export_report.add_argument("--json", action="store_true")
 
 
-def handle_planning_command(args, *, service: StrategicPlanningService, stdout, stderr) -> int:
+def handle_planning_command(args, *, service: StrategicPlanningService, stdout, stderr, catalog_service=None) -> int:
     try:
         if args.action == "overview":
             payload = service.build_overview(args.creator_id) if service.list_plans(args.creator_id) else {"creator_id": args.creator_id, "plans": []}
@@ -377,6 +384,30 @@ def handle_planning_command(args, *, service: StrategicPlanningService, stdout, 
                 timezone=args.timezone,
             )
             print(_dump(plan.to_dict()), file=stdout)
+            return 0
+        if args.action == "context-snapshot-create":
+            project_id = getattr(args, "project_id", None)
+            if project_id and catalog_service is not None:
+                project = catalog_service.get_project(project_id)
+                if project.creator_id != args.creator_id:
+                    raise DomainError("El proyecto no pertenece al creador indicado.")
+            command = CreatePlanningContextCommand(args.creator_id)
+            snapshot = service.create_context_snapshot(
+                command.creator_id,
+                recommendation_snapshot_id=args.recommendation_snapshot_id,
+            )
+            print(
+                _dump(
+                    {
+                        "snapshot_id": snapshot.id,
+                        "creator_id": snapshot.creator_id,
+                        "project_id": project_id,
+                        "snapshot_type": "planning_context_snapshot",
+                        "context_version": snapshot.context_version,
+                    }
+                ),
+                file=stdout,
+            )
             return 0
         if args.action == "plan-show":
             plan = service.get_plan(args.plan_id)

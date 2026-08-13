@@ -831,6 +831,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             planning_service=context.planning_service,
             brief_service=context.brief_service,
             production_service=context.production_service,
+            creator_feedback_service=context.creator_feedback_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,
