@@ -76,6 +76,9 @@ from creator_intelligence_studio.application.services.production_preparation_ser
 from creator_intelligence_studio.application.services.creator_memory_service import (
     CreatorMemoryService,
 )
+from creator_intelligence_studio.application.services.creator_preference_synthesis_service import (
+    CreatorPreferenceSynthesisService,
+)
 from creator_intelligence_studio.application.services.creator_language_service import (
     CreatorLanguageAnalysisDetail,
     CreatorLanguageExportResult,
@@ -338,6 +341,7 @@ class WorkspaceViewModel:
         experiment_service: ExperimentService | None = None,
         recommendation_service: RecommendationEngineService | None = None,
         creator_memory_service: CreatorMemoryService | None = None,
+        creator_preference_service: CreatorPreferenceSynthesisService | None = None,
         creator_language_service: CreatorLanguageService | None = None,
         creative_packaging_service: CreativePackagingService | None = None,
         youtube_service: YouTubeIntegrationService | None = None,
@@ -479,6 +483,7 @@ class WorkspaceViewModel:
         self.experiment_service = experiment_service
         self.recommendation_service = recommendation_service
         self.creator_memory_service = creator_memory_service
+        self.creator_preference_service = creator_preference_service
         self.creator_language_service = creator_language_service
         self.creative_packaging_service = creative_packaging_service
         self.youtube_service = youtube_service
@@ -3468,6 +3473,74 @@ class WorkspaceViewModel:
         if self.creator_memory_service is None:
             raise RuntimeError("El servicio de creator memory no esta disponible.")
         return self.creator_memory_service.record_memory_feedback(**kwargs)
+
+    def synthesize_creator_preferences(self, creator_id: str):
+        if self.creator_preference_service is None:
+            return []
+        return self.creator_preference_service.rebuild_candidates(creator_id)
+
+    def list_creator_preference_candidates(self, creator_id: str, filters=None):
+        if self.creator_preference_service is None:
+            return []
+        filters = filters or {}
+        return self.creator_preference_service.list_candidates(
+            creator_id,
+            project_id=filters.get("project_id"),
+            workflow_type=filters.get("workflow_type"),
+            status=filters.get("status"),
+            preference_type=filters.get("preference_type"),
+            limit=int(filters.get("limit", 100)),
+            offset=int(filters.get("offset", 0)),
+        )
+
+    def get_creator_preference_candidate(self, candidate_id: str):
+        if self.creator_preference_service is None:
+            return None
+        return self.creator_preference_service.get_candidate(candidate_id)
+
+    def confirm_creator_preference_candidate(self, candidate_id: str, *, confirmed_by: str, edited_value: str | None = None):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.confirm_candidate(candidate_id, confirmed_by=confirmed_by, edited_value=edited_value)
+
+    def edit_and_confirm_creator_preference_candidate(self, candidate_id: str, *, confirmed_by: str, edited_value: str):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.edit_and_confirm_candidate(candidate_id, confirmed_by=confirmed_by, edited_value=edited_value)
+
+    def dismiss_creator_preference_candidate(self, candidate_id: str, *, dismissed_by: str, reason: str):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.dismiss_candidate(candidate_id, dismissed_by=dismissed_by, reason=reason)
+
+    def list_creator_confirmed_preferences(self, creator_id: str, filters=None):
+        if self.creator_preference_service is None:
+            return []
+        filters = filters or {}
+        return self.creator_preference_service.list_confirmed_preferences(
+            creator_id,
+            project_id=filters.get("project_id"),
+            workflow_type=filters.get("workflow_type"),
+            active=filters.get("active"),
+            preference_type=filters.get("preference_type"),
+            limit=int(filters.get("limit", 100)),
+            offset=int(filters.get("offset", 0)),
+        )
+
+    def deactivate_creator_preference(self, preference_id: str):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.deactivate_preference(preference_id)
+
+    def reactivate_creator_preference(self, preference_id: str):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.reactivate_preference(preference_id)
+
+    def get_creator_preference_snapshot(self, creator_id: str):
+        if self.creator_preference_service is None:
+            raise RuntimeError("El servicio de preferencias no esta disponible.")
+        return self.creator_preference_service.preference_snapshot(creator_id)
 
     def list_creator_memory_feedback(self, creator_id: str):
         if self.creator_memory_service is None:

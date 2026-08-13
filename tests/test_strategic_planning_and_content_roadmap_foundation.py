@@ -257,7 +257,7 @@ class StrategicPlanningFoundationTests(unittest.TestCase):
                 first_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
                 run_migrations(connection)
                 second_count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
-            self.assertEqual(versions[-1], 36)
+            self.assertEqual(versions[-1], 37)
             self.assertIn("planning_context_snapshots", tables)
             self.assertIn("strategic_plans", tables)
             self.assertIn("planning_backlog_items", tables)

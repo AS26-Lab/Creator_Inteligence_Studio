@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
+from .creator_preferences_view import CreatorPreferencesView
 
 
 def _item(value: object) -> QTableWidgetItem:
@@ -42,6 +43,7 @@ class CreatorMemoryView(QWidget):
         self.objectives_tab = QWidget()
         self.evidence_tab = QWidget()
         self.history_tab = QWidget()
+        self.preferences_tab = QWidget()
         self.tabs.addTab(self.profile_tab, "Profile")
         self.tabs.addTab(self.traits_tab, "Traits")
         self.tabs.addTab(self.vocabulary_tab, "Vocabulary")
@@ -51,6 +53,7 @@ class CreatorMemoryView(QWidget):
         self.tabs.addTab(self.objectives_tab, "Objectives")
         self.tabs.addTab(self.evidence_tab, "Evidence")
         self.tabs.addTab(self.history_tab, "History")
+        self.tabs.addTab(self.preferences_tab, "Preferences")
 
         self._build_profile_tab()
         self._build_traits_tab()
@@ -61,6 +64,7 @@ class CreatorMemoryView(QWidget):
         self._build_objectives_tab()
         self._build_evidence_tab()
         self._build_history_tab()
+        self._build_preferences_tab()
 
         title = QLabel("Creator Memory")
         title.setObjectName("TitleLabel")
@@ -368,6 +372,11 @@ class CreatorMemoryView(QWidget):
         layout.addWidget(self.snapshots_table)
         layout.addWidget(self.feedback_table)
 
+    def _build_preferences_tab(self) -> None:
+        self.preferences_view = CreatorPreferencesView(self.workspace)
+        layout = QVBoxLayout(self.preferences_tab)
+        layout.addWidget(self.preferences_view)
+
     def refresh(self) -> None:
         creator_id = self._selected_creator_id()
         if creator_id is None:
@@ -397,6 +406,7 @@ class CreatorMemoryView(QWidget):
         self._populate_snapshots(detail.snapshots)
         self._populate_feedback(detail.feedback)
         self._populate_objectives(detail.profile.objectives_json)
+        self.preferences_view.refresh()
 
     def _clear_tables(self) -> None:
         for table in (

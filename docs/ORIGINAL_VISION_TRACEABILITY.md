@@ -20,6 +20,7 @@ This document maps original product intent to the current repository state. It i
 | Local-first, but quality over dogma | `README.md`, `docs/AI_ML_ARCHITECTURE.md` | implemented as direction | needs AI-specific contract | hybrid architecture is approved | AI Runtime and Provider Orchestration Foundation |
 | Safe provider execution through a central AI runtime | `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` | implemented | only provider diagnostics are enabled in v31 | keep modules off direct provider calls | Component Manager and Local Transcription Foundation |
 | Creator feedback and learning signals foundation | `docs/CREATOR_MEMORY_AND_LEARNING.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | implemented | does not auto-apply preferences to prompts or retrieval | keep feedback canonical, conservative, local, and diagnostic-only at the validation surface | Feedback Learning Foundation |
+| Creator preference synthesis and confirmation | `docs/CREATOR_PREFERENCES_AND_CONFIRMATION_ARCHITECTURE.md`, `docs/CREATOR_CORPUS_V33_I_PREFERENCE_SYNTHESIS.md` | implemented | does not auto-apply confirmed preferences to prompts, retrieval, or voice | keep confirmed preferences separate from raw evidence and explicit human control | Preference Confirmation Foundation |
 
 ## Requirement Groups
 

@@ -178,6 +178,14 @@ v33-H product reality:
 - diagnostic validation surfaces exist for packaged frozen runtime checks, but they do not change normal-user workflows
 - feedback does not automatically mutate prompt grounding, retrieval ranking, or creator voice
 
+v33-I product reality:
+
+- deterministic preference candidates are synthesized from repeated signals
+- confirmed preferences are stored separately from feedback events and learning signals
+- confirm, edit-and-confirm, dismiss, deactivate, and reactivate flows are explicit
+- project-scoped evidence does not automatically become creator-global preference
+- no confirmed preference is applied automatically to prompts, retrieval, or creator voice
+
 ## Embeddings And Search
 
 Approved decisions:
@@ -220,6 +228,13 @@ Benchmark language and constraints:
 Cycle:
 
 context -> generation -> creator decision -> corrected version -> diff -> observation -> candidate pattern -> repeated pattern -> human confirmation -> active preference -> obsolete or replaced
+
+v33-I keeps the same chain but splits the middle into:
+
+- observation
+- conservative candidate synthesis
+- explicit confirmation or dismissal
+- separate confirmed preference state
 
 Store:
 

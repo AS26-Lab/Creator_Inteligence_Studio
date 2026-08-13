@@ -9357,6 +9357,99 @@ def migration_36(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_learning_signal_evidence_event_id ON creator_learning_signal_evidence(feedback_event_id)")
 
 
+def migration_37(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_preference_candidates (
+            id TEXT PRIMARY KEY,
+            candidate_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            workflow_type TEXT,
+            scope TEXT NOT NULL CHECK (
+                scope IN ('creator_global', 'project_specific', 'workflow_specific')
+            ),
+            preference_type TEXT NOT NULL CHECK (
+                preference_type IN ('content_length_preference')
+            ),
+            proposed_value TEXT NOT NULL,
+            evidence_count INTEGER NOT NULL,
+            supporting_signal_count INTEGER NOT NULL,
+            conflicting_signal_count INTEGER NOT NULL,
+            confidence TEXT NOT NULL CHECK (confidence IN ('low', 'medium', 'high')),
+            status TEXT NOT NULL CHECK (status IN ('observed', 'candidate', 'confirmed', 'dismissed')),
+            dismissed_evidence_count INTEGER NOT NULL DEFAULT 0,
+            source_signal_ids_json TEXT NOT NULL DEFAULT '[]',
+            explanation_json TEXT NOT NULL DEFAULT '{}',
+            algorithm_version TEXT NOT NULL,
+            first_observed_at TEXT NOT NULL,
+            last_observed_at TEXT NOT NULL,
+            confirmed_preference_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (confirmed_preference_id) REFERENCES creator_preferences(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidates_creator_id ON creator_preference_candidates(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidates_project_id ON creator_preference_candidates(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidates_workflow_type ON creator_preference_candidates(workflow_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidates_preference_type ON creator_preference_candidates(preference_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidates_status ON creator_preference_candidates(status)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_preference_candidate_evidence (
+            id TEXT PRIMARY KEY,
+            candidate_id TEXT NOT NULL,
+            learning_signal_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (candidate_id) REFERENCES creator_preference_candidates(id) ON DELETE CASCADE,
+            FOREIGN KEY (learning_signal_id) REFERENCES creator_learning_signals(id) ON DELETE CASCADE,
+            UNIQUE (candidate_id, learning_signal_id)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidate_evidence_candidate_id ON creator_preference_candidate_evidence(candidate_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preference_candidate_evidence_signal_id ON creator_preference_candidate_evidence(learning_signal_id)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS creator_preferences (
+            id TEXT PRIMARY KEY,
+            preference_key TEXT NOT NULL UNIQUE,
+            creator_id TEXT NOT NULL,
+            project_id TEXT,
+            workflow_type TEXT,
+            scope TEXT NOT NULL CHECK (
+                scope IN ('creator_global', 'project_specific', 'workflow_specific')
+            ),
+            preference_type TEXT NOT NULL CHECK (
+                preference_type IN ('content_length_preference')
+            ),
+            value_json TEXT NOT NULL,
+            source_candidate_id TEXT,
+            confirmed_by TEXT NOT NULL,
+            confirmed_at TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (creator_id) REFERENCES creators(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_candidate_id) REFERENCES creator_preference_candidates(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preferences_creator_id ON creator_preferences(creator_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preferences_project_id ON creator_preferences(project_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preferences_workflow_type ON creator_preferences(workflow_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preferences_preference_type ON creator_preferences(preference_type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_creator_preferences_active ON creator_preferences(active)")
+
+
 def _component_catalog_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("PRAGMA table_info(component_catalog)").fetchall()
     return {str(row[1]) for row in rows}
@@ -9525,6 +9618,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=34, name="creator_corpus_retrieval_foundation"),
     Migration(version=35, name="creator_semantic_index_foundation"),
     Migration(version=36, name="creator_feedback_and_learning_signals_foundation"),
+    Migration(version=37, name="creator_preference_confirmation_foundation"),
 )
 
 
@@ -9646,6 +9740,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
                     migration_35(connection)
                 elif migration.version == 36:
                     migration_36(connection)
+                elif migration.version == 37:
+                    migration_37(connection)
                 else:  # pragma: no cover - no more migrations yet
                     migration.apply(connection)
                 connection.execute(

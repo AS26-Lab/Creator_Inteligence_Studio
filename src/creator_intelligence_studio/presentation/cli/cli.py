@@ -255,6 +255,10 @@ from creator_intelligence_studio.presentation.cli.feedback_cli import (
     build_feedback_parser,
     handle_feedback_command,
 )
+from creator_intelligence_studio.presentation.cli.preferences_cli import (
+    build_preferences_parser,
+    handle_preferences_command,
+)
 from creator_intelligence_studio.presentation.cli.ai_runtime_cli import (
     build_ai_parser,
     handle_ai_command,
@@ -483,6 +487,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_briefs_parser(subparsers)
     build_production_parser(subparsers)
     build_feedback_parser(subparsers)
+    build_preferences_parser(subparsers)
     build_ai_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
@@ -5997,6 +6002,7 @@ def dispatch(
     brief_service=None,
     production_service=None,
     creator_feedback_service=None,
+    creator_preference_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6114,6 +6120,10 @@ def dispatch(
                 brief_service=brief_service,
                 production_service=production_service,
             )
+        if args.entity == "preferences":
+            if creator_preference_service is None:
+                raise DomainError("El servicio de preferencias no esta disponible.")
+            return handle_preferences_command(args, service=creator_preference_service, stdout=stdout, stderr=stderr)
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

@@ -99,6 +99,13 @@ v33-H adds the local creator feedback and learning-signals foundation.
 - packaged validation surfaces may invoke the canonical services for frozen checks, but they are diagnostic/developer boundaries rather than normal-user product flows
 - prompt mutation, retrieval reranking, voice learning, and fine-tuning remain paused
 
+v33-I adds deterministic preference synthesis and human confirmation.
+
+- repeated learning signals can become reviewable preference candidates
+- confirm, edit-and-confirm, dismiss, deactivate, and reactivate are explicit user decisions
+- confirmed preferences stay separate from feedback events and derived signals
+- no confirmed preference is automatically applied to prompts, retrieval, or creator voice
+
 ## Stage Gates
 
 Every stage must define:
@@ -127,6 +134,7 @@ The following stay paused until approved by a later contract:
 - camera or hardware control;
 - foundation model training;
 - automatic application of learned preferences to prompts or retrieval.
+- automatic application of confirmed preferences to prompts, retrieval, or creator voice.
 
 ## Anti-Drift Rules
 

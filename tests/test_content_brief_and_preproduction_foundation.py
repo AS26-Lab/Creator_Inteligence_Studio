@@ -555,7 +555,7 @@ class ContentBriefFoundationTests(unittest.TestCase):
                 self.assertIn("content_briefs", tables)
                 self.assertIn("brief_reports", tables)
                 schema_version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
-                self.assertEqual(schema_version, 36)
+                self.assertEqual(schema_version, 37)
 
     def test_brief_generation_links_sources_and_preserves_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

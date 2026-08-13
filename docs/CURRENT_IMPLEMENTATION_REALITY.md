@@ -7,12 +7,12 @@ This document records what is actually implemented in the repository through the
 ## Cut-Off State
 
 - canonical starting commit: `64f380dd4adf0fa9462188401eabd5e228fec387`
-- current migration ceiling: `v35`
+- current migration ceiling: `v37`
 - repository state at inspection time: clean
 - `v31` exists and introduces the first AI runtime foundation
 - AI runtime orchestration has started as a controlled provider layer
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
-- Creator Corpus now spans v33-A through v33-H: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, and a creator-scoped feedback/learning-signal foundation with explicit diagnostic validation surfaces.
+- Creator Corpus now spans v33-A through v33-I: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, and deterministic preference synthesis with explicit confirmation surfaces.
 
 ## What Is Implemented
 
@@ -194,12 +194,11 @@ Status: `requires_ml`
 ## What Is Not Started
 
 - Semantic Retrieval Foundation
-- Feedback Learning Foundation
 - Creator Voice Workbench
 - Human-Guided Script Drafting Foundation
 - automatic video editing
 
-Status: `semantic retrieval adoption is optional; feedback learning and later phases remain not started`
+Status: `semantic retrieval adoption is optional; creator voice, script drafting, and automatic video editing remain not started`
 
 ## Creator Corpus v33-A Foundation
 
@@ -263,7 +262,18 @@ Status: `adopted as optional capability`
 - acceptance, rejection, regeneration, adoption, supersession, and edit transitions are recorded without auto-applying learned preferences
 - repeated evidence can promote a conservative signal from observed to candidate, but confirmed preferences are not automatic
 - the packaged runtime exposes developer/diagnostic validation surfaces for planning context snapshot creation and edit-feedback recording so frozen validation can invoke the canonical services without adding normal-user product controls
-- feedback events, derived signals, and their evidence links are persisted in the existing SQLite store through the v36 schema
+- feedback events, derived signals, and their evidence links are persisted in the existing SQLite store through the v37 schema
+
+Status: `implemented` and `frozen-runtime-validated`
+
+## Creator Corpus v33-I Preference Synthesis And Confirmation
+
+- repeated learning signals can be synthesized into reviewable preference candidates
+- confirmed preferences are stored separately from raw events and derived signals
+- confirm, edit-and-confirm, dismiss, deactivate, and reactivate are explicit human-controlled actions
+- candidate explanations stay conservative and human-readable
+- the packaged runtime exposes diagnostic CLI surfaces for preference validation
+- confirmed preferences do not yet mutate prompts, retrieval, or creator voice
 
 Status: `implemented` and `frozen-runtime-validated`
 

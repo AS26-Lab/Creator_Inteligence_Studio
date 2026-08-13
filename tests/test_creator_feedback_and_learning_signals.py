@@ -138,7 +138,7 @@ class CreatorFeedbackAndLearningSignalsTests(unittest.TestCase):
                 run_migrations(connection)
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertEqual(versions[-1], 36)
+            self.assertEqual(versions[-1], 37)
             self.assertIn("creator_feedback_events", tables)
             self.assertIn("creator_learning_signals", tables)
             self.assertIn("creator_learning_signal_evidence", tables)
