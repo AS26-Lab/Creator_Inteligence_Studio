@@ -13,6 +13,7 @@ This document records what is actually implemented in the repository through the
 - AI runtime orchestration has started as a controlled provider layer
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 - Creator Corpus now spans v33-A through v33-I: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, and deterministic preference synthesis with explicit confirmation surfaces.
+- Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
 
 ## What Is Implemented
 
@@ -274,6 +275,17 @@ Status: `implemented` and `frozen-runtime-validated`
 - candidate explanations stay conservative and human-readable
 - the packaged runtime exposes diagnostic CLI surfaces for preference validation
 - confirmed preferences do not yet mutate prompts, retrieval, or creator voice
+
+Status: `implemented` and `frozen-runtime-validated`
+
+## Creator Corpus v33-J Confirmed Preference Application
+
+- confirmed + active preferences can be rendered into bounded application bundles
+- current user and project / artifact instructions outrank stored preferences
+- content brief context assembly consumes the application bundle
+- production preparation consumes the same boundary and stays scope-aware
+- the application bundle is offline, deterministic, and provider-independent
+- unconfirmed, dismissed, or inactive preferences remain non-authoritative
 
 Status: `implemented` and `frozen-runtime-validated`
 

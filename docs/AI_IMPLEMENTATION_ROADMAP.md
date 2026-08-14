@@ -106,6 +106,15 @@ v33-I adds deterministic preference synthesis and human confirmation.
 - confirmed preferences stay separate from feedback events and derived signals
 - no confirmed preference is automatically applied to prompts, retrieval, or creator voice
 
+v33-J adds bounded confirmed-preference application.
+
+- only active confirmed preferences may influence grounded workflows
+- current user and project / artifact instructions outrank stored preferences
+- preferences are rendered into a bounded application bundle, not injected as arbitrary prompt text
+- content brief and production preparation are the first wired workflows
+- retrieval, semantic indexing, and Creator Voice remain unchanged
+- no candidate or dismissed preference can apply
+
 ## Stage Gates
 
 Every stage must define:

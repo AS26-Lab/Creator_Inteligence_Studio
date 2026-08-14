@@ -186,6 +186,15 @@ v33-I product reality:
 - project-scoped evidence does not automatically become creator-global preference
 - no confirmed preference is applied automatically to prompts, retrieval, or creator voice
 
+v33-J product reality:
+
+- only confirmed + active preferences can enter a bounded application bundle
+- current user request and project / artifact instructions outrank stored preferences
+- the application path is deterministic, offline, and provider-independent
+- content brief context assembly now consumes the preference bundle
+- production preparation has the same application boundary and remains scope-aware
+- retrieval, semantic indexing, and Creator Voice remain unchanged
+
 ## Embeddings And Search
 
 Approved decisions:
@@ -258,6 +267,8 @@ Separate:
 
 - creative preference;
 - strategic performance.
+
+When preferences become applicable, they remain a secondary guidance layer, not a replacement for the source artifact or the current request.
 
 ## Quality Evaluation
 

@@ -37,3 +37,19 @@ These are validation boundaries, not normal-user product features.
 - no LLM required
 - no remote network required
 - no sensitive personal trait inference
+
+## v33-J Application Boundary
+
+Confirmed preferences are now eligible for bounded application through `CreatorPreferenceApplicationService`.
+
+Rules:
+
+- only `active` + `confirmed` preferences may apply
+- candidates remain non-authoritative
+- dismissed preferences remain non-authoritative
+- current user and project instructions outrank stored preferences
+- project / workflow scope stays explicit
+- the application bundle is bounded and auditable
+- content brief and production preparation are the first wired workflows
+
+The application step does not change how preferences are stored, confirmed, dismissed, deactivated, or reactivated.

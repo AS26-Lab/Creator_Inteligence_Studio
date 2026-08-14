@@ -6003,6 +6003,7 @@ def dispatch(
     production_service=None,
     creator_feedback_service=None,
     creator_preference_service=None,
+    creator_preference_application_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6123,7 +6124,13 @@ def dispatch(
         if args.entity == "preferences":
             if creator_preference_service is None:
                 raise DomainError("El servicio de preferencias no esta disponible.")
-            return handle_preferences_command(args, service=creator_preference_service, stdout=stdout, stderr=stderr)
+            return handle_preferences_command(
+                args,
+                service=creator_preference_service,
+                application_service=creator_preference_application_service,
+                stdout=stdout,
+                stderr=stderr,
+            )
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

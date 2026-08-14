@@ -6,6 +6,7 @@ import argparse
 import json
 from typing import Any
 
+from creator_intelligence_studio.application.services.creator_preference_application_service import CreatorPreferenceApplicationService
 from creator_intelligence_studio.application.services.creator_preference_synthesis_service import CreatorPreferenceSynthesisService
 from creator_intelligence_studio.domain.errors import DomainError
 
@@ -75,11 +76,23 @@ def build_preferences_parser(subparsers) -> None:
     snapshot.add_argument("--creator-id", required=True)
     snapshot.add_argument("--json", action="store_true")
 
+    apply_preview = prefs.add_parser("apply-preview", help="Previsualizar la aplicacion de preferencias confirmadas")
+    apply_preview.add_argument("--creator-id", required=True)
+    apply_preview.add_argument("--workflow-type", required=True)
+    apply_preview.add_argument("--project-id")
+    apply_preview.add_argument("--current-user-instruction")
+    apply_preview.add_argument("--project-instruction")
+    apply_preview.add_argument("--primary-artifact-json", default="{}")
+    apply_preview.add_argument("--corpus-context-present", action="store_true")
+    apply_preview.add_argument("--corpus-context-item-count", type=int, default=0)
+    apply_preview.add_argument("--json", action="store_true")
+
 
 def handle_preferences_command(
     args: argparse.Namespace,
     *,
     service: CreatorPreferenceSynthesisService,
+    application_service: CreatorPreferenceApplicationService | None = None,
     stdout,
     stderr,
 ) -> int:
@@ -146,6 +159,30 @@ def handle_preferences_command(
         if args.action == "snapshot":
             snapshot = service.preference_snapshot(args.creator_id)
             print(_dump(snapshot.to_dict()), file=stdout)
+            return 0
+        if args.action == "apply-preview":
+            if application_service is None:
+                raise DomainError("El servicio de aplicacion de preferencias no esta disponible.")
+            try:
+                primary_artifact_metadata = json.loads(args.primary_artifact_json or "{}")
+            except json.JSONDecodeError:
+                raise DomainError("primary-artifact-json debe ser JSON valido.")
+            if not isinstance(primary_artifact_metadata, dict):
+                raise DomainError("primary-artifact-json debe ser un objeto JSON.")
+            payload = application_service.diagnostics(
+                creator_id=args.creator_id,
+                workflow_type=args.workflow_type,
+                project_id=args.project_id,
+                current_user_instruction=args.current_user_instruction,
+                project_instruction=args.project_instruction,
+                primary_artifact_metadata=primary_artifact_metadata,
+                corpus_context_present=bool(args.corpus_context_present),
+                corpus_context_item_count=int(args.corpus_context_item_count),
+            )
+            if args.json:
+                print(_dump(payload), file=stdout)
+            else:
+                print(_dump(payload["bundle"]), file=stdout)
             return 0
     except DomainError as exc:
         print(f"Error: {exc}", file=stderr)

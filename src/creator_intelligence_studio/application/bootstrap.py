@@ -90,6 +90,10 @@ from creator_intelligence_studio.application.services.creator_preference_synthes
     CreatorPreferenceSynthesisService,
     build_creator_preference_synthesis_service,
 )
+from creator_intelligence_studio.application.services.creator_preference_application_service import (
+    CreatorPreferenceApplicationService,
+    build_creator_preference_application_service,
+)
 from creator_intelligence_studio.application.services.creative_packaging_service import (
     CreativePackagingService,
     build_creative_packaging_service,
@@ -300,6 +304,7 @@ class ServiceContext(BootstrapContext):
     creator_language_service: CreatorLanguageService | None = None
     creator_feedback_service: CreatorFeedbackService | None = None
     creator_preference_service: CreatorPreferenceSynthesisService | None = None
+    creator_preference_application_service: CreatorPreferenceApplicationService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
     instagram_service: InstagramIntegrationService | None = None
@@ -528,6 +533,11 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         logger=context.logger,
     )
+    creator_preference_repository = SQLiteCreatorPreferenceRepository(database)
+    creator_preference_application_service = build_creator_preference_application_service(
+        repository=creator_preference_repository,
+        logger=context.logger,
+    )
     creative_packaging_service = build_creative_packaging_service(
         settings=context.settings,
         paths=context.paths,
@@ -645,6 +655,7 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_preference_application_service=creator_preference_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,
@@ -666,6 +677,7 @@ def _load_service_context() -> ServiceContext:
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_preference_application_service=creator_preference_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         platform_service=platform_service,
@@ -682,12 +694,14 @@ def _load_service_context() -> ServiceContext:
         logger=context.logger,
     )
     creator_preference_service = build_creator_preference_synthesis_service(
-        repository=SQLiteCreatorPreferenceRepository(database),
+        repository=creator_preference_repository,
         feedback_service=creator_feedback_service,
         logger=context.logger,
     )
     brief_service.creator_feedback_service = creator_feedback_service
+    brief_service.creator_preference_application_service = creator_preference_application_service
     production_service.creator_feedback_service = creator_feedback_service
+    production_service.creator_preference_application_service = creator_preference_application_service
     planning_service.creator_feedback_service = creator_feedback_service
     personalization_service = build_personalization_dataset_service(
         settings=context.settings,
@@ -747,6 +761,7 @@ def _load_service_context() -> ServiceContext:
         creator_language_service=creator_language_service,
         creator_feedback_service=creator_feedback_service,
         creator_preference_service=creator_preference_service,
+        creator_preference_application_service=creator_preference_application_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
         instagram_service=instagram_service,
@@ -847,6 +862,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             production_service=context.production_service,
             creator_feedback_service=context.creator_feedback_service,
             creator_preference_service=context.creator_preference_service,
+            creator_preference_application_service=context.creator_preference_application_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

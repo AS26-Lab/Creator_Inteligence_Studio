@@ -15,6 +15,10 @@ from creator_intelligence_studio.application.services.creator_context_policy imp
     CreatorContextPolicyRegistry,
     build_default_creator_context_policy_registry,
 )
+from creator_intelligence_studio.application.services.creator_preference_application_service import (
+    CreatorPreferenceApplicationBundle,
+    CreatorPreferenceApplicationService,
+)
 from creator_intelligence_studio.domain.content_briefs import (
     BriefRecord,
     BriefStatus,
@@ -144,6 +148,7 @@ class ProductionPreparationService:
         creator_memory_service: Any | None = None,
         creator_language_service: Any | None = None,
         creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+        creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
         creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         platform_service: Any | None = None,
@@ -162,6 +167,7 @@ class ProductionPreparationService:
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
         self.creator_context_assembly_service = creator_context_assembly_service
+        self.creator_preference_application_service = creator_preference_application_service
         self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.platform_service = platform_service
@@ -352,6 +358,17 @@ class ProductionPreparationService:
         audience_snapshot_id = self._snapshot_identifier(self.audience_service, ("build_profile", "get_profile", "list_profiles"), creator_id)
         platform_snapshot_id = self._snapshot_identifier(self.platform_service, ("list_reports", "list_integrations", "list_connections"), creator_id)
         packaging_snapshot_id = self._snapshot_identifier(self.packaging_service, ("list_concepts", "list_versions", "list_reports"), creator_id)
+        script_request_text = " | ".join(
+            part
+            for part in (
+                brief.title,
+                brief.primary_objective,
+                brief.audience_summary,
+                brief.content_promise,
+                brief.core_message,
+            )
+            if part
+        ) or "Production preparation context"
         payload = {
             "creator_id": creator_id,
             "context_version": self.ENGINE_VERSION,
@@ -372,6 +389,7 @@ class ProductionPreparationService:
         creator_context_bundle = None
         creator_context_package: dict[str, object] = {}
         creator_context_prompt: str | None = None
+        creator_preference_application_bundle: CreatorPreferenceApplicationBundle | None = None
         creator_context_usage: dict[str, object] = {
             "enabled": False,
             "policy_id": None if context_policy is None else context_policy.policy_id,
@@ -380,19 +398,11 @@ class ProductionPreparationService:
             "estimated_tokens": 0,
             "estimated_characters": 0,
             "truncated": False,
+            "preference_item_count": 0,
+            "preference_omitted_count": 0,
+            "preference_conflict_count": 0,
         }
         if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
-            script_request_text = " | ".join(
-                part
-                for part in (
-                    brief.title,
-                    brief.primary_objective,
-                    brief.audience_summary,
-                    brief.content_promise,
-                    brief.core_message,
-                )
-                if part
-            ) or "Production preparation context"
             creator_context_request = context_policy.build_request(
                 creator_id=creator_id,
                 user_request=script_request_text,
@@ -410,6 +420,39 @@ class ProductionPreparationService:
                 "estimated_characters": creator_context_bundle.total_estimated_characters,
                 "truncated": creator_context_bundle.truncated,
             }
+        if self.creator_preference_application_service is not None:
+            creator_preference_application_bundle = self.creator_preference_application_service.build_application_bundle(
+                creator_id=creator_id,
+                workflow_type="production_preparation",
+                project_id=getattr(brief, "project_id", None),
+                current_user_instruction=script_request_text,
+                project_instruction=str(getattr(brief, "title", "") or getattr(brief, "primary_objective", "") or ""),
+                primary_artifact_metadata={
+                    "brief_id": brief.id,
+                    "brief_version": brief_version,
+                    "content_brief_id": content_brief_id,
+                    "brief_title": getattr(brief, "title", None),
+                    "brief_project_id": getattr(brief, "project_id", None),
+                },
+                corpus_context_present=bool(creator_context_bundle and creator_context_bundle.items),
+                corpus_context_item_count=0 if creator_context_bundle is None else len(creator_context_bundle.items),
+            )
+            if creator_preference_application_bundle.rendered_context:
+                creator_context_prompt = (
+                    creator_preference_application_bundle.rendered_context
+                    + ("\n\n" + creator_context_prompt if creator_context_prompt else "")
+                ).strip()
+            creator_context_package = {
+                **creator_context_package,
+                "confirmed_preference_context": creator_preference_application_bundle.to_dict(),
+                "confirmed_preference_prompt": creator_preference_application_bundle.rendered_context,
+            }
+            creator_context_usage = {
+                **creator_context_usage,
+                "preference_item_count": len(creator_preference_application_bundle.applied_preferences),
+                "preference_omitted_count": creator_preference_application_bundle.preferences_omitted_count,
+                "preference_conflict_count": creator_preference_application_bundle.conflict_count,
+            }
         context_details = {
             "creator_context_enabled": bool(creator_context_usage["enabled"]),
             "creator_context_policy_id": creator_context_usage["policy_id"],
@@ -418,6 +461,7 @@ class ProductionPreparationService:
             "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
             "creator_context_package": creator_context_package,
             "creator_context_prompt": creator_context_prompt,
+            "confirmed_preference_application": None if creator_preference_application_bundle is None else creator_preference_application_bundle.to_dict(),
         }
         payload["source_fingerprint"] = build_production_fingerprint(
             {
@@ -1724,6 +1768,7 @@ def build_production_preparation_service(
     creator_memory_service: Any | None = None,
     creator_language_service: Any | None = None,
     creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+    creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
     creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
     audience_service: Any | None = None,
     platform_service: Any | None = None,
@@ -1743,6 +1788,7 @@ def build_production_preparation_service(
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_preference_application_service=creator_preference_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         platform_service=platform_service,

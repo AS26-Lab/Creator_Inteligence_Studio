@@ -21,6 +21,7 @@ This document maps original product intent to the current repository state. It i
 | Safe provider execution through a central AI runtime | `docs/AI_RUNTIME_AND_PROVIDER_ORCHESTRATION_FOUNDATION.md` | implemented | only provider diagnostics are enabled in v31 | keep modules off direct provider calls | Component Manager and Local Transcription Foundation |
 | Creator feedback and learning signals foundation | `docs/CREATOR_MEMORY_AND_LEARNING.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | implemented | does not auto-apply preferences to prompts or retrieval | keep feedback canonical, conservative, local, and diagnostic-only at the validation surface | Feedback Learning Foundation |
 | Creator preference synthesis and confirmation | `docs/CREATOR_PREFERENCES_AND_CONFIRMATION_ARCHITECTURE.md`, `docs/CREATOR_CORPUS_V33_I_PREFERENCE_SYNTHESIS.md` | implemented | does not auto-apply confirmed preferences to prompts, retrieval, or voice | keep confirmed preferences separate from raw evidence and explicit human control | Preference Confirmation Foundation |
+| Confirmed preference application | `docs/CREATOR_PREFERENCE_APPLICATION_ARCHITECTURE.md`, `docs/CREATOR_CORPUS_V33_J_CONFIRMED_PREFERENCE_APPLICATION.md` | implemented | only bounded application of active confirmed preferences; current user and project instructions still win | render confirmed guidance into workflow bundles without turning it into system policy | Confirmed Preference Application |
 
 ## Requirement Groups
 
