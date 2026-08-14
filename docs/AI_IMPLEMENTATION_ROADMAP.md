@@ -132,6 +132,13 @@ v34-B adds Creator Voice profile synthesis on top of the evidence snapshot.
 - confirmed preferences remain separate from text-derived features
 - profiles are diagnostic and explainable, not model-facing style prompts
 
+v34-C adds Creator Voice guidance consumption as a diagnostic preview boundary.
+
+- guidance is derived from the profile only, not raw corpus text
+- higher-precedence user, project, and confirmed-preference instructions outrank Creator Voice
+- normal workflow prompts remain unchanged
+- the preview surface is deterministic, bounded, and offline
+
 ## Stage Gates
 
 Every stage must define:

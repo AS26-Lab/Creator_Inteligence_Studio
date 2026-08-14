@@ -225,6 +225,16 @@ Status: `implemented`
 
 Status: `implemented`
 
+## Creator Voice v34-C Guidance Consumption
+
+- Creator Voice guidance is consumed through a deterministic preview service
+- the guidance layer reads only the synthesized profile, not raw corpus text
+- explicit user instructions, project instructions, and confirmed preferences outrank voice guidance
+- bounded guidance bundles and deterministic fingerprints are exposed through the CLI preview surface
+- normal AI workflows remain unchanged; no automatic prompt application has been introduced
+
+Status: `implemented`
+
 ## Creator Corpus v33-A Foundation
 
 - local creator corpus storage is implemented as a creator-scoped SQLite-backed foundation

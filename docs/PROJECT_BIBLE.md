@@ -97,6 +97,7 @@ Included in product scope:
 - creator corpus identity, provenance, ingestion, versioning, and lifecycle;
 - creator voice evidence selection and diagnostics;
 - creator voice profile synthesis for diagnostics;
+- creator voice guidance preview for diagnostics only;
 - outlines;
 - hooks;
 - titles;

@@ -321,3 +321,13 @@ Also track:
 ## Discrepancy Note
 
 Current repository modules labeled memory, personalization, or corpus are structural foundations. The corpus foundation is now implemented locally, but it is still not the semantic retrieval layer described here.
+
+## Creator Voice Boundary
+
+Creator Voice now has a three-step local pipeline:
+
+1. evidence selection;
+2. deterministic profile synthesis;
+3. diagnostic guidance preview.
+
+The guidance preview is secondary to explicit user, project, and confirmed-preference instructions. It does not yet alter normal workflow prompts.

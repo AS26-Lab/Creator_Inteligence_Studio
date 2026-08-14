@@ -204,6 +204,15 @@ v34-B consumes this snapshot and derives structured profile features from it.
 - confirmed preferences remain separate structured guidance;
 - no prompt application or retrieval mutation is introduced.
 
+## v34-C Guidance Hand-Off
+
+v34-C consumes the profile, not raw corpus text.
+
+- guidance is derived from the profile as a diagnostic preview;
+- higher-precedence user, project, and confirmed-preference signals can suppress voice guidance;
+- scope and language mismatches are explicit exclusions;
+- the guidance bundle remains bounded and rebuildable.
+
 ## Non-Goals
 
 v34-A does not:

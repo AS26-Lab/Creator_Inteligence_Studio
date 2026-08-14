@@ -8,6 +8,10 @@ from dataclasses import asdict
 from typing import Any
 
 from creator_intelligence_studio.application.services.creator_voice_evidence_service import CreatorVoiceEvidenceService
+from creator_intelligence_studio.application.services.creator_voice_guidance_service import (
+    CreatorVoiceGuidanceService,
+    build_creator_voice_guidance_service,
+)
 from creator_intelligence_studio.application.services.creator_voice_profile_service import (
     CreatorVoiceProfileService,
     build_creator_voice_profile_service,
@@ -85,6 +89,25 @@ def build_voice_parser(subparsers) -> None:
     profile_compare.add_argument("--json", action="store_true")
     profile_compare.add_argument("--debug", action="store_true")
 
+    guidance_preview = voice_sub.add_parser("guidance-preview", help="Previsualizar la guia de Creator Voice")
+    guidance_preview.add_argument("--creator-id", required=True)
+    guidance_preview.add_argument("--project-id")
+    guidance_preview.add_argument("--workflow-type", required=True)
+    guidance_preview.add_argument("--language")
+    guidance_preview.add_argument("--include-historical-versions", action="store_true")
+    guidance_preview.add_argument("--include-creator-global", action="store_true")
+    guidance_preview.add_argument("--max-items-per-source", type=int, default=3)
+    guidance_preview.add_argument("--max-items-per-type", type=int, default=8)
+    guidance_preview.add_argument("--current-user-instruction")
+    guidance_preview.add_argument("--project-instruction")
+    guidance_preview.add_argument("--enabled", dest="enabled", action="store_true")
+    guidance_preview.add_argument("--disabled", dest="enabled", action="store_false")
+    guidance_preview.add_argument("--max-items", type=int, default=4)
+    guidance_preview.add_argument("--max-characters", type=int, default=480)
+    guidance_preview.set_defaults(enabled=True)
+    guidance_preview.add_argument("--json", action="store_true")
+    guidance_preview.add_argument("--debug", action="store_true")
+
 
 def _snapshot_request_from_args(args: argparse.Namespace, *, prefix: str = "") -> dict[str, object]:
     prefix_name = f"{prefix}_" if prefix else ""
@@ -127,12 +150,40 @@ def _print_profile(payload: dict[str, object], *, stdout) -> None:
     print(f"Limitations: {_dump(profile['limitations'])}", file=stdout)
 
 
+def _guidance_request_from_args(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "creator_id": args.creator_id,
+        "project_id": args.project_id,
+        "workflow_type": args.workflow_type,
+        "language": args.language,
+        "current_user_instruction": getattr(args, "current_user_instruction", None),
+        "project_instruction": getattr(args, "project_instruction", None),
+        "enabled": bool(getattr(args, "enabled", True)),
+        "max_items": int(getattr(args, "max_items", 4)),
+        "max_characters": int(getattr(args, "max_characters", 480)),
+    }
+
+
+def _print_guidance(payload: dict[str, object], *, stdout) -> None:
+    summary = payload["summary"]
+    bundle = payload["bundle"]
+    print(f"Creator: {summary['creator_id']}", file=stdout)
+    print(f"State: {summary['guidance_state']}", file=stdout)
+    print(f"Profile status: {summary['profile_status']}", file=stdout)
+    print(f"Fingerprint: {summary['bundle_fingerprint']}", file=stdout)
+    print(f"Guidance count: {summary['guidance_count']}", file=stdout)
+    print(f"Omitted: {summary['omitted_count']}", file=stdout)
+    print(f"Conflicts: {summary['conflict_count']}", file=stdout)
+    print(f"Guidance: {bundle['rendered_guidance']}", file=stdout)
+
+
 def handle_voice_command(
     args: argparse.Namespace,
     *,
     service: CreatorVoiceEvidenceService | None = None,
     evidence_service: CreatorVoiceEvidenceService | None = None,
     profile_service: CreatorVoiceProfileService | None = None,
+    guidance_service: CreatorVoiceGuidanceService | None = None,
     stdout,
     stderr,
 ) -> int:
@@ -142,6 +193,8 @@ def handle_voice_command(
             raise DomainError("El servicio de Creator Voice no esta disponible.")
         if profile_service is None:
             profile_service = build_creator_voice_profile_service()
+        if guidance_service is None:
+            guidance_service = build_creator_voice_guidance_service()
         if args.action == "evidence-snapshot":
             payload = resolved_evidence_service.diagnostics(_snapshot_request_from_args(args), debug=bool(args.debug))
             if args.json:
@@ -157,6 +210,21 @@ def handle_voice_command(
                 print(_dump(payload), file=stdout)
             else:
                 _print_profile(payload, stdout=stdout)
+            return 0
+        if args.action == "guidance-preview":
+            snapshot = resolved_evidence_service.build_snapshot(_snapshot_request_from_args(args))
+            profile = profile_service.build_profile(snapshot)
+            payload = guidance_service.diagnostics(
+                {
+                    **_guidance_request_from_args(args),
+                    "profile": profile,
+                },
+                debug=bool(args.debug),
+            )
+            if args.json:
+                print(_dump(payload), file=stdout)
+            else:
+                _print_guidance(payload, stdout=stdout)
             return 0
         if args.action == "profile-compare":
             base_snapshot = resolved_evidence_service.build_snapshot(_snapshot_request_from_args(args, prefix="base"))

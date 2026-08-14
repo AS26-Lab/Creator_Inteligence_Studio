@@ -6011,6 +6011,7 @@ def dispatch(
     creator_preference_application_service=None,
     creator_voice_evidence_service=None,
     creator_voice_profile_service=None,
+    creator_voice_guidance_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6147,6 +6148,7 @@ def dispatch(
                 args,
                 evidence_service=creator_voice_evidence_service,
                 profile_service=creator_voice_profile_service,
+                guidance_service=creator_voice_guidance_service,
                 stdout=stdout,
                 stderr=stderr,
             )

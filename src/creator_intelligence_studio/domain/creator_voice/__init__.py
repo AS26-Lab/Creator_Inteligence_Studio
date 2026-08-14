@@ -16,6 +16,17 @@ from .profile import (
     CreatorVoiceProfileVersion,
     CreatorVoiceStructuredPreference,
 )
+from .guidance import (
+    CreatorVoiceGuidanceBundle,
+    CreatorVoiceGuidanceCategory,
+    CreatorVoiceGuidanceConflict,
+    CreatorVoiceGuidanceItem,
+    CreatorVoiceGuidanceOmission,
+    CreatorVoiceGuidanceOmissionReason,
+    CreatorVoiceGuidanceRequest,
+    CreatorVoiceGuidanceState,
+    CreatorVoiceGuidanceVersion,
+)
 from .repositories import CreatorVoiceCorpusQueryRepository
 from .value_objects import (
     CreatorVoiceEvidenceQuality,
@@ -38,6 +49,15 @@ __all__ = [
     "CreatorVoiceConfidenceLevel",
     "CreatorVoiceFeature",
     "CreatorVoiceFeatureStatus",
+    "CreatorVoiceGuidanceBundle",
+    "CreatorVoiceGuidanceCategory",
+    "CreatorVoiceGuidanceConflict",
+    "CreatorVoiceGuidanceItem",
+    "CreatorVoiceGuidanceOmission",
+    "CreatorVoiceGuidanceOmissionReason",
+    "CreatorVoiceGuidanceRequest",
+    "CreatorVoiceGuidanceState",
+    "CreatorVoiceGuidanceVersion",
     "CreatorVoiceProfile",
     "CreatorVoiceProfileComparison",
     "CreatorVoiceProfileSection",

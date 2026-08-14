@@ -118,6 +118,25 @@ The CLI surface supports:
 
 The CLI prints safe summary output by default and JSON when requested.
 
+## v34-C Consumption Boundary
+
+`CreatorVoiceGuidanceService` consumes the profile as derived data.
+
+It may:
+
+- inspect readiness and confidence;
+- consume only allowlisted features;
+- preserve scope, language, and spoken/written distinctions;
+- preserve confirmed preferences as separate structured guidance;
+- record overrides and omissions explicitly.
+
+It may not:
+
+- apply guidance to workflow prompts;
+- mutate preferences;
+- mutate retrieval;
+- generate a final style prompt.
+
 ## Non-Goals
 
 v34-B does not:
@@ -129,4 +148,3 @@ v34-B does not:
 - fine-tune a model;
 - infer personality or sensitive traits;
 - persist profile state by default.
-
