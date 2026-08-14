@@ -94,6 +94,10 @@ from creator_intelligence_studio.application.services.creator_preference_applica
     CreatorPreferenceApplicationService,
     build_creator_preference_application_service,
 )
+from creator_intelligence_studio.application.services.creator_voice_evidence_service import (
+    CreatorVoiceEvidenceService,
+    build_creator_voice_evidence_service,
+)
 from creator_intelligence_studio.application.services.creative_packaging_service import (
     CreativePackagingService,
     build_creative_packaging_service,
@@ -305,6 +309,7 @@ class ServiceContext(BootstrapContext):
     creator_feedback_service: CreatorFeedbackService | None = None
     creator_preference_service: CreatorPreferenceSynthesisService | None = None
     creator_preference_application_service: CreatorPreferenceApplicationService | None = None
+    creator_voice_evidence_service: CreatorVoiceEvidenceService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
     instagram_service: InstagramIntegrationService | None = None
@@ -538,6 +543,12 @@ def _load_service_context() -> ServiceContext:
         repository=creator_preference_repository,
         logger=context.logger,
     )
+    creator_voice_evidence_service = build_creator_voice_evidence_service(
+        corpus_repository=creator_corpus_repository,
+        preference_repository=creator_preference_repository,
+        project_repository=project_repository,
+        logger=context.logger,
+    )
     creative_packaging_service = build_creative_packaging_service(
         settings=context.settings,
         paths=context.paths,
@@ -762,6 +773,7 @@ def _load_service_context() -> ServiceContext:
         creator_feedback_service=creator_feedback_service,
         creator_preference_service=creator_preference_service,
         creator_preference_application_service=creator_preference_application_service,
+        creator_voice_evidence_service=creator_voice_evidence_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
         instagram_service=instagram_service,
@@ -863,6 +875,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             creator_feedback_service=context.creator_feedback_service,
             creator_preference_service=context.creator_preference_service,
             creator_preference_application_service=context.creator_preference_application_service,
+            creator_voice_evidence_service=context.creator_voice_evidence_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,

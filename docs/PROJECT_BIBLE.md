@@ -81,6 +81,7 @@ Default flows must be guided, safe, and understandable in plain language. Techni
 8. Replaceable AI roles instead of fixed vendor names.
 9. Local-first processing where reasonable.
 10. Quality and speed over ideological purity.
+11. Authentic creator evidence must stay separate from AI-derived content and from structured confirmed preferences.
 
 ## Approved Scope
 
@@ -93,6 +94,7 @@ Included in product scope:
 - briefs;
 - scripts;
 - creator corpus identity, provenance, ingestion, versioning, and lifecycle;
+- creator voice evidence selection and diagnostics;
 - outlines;
 - hooks;
 - titles;

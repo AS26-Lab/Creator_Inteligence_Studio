@@ -60,6 +60,10 @@ class CreatorCorpusRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def list_document_versions_for_creator(self, creator_id: str, project_id: str | None = None) -> list[CorpusDocumentVersion]:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_document_version_by_hash(self, document_id: str, content_hash: str) -> CorpusDocumentVersion | None:
         raise NotImplementedError
 
@@ -69,6 +73,10 @@ class CreatorCorpusRepository(ABC):
 
     @abstractmethod
     def list_segments(self, document_version_id: str) -> list[CorpusSegment]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_segments_for_creator(self, creator_id: str, project_id: str | None = None) -> list[CorpusSegment]:
         raise NotImplementedError
 
     @abstractmethod

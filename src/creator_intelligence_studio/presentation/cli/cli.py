@@ -259,6 +259,10 @@ from creator_intelligence_studio.presentation.cli.preferences_cli import (
     build_preferences_parser,
     handle_preferences_command,
 )
+from creator_intelligence_studio.presentation.cli.voice_cli import (
+    build_voice_parser,
+    handle_voice_command,
+)
 from creator_intelligence_studio.presentation.cli.ai_runtime_cli import (
     build_ai_parser,
     handle_ai_command,
@@ -488,6 +492,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_production_parser(subparsers)
     build_feedback_parser(subparsers)
     build_preferences_parser(subparsers)
+    build_voice_parser(subparsers)
     build_ai_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
@@ -6004,6 +6009,7 @@ def dispatch(
     creator_feedback_service=None,
     creator_preference_service=None,
     creator_preference_application_service=None,
+    creator_voice_evidence_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6131,6 +6137,10 @@ def dispatch(
                 stdout=stdout,
                 stderr=stderr,
             )
+        if args.entity == "voice":
+            if creator_voice_evidence_service is None:
+                raise DomainError("El servicio de Creator Voice no esta disponible.")
+            return handle_voice_command(args, service=creator_voice_evidence_service, stdout=stdout, stderr=stderr)
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

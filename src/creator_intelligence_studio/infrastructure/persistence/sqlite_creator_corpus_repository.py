@@ -359,6 +359,22 @@ class SQLiteCreatorCorpusRepository(CreatorCorpusRepository):
             ).fetchall()
         return [_row_to_version(row) for row in rows]
 
+    def list_document_versions_for_creator(self, creator_id: str, project_id: str | None = None) -> list[CorpusDocumentVersion]:
+        query = """
+            SELECT v.*
+            FROM creator_corpus_document_versions AS v
+            INNER JOIN creator_corpus_documents AS d ON d.id = v.document_id
+            WHERE v.creator_id = ?
+        """
+        params: list[object] = [creator_id]
+        if project_id is not None:
+            query += " AND IFNULL(d.project_id, '') = IFNULL(?, '')"
+            params.append(project_id)
+        query += " ORDER BY d.created_at ASC, v.version_number ASC, v.created_at ASC, v.id ASC"
+        with self._database.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_version(row) for row in rows]
+
     def get_document_version_by_hash(self, document_id: str, content_hash: str) -> CorpusDocumentVersion | None:
         with self._database.connect() as connection:
             row = connection.execute(
@@ -407,6 +423,23 @@ class SQLiteCreatorCorpusRepository(CreatorCorpusRepository):
                 "SELECT * FROM creator_corpus_segments WHERE document_version_id = ? ORDER BY sequence ASC",
                 (document_version_id,),
             ).fetchall()
+        return [_row_to_segment(row) for row in rows]
+
+    def list_segments_for_creator(self, creator_id: str, project_id: str | None = None) -> list[CorpusSegment]:
+        query = """
+            SELECT s.*
+            FROM creator_corpus_segments AS s
+            INNER JOIN creator_corpus_document_versions AS v ON v.id = s.document_version_id
+            INNER JOIN creator_corpus_documents AS d ON d.id = v.document_id
+            WHERE s.creator_id = ?
+        """
+        params: list[object] = [creator_id]
+        if project_id is not None:
+            query += " AND IFNULL(d.project_id, '') = IFNULL(?, '')"
+            params.append(project_id)
+        query += " ORDER BY d.created_at ASC, v.version_number ASC, s.sequence ASC, s.created_at ASC, s.id ASC"
+        with self._database.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
         return [_row_to_segment(row) for row in rows]
 
     def upsert_provenance_edge(self, edge: CorpusProvenanceEdge) -> CorpusProvenanceEdge:

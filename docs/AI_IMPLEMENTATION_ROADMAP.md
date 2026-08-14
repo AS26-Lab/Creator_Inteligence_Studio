@@ -115,6 +115,15 @@ v33-J adds bounded confirmed-preference application.
 - retrieval, semantic indexing, and Creator Voice remain unchanged
 - no candidate or dismissed preference can apply
 
+v34-A begins Creator Voice as evidence foundation only.
+
+- creator voice evidence is selected from authentic creator evidence, not inferred by an LLM
+- AI-generated and AI-rewritten content remain excluded by default
+- creator-edited AI content is handled conservatively as evidence, not as pure creator-original truth
+- confirmed preferences remain separate structured guidance and are not textual style samples
+- snapshots are deterministic, bounded, rebuildable, and creator-scoped
+- no style prompt synthesis, no embeddings, no prompt application, and no retrieval mutation are introduced
+
 ## Stage Gates
 
 Every stage must define:

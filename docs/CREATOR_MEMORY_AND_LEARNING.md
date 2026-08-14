@@ -74,6 +74,17 @@ The current corpus implementation now distinguishes:
 
 The ingestion layer is still local-only and does not send corpus text to OpenAI, Anthropic, Supabase, Hugging Face, or any other remote service.
 
+## Creator Voice Evidence Reality
+
+v34-A adds the canonical Creator Voice evidence foundation on top of the corpus.
+
+- authentic voice evidence is selected from creator-written, creator-edited, transcribed creator speech, and confirmed preference records
+- AI-generated and AI-rewritten material are excluded by default from voice evidence
+- creator-edited AI content is treated conservatively and does not become creator-original by default
+- confirmed preferences remain structured guidance and are not merged into textual style samples
+- snapshots are creator-scoped, project-scoped when requested, workflow-aware when requested, language-aware, bounded, and rebuildable
+- no voice profile, prompt mutation, or style embedding is introduced here
+
 ## Retrieval Reality
 
 v33-C adds the first explicit local retrieval layer for the corpus.
@@ -194,6 +205,14 @@ v33-J product reality:
 - content brief context assembly now consumes the preference bundle
 - production preparation has the same application boundary and remains scope-aware
 - retrieval, semantic indexing, and Creator Voice remain unchanged
+
+v34-A product reality:
+
+- Creator Voice evidence selection is implemented as a deterministic local service
+- evidence snapshots are bounded, rebuildable, and creator-isolated
+- evidence quality is tracked with explainable levels and exclusion reasons
+- the service does not synthesize a final Creator Voice profile
+- prompt grounding, retrieval ranking, and confirmed preference application remain unchanged
 
 ## Embeddings And Search
 
