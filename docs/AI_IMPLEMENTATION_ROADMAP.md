@@ -139,6 +139,13 @@ v34-C adds Creator Voice guidance consumption as a diagnostic preview boundary.
 - normal workflow prompts remain unchanged
 - the preview surface is deterministic, bounded, and offline
 
+v34-D adds a controlled Creator Voice workflow application boundary.
+
+- workflow integration remains shadow-first for comparison and observability
+- real application is gated to approved workflows and remains subordinate to explicit instructions and confirmed preferences
+- the final request only changes when the application boundary is explicitly enabled
+- no global prompt injection is introduced
+
 ## Stage Gates
 
 Every stage must define:

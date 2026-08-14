@@ -27,6 +27,12 @@ from .guidance import (
     CreatorVoiceGuidanceState,
     CreatorVoiceGuidanceVersion,
 )
+from .workflow_application import (
+    CreatorVoiceWorkflowApplicationBundle,
+    CreatorVoiceWorkflowApplicationRequest,
+    CreatorVoiceWorkflowApplicationState,
+    CreatorVoiceWorkflowApplicationVersion,
+)
 from .repositories import CreatorVoiceCorpusQueryRepository
 from .value_objects import (
     CreatorVoiceEvidenceQuality,
@@ -66,4 +72,8 @@ __all__ = [
     "CreatorVoiceScopeMode",
     "CreatorVoiceStructuredPreference",
     "CreatorVoiceSelectionPolicyVersion",
+    "CreatorVoiceWorkflowApplicationBundle",
+    "CreatorVoiceWorkflowApplicationRequest",
+    "CreatorVoiceWorkflowApplicationState",
+    "CreatorVoiceWorkflowApplicationVersion",
 ]

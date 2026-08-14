@@ -19,6 +19,10 @@ from creator_intelligence_studio.application.services.creator_preference_applica
     CreatorPreferenceApplicationBundle,
     CreatorPreferenceApplicationService,
 )
+from creator_intelligence_studio.application.services.creator_voice_workflow_application_service import (
+    CreatorVoiceWorkflowApplicationBundle,
+    CreatorVoiceWorkflowApplicationService,
+)
 from creator_intelligence_studio.domain.content_briefs import (
     BriefRecord,
     BriefStatus,
@@ -149,6 +153,7 @@ class ProductionPreparationService:
         creator_language_service: Any | None = None,
         creator_context_assembly_service: CreatorContextAssemblyService | None = None,
         creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
+        creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
         creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         platform_service: Any | None = None,
@@ -168,6 +173,7 @@ class ProductionPreparationService:
         self.creator_language_service = creator_language_service
         self.creator_context_assembly_service = creator_context_assembly_service
         self.creator_preference_application_service = creator_preference_application_service
+        self.creator_voice_workflow_application_service = creator_voice_workflow_application_service
         self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.platform_service = platform_service
@@ -247,6 +253,32 @@ class ProductionPreparationService:
             "list_snapshots": ("production_snapshots", "script_outline_id", None),
             "list_reports": ("production_reports", "script_outline_id", None),
         }
+
+    def _build_creator_voice_application_bundle(
+        self,
+        *,
+        creator_id: str,
+        project_id: str | None,
+        workflow_type: str,
+        language: str | None,
+        current_user_instruction: str | None,
+        project_instruction: str | None,
+        apply_requested: bool,
+    ) -> CreatorVoiceWorkflowApplicationBundle | None:
+        if self.creator_voice_workflow_application_service is None:
+            return None
+        return self.creator_voice_workflow_application_service.build_application(
+            {
+                "creator_id": creator_id,
+                "project_id": project_id,
+                "workflow_type": workflow_type,
+                "language": language,
+                "current_user_instruction": current_user_instruction,
+                "project_instruction": project_instruction,
+                "enabled": True,
+                "apply_enabled": apply_requested,
+            }
+        )
 
     def _upsert(self, table: str, payload: dict[str, Any], conflict_columns: tuple[str, ...] = ("id",)) -> dict[str, Any]:
         return self.repository.upsert_record(table, payload, conflict_columns=conflict_columns)
@@ -366,9 +398,18 @@ class ProductionPreparationService:
                 brief.audience_summary,
                 brief.content_promise,
                 brief.core_message,
-            )
+                )
             if part
         ) or "Production preparation context"
+        creator_voice_application_bundle = self._build_creator_voice_application_bundle(
+            creator_id=creator_id,
+            project_id=getattr(brief, "project_id", None),
+            workflow_type="production_preparation",
+            language=getattr(brief, "language", None),
+            current_user_instruction=None,
+            project_instruction=None,
+            apply_requested=bool(self.preferences.get("creator_voice_guidance_enabled", False)),
+        )
         payload = {
             "creator_id": creator_id,
             "context_version": self.ENGINE_VERSION,
@@ -401,6 +442,10 @@ class ProductionPreparationService:
             "preference_item_count": 0,
             "preference_omitted_count": 0,
             "preference_conflict_count": 0,
+            "voice_guidance_shadow": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_shadow),
+            "voice_guidance_applied": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_applied),
+            "voice_guidance_item_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+            "voice_guidance_omitted_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
         }
         if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
             creator_context_request = context_policy.build_request(
@@ -453,6 +498,24 @@ class ProductionPreparationService:
                 "preference_omitted_count": creator_preference_application_bundle.preferences_omitted_count,
                 "preference_conflict_count": creator_preference_application_bundle.conflict_count,
             }
+        if creator_voice_application_bundle is not None:
+            creator_context_package = {
+                **creator_context_package,
+                "creator_voice_application_context": creator_voice_application_bundle.to_dict(),
+            }
+            creator_context_usage = {
+                **creator_context_usage,
+                "voice_guidance_shadow": creator_voice_application_bundle.voice_guidance_shadow,
+                "voice_guidance_applied": creator_voice_application_bundle.voice_guidance_applied,
+                "voice_guidance_item_count": 0 if creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+                "voice_guidance_omitted_count": 0 if creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
+            }
+            if creator_voice_application_bundle.voice_guidance_applied and creator_voice_application_bundle.rendered_guidance:
+                creator_context_prompt = (
+                    creator_context_prompt + "\n\n" + creator_voice_application_bundle.rendered_guidance
+                    if creator_context_prompt
+                    else creator_voice_application_bundle.rendered_guidance
+                ).strip()
         context_details = {
             "creator_context_enabled": bool(creator_context_usage["enabled"]),
             "creator_context_policy_id": creator_context_usage["policy_id"],
@@ -462,6 +525,7 @@ class ProductionPreparationService:
             "creator_context_package": creator_context_package,
             "creator_context_prompt": creator_context_prompt,
             "confirmed_preference_application": None if creator_preference_application_bundle is None else creator_preference_application_bundle.to_dict(),
+            "creator_voice_application_bundle": None if creator_voice_application_bundle is None else creator_voice_application_bundle.to_dict(),
         }
         payload["source_fingerprint"] = build_production_fingerprint(
             {
@@ -1769,6 +1833,7 @@ def build_production_preparation_service(
     creator_language_service: Any | None = None,
     creator_context_assembly_service: CreatorContextAssemblyService | None = None,
     creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
+    creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
     creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
     audience_service: Any | None = None,
     platform_service: Any | None = None,
@@ -1789,6 +1854,7 @@ def build_production_preparation_service(
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
         creator_preference_application_service=creator_preference_application_service,
+        creator_voice_workflow_application_service=creator_voice_workflow_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         platform_service=platform_service,

@@ -213,6 +213,15 @@ v34-C consumes the profile, not raw corpus text.
 - scope and language mismatches are explicit exclusions;
 - the guidance bundle remains bounded and rebuildable.
 
+## v34-D Workflow Application Hand-Off
+
+v34-D consumes the guidance bundle, not the raw profile.
+
+- shadow integration remains available for diagnostics and comparison;
+- application may only occur through the controlled workflow boundary;
+- unsupported or disabled workflows remain preview-only;
+- no raw corpus text is promoted into executable prompt text.
+
 ## Non-Goals
 
 v34-A does not:

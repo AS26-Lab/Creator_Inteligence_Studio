@@ -324,10 +324,11 @@ Current repository modules labeled memory, personalization, or corpus are struct
 
 ## Creator Voice Boundary
 
-Creator Voice now has a three-step local pipeline:
+Creator Voice now has a four-step local pipeline:
 
 1. evidence selection;
 2. deterministic profile synthesis;
-3. diagnostic guidance preview.
+3. diagnostic guidance preview;
+4. controlled workflow application.
 
-The guidance preview is secondary to explicit user, project, and confirmed-preference instructions. It does not yet alter normal workflow prompts.
+The guidance preview is secondary to explicit user, project, and confirmed-preference instructions. Controlled workflow application remains gated and does not broadly alter normal workflow prompts.

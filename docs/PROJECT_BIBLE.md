@@ -82,7 +82,7 @@ Default flows must be guided, safe, and understandable in plain language. Techni
 9. Local-first processing where reasonable.
 10. Quality and speed over ideological purity.
 11. Authentic creator evidence must stay separate from AI-derived content and from structured confirmed preferences.
-12. Creator Voice profiles must remain descriptive and diagnostic until a later approved phase allows any workflow application.
+12. Creator Voice profiles must remain descriptive and diagnostic until a later approved phase allows controlled workflow application.
 
 ## Approved Scope
 
@@ -98,6 +98,7 @@ Included in product scope:
 - creator voice evidence selection and diagnostics;
 - creator voice profile synthesis for diagnostics;
 - creator voice guidance preview for diagnostics only;
+- creator voice workflow application through an explicit controlled boundary;
 - outlines;
 - hooks;
 - titles;

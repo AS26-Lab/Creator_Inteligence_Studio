@@ -83,6 +83,25 @@ It does not include raw corpus text or private repeated tokens.
 
 The renderer exists only to make diagnostics human-readable.
 
+## v34-D Workflow Application Boundary
+
+v34-D introduces a controlled consumer of the guidance bundle for approved workflows.
+
+It:
+
+- reads the guidance bundle, not the raw profile;
+- keeps shadow integration available for comparison;
+- applies guidance only when the workflow explicitly opts in;
+- preserves the same precedence rules as preview;
+- keeps the final request unchanged when application is disabled or unsupported.
+
+It does not:
+
+- broaden Creator Voice to all workflows;
+- bypass confirmed preferences, user instructions, or project instructions;
+- inject free-form corpus text into prompts;
+- apply guidance outside the controlled boundary.
+
 ## Fingerprint
 
 The bundle fingerprint depends on:

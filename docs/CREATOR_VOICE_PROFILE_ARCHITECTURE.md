@@ -137,6 +137,24 @@ It may not:
 - mutate retrieval;
 - generate a final style prompt.
 
+## v34-D Workflow Application Boundary
+
+`CreatorVoiceWorkflowApplicationService` consumes the guidance bundle and decides whether the guidance may be applied to a workflow.
+
+It may:
+
+- preserve shadow mode for comparison;
+- gate application by workflow allowlist and explicit opt-in;
+- emit observability about applied, omitted, and overridden guidance;
+- leave the normal final request unchanged when application is disabled.
+
+It may not:
+
+- read raw corpus text;
+- bypass confirmed preferences or explicit instructions;
+- generalize application to all workflows;
+- mutate the underlying profile.
+
 ## Non-Goals
 
 v34-B does not:

@@ -88,6 +88,10 @@ from creator_intelligence_studio.application.services.creator_context_policy imp
     CreatorContextPolicyRegistry,
     build_default_creator_context_policy_registry,
 )
+from creator_intelligence_studio.application.services.creator_voice_workflow_application_service import (
+    CreatorVoiceWorkflowApplicationBundle,
+    CreatorVoiceWorkflowApplicationService,
+)
 from creator_intelligence_studio.shared.dates import utc_now, to_iso_z
 from creator_intelligence_studio.shared.paths import ProjectPaths
 
@@ -190,6 +194,7 @@ class StrategicPlanningService:
         creator_memory_service: Any | None = None,
         creator_language_service: Any | None = None,
         creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+        creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
         creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         analytics_service: Any | None = None,
@@ -208,6 +213,7 @@ class StrategicPlanningService:
         self.creator_memory_service = creator_memory_service
         self.creator_language_service = creator_language_service
         self.creator_context_assembly_service = creator_context_assembly_service
+        self.creator_voice_workflow_application_service = creator_voice_workflow_application_service
         self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.analytics_service = analytics_service
@@ -223,6 +229,32 @@ class StrategicPlanningService:
         self._snapshots_root = self.paths.data_directory / "planning" / "snapshots"
         self._reports_root.mkdir(parents=True, exist_ok=True)
         self._snapshots_root.mkdir(parents=True, exist_ok=True)
+
+    def _build_creator_voice_application_bundle(
+        self,
+        *,
+        creator_id: str,
+        project_id: str | None,
+        workflow_type: str,
+        language: str | None,
+        current_user_instruction: str | None,
+        project_instruction: str | None,
+        apply_requested: bool,
+    ) -> CreatorVoiceWorkflowApplicationBundle | None:
+        if self.creator_voice_workflow_application_service is None:
+            return None
+        return self.creator_voice_workflow_application_service.build_application(
+            {
+                "creator_id": creator_id,
+                "project_id": project_id,
+                "workflow_type": workflow_type,
+                "language": language,
+                "current_user_instruction": current_user_instruction,
+                "project_instruction": project_instruction,
+                "enabled": True,
+                "apply_enabled": apply_requested,
+            }
+        )
 
     def _upsert(self, table: str, payload: dict[str, Any], conflict_columns: tuple[str, ...] = ("id",)) -> dict[str, Any]:
         return self.repository.upsert_record(table, payload, conflict_columns=conflict_columns)
@@ -322,6 +354,28 @@ class StrategicPlanningService:
         content_library_snapshot_id = self._snapshot_identifier(self.content_library_service, ("list_content", "list_items", "list_entries", "list_assets"), creator_id)
         platform_snapshot_id = self._snapshot_identifier(self.platform_service, ("list_reports", "list_integrations", "list_connections"), creator_id)
         recommendation_payload = self._recommendation_payload(creator_id)
+        planning_request_text = " | ".join(
+            part
+            for part in (
+                str(preferences or self.preferences),
+                str(capacity or {}),
+                str(constraints or []),
+                str(conflicts or []),
+                str(missing_data or []),
+                str(stale_data or []),
+                str((recommendation_payload.get("approved") or [{}])[0].get("title") if recommendation_payload.get("approved") else ""),
+            )
+            if part
+        ) or "Strategic planning context"
+        creator_voice_application_bundle = self._build_creator_voice_application_bundle(
+            creator_id=creator_id,
+            project_id=None,
+            workflow_type="strategic_planning",
+            language=None,
+            current_user_instruction=None,
+            project_instruction=None,
+            apply_requested=False,
+        )
         creator_context_bundle = None
         creator_context_package: dict[str, object] = {}
         creator_context_prompt: str | None = None
@@ -333,21 +387,12 @@ class StrategicPlanningService:
             "estimated_tokens": 0,
             "estimated_characters": 0,
             "truncated": False,
+            "voice_guidance_shadow": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_shadow),
+            "voice_guidance_applied": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_applied),
+            "voice_guidance_item_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+            "voice_guidance_omitted_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
         }
         if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
-            planning_request_text = " | ".join(
-                part
-                for part in (
-                    str(preferences or self.preferences),
-                    str(capacity or {}),
-                    str(constraints or []),
-                    str(conflicts or []),
-                    str(missing_data or []),
-                    str(stale_data or []),
-                    str((recommendation_payload.get("approved") or [{}])[0].get("title") if recommendation_payload.get("approved") else ""),
-                )
-                if part
-            ) or "Strategic planning context"
             creator_context_request = context_policy.build_request(
                 creator_id=creator_id,
                 user_request=planning_request_text,
@@ -364,6 +409,15 @@ class StrategicPlanningService:
                 "estimated_tokens": creator_context_bundle.total_estimated_tokens,
                 "estimated_characters": creator_context_bundle.total_estimated_characters,
                 "truncated": creator_context_bundle.truncated,
+                "voice_guidance_shadow": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_shadow),
+                "voice_guidance_applied": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_applied),
+                "voice_guidance_item_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+                "voice_guidance_omitted_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
+            }
+        if creator_voice_application_bundle is not None:
+            creator_context_package = {
+                **creator_context_package,
+                "creator_voice_application_context": creator_voice_application_bundle.to_dict(),
             }
         payload = {
             "creator_id": creator_id,
@@ -395,6 +449,7 @@ class StrategicPlanningService:
             "creator_context_bundle": creator_context_bundle.to_dict() if creator_context_bundle else None,
             "creator_context_package": creator_context_package,
             "creator_context_prompt": creator_context_prompt,
+            "creator_voice_application_bundle": None if creator_voice_application_bundle is None else creator_voice_application_bundle.to_dict(),
         }
         fingerprint = build_planning_fingerprint({**payload, **context_details})
         existing = self._fetch(
@@ -2008,6 +2063,7 @@ def build_strategic_planning_service(
     creator_memory_service: Any | None = None,
     creator_language_service: Any | None = None,
     creator_context_assembly_service: CreatorContextAssemblyService | None = None,
+    creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
     audience_service: Any | None = None,
     analytics_service: Any | None = None,
     analytics_lab_service: Any | None = None,
@@ -2027,6 +2083,7 @@ def build_strategic_planning_service(
         creator_memory_service=creator_memory_service,
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
+        creator_voice_workflow_application_service=creator_voice_workflow_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,

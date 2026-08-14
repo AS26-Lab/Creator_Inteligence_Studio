@@ -49,6 +49,10 @@ from creator_intelligence_studio.application.services.creator_preference_applica
     CreatorPreferenceApplicationBundle,
     CreatorPreferenceApplicationService,
 )
+from creator_intelligence_studio.application.services.creator_voice_workflow_application_service import (
+    CreatorVoiceWorkflowApplicationBundle,
+    CreatorVoiceWorkflowApplicationService,
+)
 from creator_intelligence_studio.application.services.creator_context_policy import (
     CreatorContextPolicyRegistry,
     build_default_creator_context_policy_registry,
@@ -175,6 +179,7 @@ class ContentBriefService:
         creator_language_service: Any | None = None,
         creator_context_assembly_service: CreatorContextAssemblyService | None = None,
         creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
+        creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
         creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
         audience_service: Any | None = None,
         analytics_service: Any | None = None,
@@ -196,6 +201,7 @@ class ContentBriefService:
         self.creator_language_service = creator_language_service
         self.creator_context_assembly_service = creator_context_assembly_service
         self.creator_preference_application_service = creator_preference_application_service
+        self.creator_voice_workflow_application_service = creator_voice_workflow_application_service
         self.creator_context_policy_registry = creator_context_policy_registry or build_default_creator_context_policy_registry()
         self.audience_service = audience_service
         self.analytics_service = analytics_service
@@ -541,6 +547,32 @@ class ContentBriefService:
             return BriefType.VIDEO_BRIEF
         return _enum_value(BriefType, request_payload.get("brief_type"), BriefType.VIDEO_BRIEF)
 
+    def _build_creator_voice_application_bundle(
+        self,
+        *,
+        creator_id: str,
+        project_id: str | None,
+        workflow_type: str,
+        language: str | None,
+        current_user_instruction: str | None,
+        project_instruction: str | None,
+        apply_requested: bool,
+    ) -> CreatorVoiceWorkflowApplicationBundle | None:
+        if self.creator_voice_workflow_application_service is None:
+            return None
+        return self.creator_voice_workflow_application_service.build_application(
+            {
+                "creator_id": creator_id,
+                "project_id": project_id,
+                "workflow_type": workflow_type,
+                "language": language,
+                "current_user_instruction": current_user_instruction,
+                "project_instruction": project_instruction,
+                "enabled": True,
+                "apply_enabled": apply_requested,
+            }
+        )
+
     def create_context_snapshot(
         self,
         creator_id: str,
@@ -583,6 +615,15 @@ class ContentBriefService:
             )
             if part
         ) or "Content brief context"
+        creator_voice_application_bundle = self._build_creator_voice_application_bundle(
+            creator_id=creator_id,
+            project_id=None,
+            workflow_type="content_brief",
+            language=None,
+            current_user_instruction=None,
+            project_instruction=None,
+            apply_requested=False,
+        )
         creator_context_bundle = None
         creator_context_package: dict[str, object] = {}
         creator_context_prompt: str | None = None
@@ -598,7 +639,12 @@ class ContentBriefService:
             "preference_item_count": 0,
             "preference_omitted_count": 0,
             "preference_conflict_count": 0,
+            "voice_guidance_shadow": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_shadow),
+            "voice_guidance_applied": bool(creator_voice_application_bundle and creator_voice_application_bundle.voice_guidance_applied),
+            "voice_guidance_item_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+            "voice_guidance_omitted_count": 0 if creator_voice_application_bundle is None or creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
         }
+
         if use_creator_context and self.creator_context_assembly_service is not None and context_policy is not None and context_policy.is_context_allowed():
             creator_context_request = context_policy.build_request(
                 creator_id=creator_id,
@@ -649,6 +695,18 @@ class ContentBriefService:
                 "preference_omitted_count": creator_preference_application_bundle.preferences_omitted_count,
                 "preference_conflict_count": creator_preference_application_bundle.conflict_count,
             }
+        if creator_voice_application_bundle is not None:
+            creator_context_package = {
+                **creator_context_package,
+                "creator_voice_application_context": creator_voice_application_bundle.to_dict(),
+            }
+            creator_context_usage = {
+                **creator_context_usage,
+                "voice_guidance_shadow": creator_voice_application_bundle.voice_guidance_shadow,
+                "voice_guidance_applied": creator_voice_application_bundle.voice_guidance_applied,
+                "voice_guidance_item_count": 0 if creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.guidance_items),
+                "voice_guidance_omitted_count": 0 if creator_voice_application_bundle.guidance_bundle is None else len(creator_voice_application_bundle.guidance_bundle.omitted_items),
+            }
         payload = {
             "creator_id": creator_id,
             "context_version": self.ENGINE_VERSION,
@@ -683,6 +741,7 @@ class ContentBriefService:
             "creator_context_package": creator_context_package,
             "creator_context_prompt": creator_context_prompt,
             "confirmed_preference_application": None if creator_preference_application_bundle is None else creator_preference_application_bundle.to_dict(),
+            "creator_voice_application_bundle": None if creator_voice_application_bundle is None else creator_voice_application_bundle.to_dict(),
         }
         fingerprint = build_brief_fingerprint({**payload, **context_details})
         existing = self._fetch("brief_context_snapshots", where="creator_id = ? AND source_fingerprint = ?", params=(creator_id, fingerprint))
@@ -1589,6 +1648,7 @@ def build_content_brief_service(
     creator_language_service: Any | None = None,
     creator_context_assembly_service: CreatorContextAssemblyService | None = None,
     creator_preference_application_service: CreatorPreferenceApplicationService | None = None,
+    creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None,
     creator_context_policy_registry: CreatorContextPolicyRegistry | None = None,
     audience_service: Any | None = None,
     analytics_service: Any | None = None,
@@ -1611,6 +1671,7 @@ def build_content_brief_service(
         creator_language_service=creator_language_service,
         creator_context_assembly_service=creator_context_assembly_service,
         creator_preference_application_service=creator_preference_application_service,
+        creator_voice_workflow_application_service=creator_voice_workflow_application_service,
         creator_context_policy_registry=creator_context_policy_registry,
         audience_service=audience_service,
         analytics_service=analytics_service,

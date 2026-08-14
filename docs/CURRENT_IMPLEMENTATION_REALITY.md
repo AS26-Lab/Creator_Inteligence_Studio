@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v34-B slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v34-D slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -14,7 +14,7 @@ This document records what is actually implemented in the repository through the
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 - Creator Corpus now spans v33-A through v33-I: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, and deterministic preference synthesis with explicit confirmation surfaces.
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
-- Creator Voice now spans v34-A through v34-B: the evidence foundation is implemented and a deterministic profile synthesis layer now derives structured, explainable voice features without applying them to AI workflows.
+- Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
 
 ## What Is Implemented
 
@@ -232,6 +232,16 @@ Status: `implemented`
 - explicit user instructions, project instructions, and confirmed preferences outrank voice guidance
 - bounded guidance bundles and deterministic fingerprints are exposed through the CLI preview surface
 - normal AI workflows remain unchanged; no automatic prompt application has been introduced
+
+Status: `implemented`
+
+## Creator Voice v34-D Workflow Application
+
+- Creator Voice guidance now has a controlled workflow application boundary
+- shadow integration is preserved for diagnostic comparison in non-approved workflows
+- real application is gated and currently limited to the approved workflow boundary used by production preparation
+- normal workflow behavior remains unchanged unless the application boundary is explicitly enabled
+- guidance application remains subordinate to user, project, and confirmed-preference precedence
 
 Status: `implemented`
 
