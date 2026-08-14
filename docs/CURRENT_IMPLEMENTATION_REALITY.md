@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v34-A slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v34-B slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -14,7 +14,7 @@ This document records what is actually implemented in the repository through the
 - Component Manager and Local Transcription Foundation now spans v32-A through v32-H: catalog, installation inventory, hardware inventory, transcription profiles, deterministic capability resolver, managed FFmpeg, resumable downloads, explicit runtime/model installers, guided local-components UI, and explicit local action dispatch with task lifecycle tracking. The existing transcription stack is still the runtime path for execution and is wrapped by the component-manager boundary rather than replaced.
 - Creator Corpus now spans v33-A through v33-I: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, and deterministic preference synthesis with explicit confirmation surfaces.
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
-- Creator Voice now spans v34-A as a conservative evidence foundation: authentic creator evidence is selected, AI-origin contamination is blocked, confirmed preferences remain separate, and no style profile is synthesized yet.
+- Creator Voice now spans v34-A through v34-B: the evidence foundation is implemented and a deterministic profile synthesis layer now derives structured, explainable voice features without applying them to AI workflows.
 
 ## What Is Implemented
 
@@ -196,11 +196,11 @@ Status: `requires_ml`
 ## What Is Not Started
 
 - Semantic Retrieval Foundation
-- Creator Voice Workbench
+- Creator Voice Prompt Application
 - Human-Guided Script Drafting Foundation
 - automatic video editing
 
-Status: `semantic retrieval adoption is optional; creator voice workbench, script drafting, and automatic video editing remain not started`
+Status: `semantic retrieval adoption is optional; creator voice prompt application, script drafting, and automatic video editing remain not started`
 
 ## Creator Voice v34-A Evidence Foundation
 
@@ -211,6 +211,17 @@ Status: `semantic retrieval adoption is optional; creator voice workbench, scrip
 - confirmed preferences remain separate structured evidence and do not become textual style samples
 - evidence snapshots are bounded, deterministic, creator-scoped, project/workflow/language aware, and rebuildable from canonical corpus state
 - no voice profile, prompt mutation, embedding creation, or retrieval mutation is introduced
+
+Status: `implemented`
+
+## Creator Voice v34-B Profile Synthesis
+
+- Creator Voice profiles are synthesized deterministically from evidence snapshots
+- text-derived features remain bounded, explainable, and language-aware
+- spoken and written patterns are preserved separately
+- confirmed preferences remain structured guidance and are not merged into textual style features
+- profile comparison is diagnostic only
+- no prompt application, retrieval mutation, embeddings, or fine-tuning are introduced
 
 Status: `implemented`
 

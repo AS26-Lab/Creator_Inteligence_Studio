@@ -6010,6 +6010,7 @@ def dispatch(
     creator_preference_service=None,
     creator_preference_application_service=None,
     creator_voice_evidence_service=None,
+    creator_voice_profile_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6140,7 +6141,15 @@ def dispatch(
         if args.entity == "voice":
             if creator_voice_evidence_service is None:
                 raise DomainError("El servicio de Creator Voice no esta disponible.")
-            return handle_voice_command(args, service=creator_voice_evidence_service, stdout=stdout, stderr=stderr)
+            if creator_voice_profile_service is None:
+                raise DomainError("El servicio de Creator Voice no esta disponible.")
+            return handle_voice_command(
+                args,
+                evidence_service=creator_voice_evidence_service,
+                profile_service=creator_voice_profile_service,
+                stdout=stdout,
+                stderr=stderr,
+            )
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

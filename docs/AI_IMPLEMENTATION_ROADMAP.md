@@ -124,6 +124,14 @@ v34-A begins Creator Voice as evidence foundation only.
 - snapshots are deterministic, bounded, rebuildable, and creator-scoped
 - no style prompt synthesis, no embeddings, no prompt application, and no retrieval mutation are introduced
 
+v34-B adds Creator Voice profile synthesis on top of the evidence snapshot.
+
+- structured profile features are derived deterministically from the snapshot
+- no personality guessing, no sensitive inference, and no prompt application are introduced
+- spoken and written patterns remain distinct
+- confirmed preferences remain separate from text-derived features
+- profiles are diagnostic and explainable, not model-facing style prompts
+
 ## Stage Gates
 
 Every stage must define:

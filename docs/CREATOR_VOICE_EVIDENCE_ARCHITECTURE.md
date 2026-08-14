@@ -194,6 +194,16 @@ The CLI surface is intentionally small.
 
 The diagnostic surface is not a voice editor.
 
+## Profile Hand-off
+
+v34-B consumes this snapshot and derives structured profile features from it.
+
+- the snapshot remains the canonical evidence source;
+- profile synthesis is deterministic and diagnostic only;
+- spoken and written evidence remain distinct;
+- confirmed preferences remain separate structured guidance;
+- no prompt application or retrieval mutation is introduced.
+
 ## Non-Goals
 
 v34-A does not:

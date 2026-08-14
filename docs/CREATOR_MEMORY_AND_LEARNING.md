@@ -214,6 +214,15 @@ v34-A product reality:
 - the service does not synthesize a final Creator Voice profile
 - prompt grounding, retrieval ranking, and confirmed preference application remain unchanged
 
+v34-B product reality:
+
+- Creator Voice profiles are synthesized deterministically from evidence snapshots
+- features remain observable, bounded, and explainable
+- spoken and written patterns are preserved separately
+- confirmed preferences remain structured guidance rather than textual style samples
+- profile comparisons are diagnostic only
+- prompt grounding, retrieval ranking, and preference application remain unchanged
+
 ## Embeddings And Search
 
 Approved decisions:

@@ -5,6 +5,17 @@ from .entities import (
     CreatorVoiceEvidenceItem,
     CreatorVoiceEvidenceSnapshot,
 )
+from .profile import (
+    CreatorVoiceConfidenceLevel,
+    CreatorVoiceFeature,
+    CreatorVoiceFeatureStatus,
+    CreatorVoiceProfile,
+    CreatorVoiceProfileComparison,
+    CreatorVoiceProfileSection,
+    CreatorVoiceProfileStatus,
+    CreatorVoiceProfileVersion,
+    CreatorVoiceStructuredPreference,
+)
 from .repositories import CreatorVoiceCorpusQueryRepository
 from .value_objects import (
     CreatorVoiceEvidenceQuality,
@@ -24,7 +35,15 @@ __all__ = [
     "CreatorVoiceEvidenceSourceKind",
     "CreatorVoiceEvidenceType",
     "CreatorVoiceExclusionReason",
+    "CreatorVoiceConfidenceLevel",
+    "CreatorVoiceFeature",
+    "CreatorVoiceFeatureStatus",
+    "CreatorVoiceProfile",
+    "CreatorVoiceProfileComparison",
+    "CreatorVoiceProfileSection",
+    "CreatorVoiceProfileStatus",
+    "CreatorVoiceProfileVersion",
     "CreatorVoiceScopeMode",
+    "CreatorVoiceStructuredPreference",
     "CreatorVoiceSelectionPolicyVersion",
 ]
-
