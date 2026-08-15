@@ -18,6 +18,31 @@ This roadmap fixes the mandatory order for AI work. It prevents the project from
 
 The collective server and predictive ML come later, once there are enough users and enough data.
 
+## v35 Integrations
+
+The next approved major block after the Creator Voice workbench is Integrations.
+
+- v35-A establishes provider-neutral connector contracts, creator-owned accounts, secure credential references, and offline fake-connector validation
+- it does not enable real social/video/storage provider publishing flows
+- it does not change Creator Voice application behavior
+- it does not alter the AI runtime or retrieval architecture
+
+Future connector phases must still follow the approved roadmap and product-value ordering.
+
+## Future Creator Voice / Script Intelligence Differentiator
+
+Advanced per-creator linguistic modeling is an approved future capability for the Creator Voice and Script Intelligence areas. It is deferred until a later phase and must not be implemented during v35-A.
+
+- The model must remain creator-specific, never universal.
+- There is no universal blacklist of "AI words" or generic bad-word lists for the feature.
+- The system may use positive and conservative negative linguistic evidence only after enough authentic creator evidence exists.
+- Future analysis may compare authentic creator language against AI-generated language to find explainable mismatches, but it is not a universal AI detector.
+- Creator Voice Training or Linguistic Calibration may later accept creator-authored exercises as durable evidence, independent of a single LLM conversation.
+- Future ingestion must include approved document and short-form text sources such as PDF, DOCX, TXT, Markdown, scripts, titles, hooks, captions, CTAs, posts, and emoji-containing text.
+- Language authenticity and performance remain separate signals.
+- All linguistic state, samples, and calibration responses remain creator-scoped.
+- Sensitive inference and personality profiling remain out of scope.
+
 ## Next Handoff
 
 Component Manager and Local Transcription Foundation now has v32-A through v32-H implemented as a coherent stack: catalog, benchmark, managed FFmpeg, resumable downloads, explicit runtime/model installers, canonical readiness, guided local-components UI, and explicit local actions with task lifecycle wiring.

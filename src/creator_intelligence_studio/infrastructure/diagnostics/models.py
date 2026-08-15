@@ -55,6 +55,10 @@ class EnvironmentDiagnostic:
     model_roles_configured: bool = False
     budget_policy_configured: bool = False
     credential_store_available: bool = False
+    integration_contract_version: str | None = None
+    registered_connector_count: int = 0
+    registered_connector_ids: tuple[str, ...] = ()
+    integration_connectors: tuple[dict[str, Any], ...] = ()
     packaged_application: bool = False
     application_root: str | None = None
     runtime_manifest_path: str | None = None
@@ -103,8 +107,13 @@ class EnvironmentDiagnostic:
             f"Modelos por rol configurados: {'si' if self.model_roles_configured else 'no'}",
             f"Presupuesto AI configurado: {'si' if self.budget_policy_configured else 'no'}",
             f"Credential store disponible: {'si' if self.credential_store_available else 'no'}",
+            f"Integraciones registradas: {self.registered_connector_count}",
             f"Modo basico listo: {'si' if self.state.ready_for_basic_mode else 'no'}",
         ]
+        if self.integration_contract_version:
+            lines.append(f"Integration contract: {self.integration_contract_version}")
+        if self.registered_connector_ids:
+            lines.append(f"Connector IDs: {', '.join(self.registered_connector_ids)}")
         if self.gpu_devices:
             gpu = self.gpu_devices[0]
             lines.append(

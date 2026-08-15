@@ -15,6 +15,7 @@ This document records what is actually implemented in the repository through the
 - Creator Corpus now spans v33-A through v33-I: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, and deterministic preference synthesis with explicit confirmation surfaces.
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
 - Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
+- v35-A adds the integration foundation: provider-neutral connector contracts, a registry, a fake connector, creator-scoped accounts, opaque credential references, and frozen-runtime diagnostics. No real provider integration is enabled yet.
 
 ## What Is Implemented
 
@@ -604,5 +605,14 @@ Status: `implemented`
 - archived and non-eligible content stay out of the default result set
 - the current query implementation uses deterministic normalized-text filtering over the derived retrieval index; embeddings and LLM retrieval remain paused
 - the retrieval index is derived data and can be rebuilt from canonical corpus tables
+
+## v35-A Integration Foundation
+
+- integration contracts are provider-neutral and versioned as `integration-contract-v1`
+- accounts remain creator-owned, and normal records only store opaque credential references
+- read and write capabilities are separated explicitly
+- the fake connector validates offline read/write, auth-expiry, rate-limit, and provider-down behavior
+- the frozen runtime exposes integration diagnostics and the `integrations` CLI surface
+- no real provider connector has been enabled yet
 
 Status: `implemented`

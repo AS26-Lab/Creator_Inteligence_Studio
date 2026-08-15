@@ -263,6 +263,10 @@ from creator_intelligence_studio.presentation.cli.voice_cli import (
     build_voice_parser,
     handle_voice_command,
 )
+from creator_intelligence_studio.presentation.cli.integrations_cli import (
+    build_integrations_parser,
+    handle_integrations_command,
+)
 from creator_intelligence_studio.presentation.cli.ai_runtime_cli import (
     build_ai_parser,
     handle_ai_command,
@@ -493,6 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_feedback_parser(subparsers)
     build_preferences_parser(subparsers)
     build_voice_parser(subparsers)
+    build_integrations_parser(subparsers)
     build_ai_parser(subparsers)
 
     creator_parser = subparsers.add_parser("creator", help="Gestion de creadores")
@@ -6013,6 +6018,7 @@ def dispatch(
     creator_voice_profile_service=None,
     creator_voice_guidance_service=None,
     creator_voice_workflow_application_service=None,
+    integration_service=None,
     audience_service: AudienceModelService | None = None,
     platform_service: PlatformIntegrationService | None = None,
     analytics_service: AnalyticsImportService | None = None,
@@ -6154,6 +6160,10 @@ def dispatch(
                 stdout=stdout,
                 stderr=stderr,
             )
+        if args.entity == "integrations":
+            if integration_service is None:
+                raise DomainError("El servicio de integraciones no esta disponible.")
+            return handle_integrations_command(args, service=integration_service, stdout=stdout, stderr=stderr)
         if args.entity == "learnings":
             if experiment_service is None:
                 raise DomainError("El servicio de experiments no esta disponible.")

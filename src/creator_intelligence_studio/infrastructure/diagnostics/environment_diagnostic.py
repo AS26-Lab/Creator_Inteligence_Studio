@@ -95,6 +95,8 @@ def _parse_nvidia_smi_output(output: str) -> tuple[str | None, str | None, list[
 def collect_environment_diagnostic(
     settings: AppSettings,
     paths: ProjectPaths,
+    *,
+    integration_summary: dict[str, object] | None = None,
 ) -> EnvironmentDiagnostic:
     """Recopila diagnostico del entorno sin modificar el sistema."""
 
@@ -197,6 +199,25 @@ def collect_environment_diagnostic(
         model_roles_configured=False,
         budget_policy_configured=False,
         credential_store_available=credential_store_available,
+        integration_contract_version=(
+            None if integration_summary is None else str(integration_summary.get("integration_contract_version") or None)
+        ),
+        registered_connector_count=(
+            0 if integration_summary is None else int(integration_summary.get("registered_connector_count") or 0)
+        ),
+        registered_connector_ids=(
+            ()
+            if integration_summary is None
+            else tuple(str(item) for item in integration_summary.get("registered_connector_ids", ()))
+        ),
+        integration_connectors=(
+            ()
+            if integration_summary is None
+            else tuple(
+                dict(item) if isinstance(item, dict) else {"value": item}
+                for item in integration_summary.get("connectors", ())
+            )
+        ),
         runtime_manifest_path=runtime_manifest_path,
         runtime_manifest=runtime_manifest,
         state=state,

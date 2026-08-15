@@ -154,6 +154,26 @@ These may remain as future ideas, but they are not part of the current priority 
 9. Keep privacy and creator isolation explicit.
 10. Record provenance and decision history.
 
+## Approved Future Product Differentiator
+
+Advanced per-creator linguistic modeling is an approved future product requirement for Creator Intelligence Studio. It is a high-priority differentiator for Creator Voice and Script Intelligence, but it remains deferred to a later roadmap phase.
+
+The approved direction is:
+
+- linguistic modeling must be creator-specific, never universal;
+- there is no universal blacklist of "AI words" or "bad wording";
+- the relevant question is whether language matches this creator in this language, project, workflow, and content format;
+- positive evidence and conservative negative evidence are both allowed once enough authentic evidence exists;
+- creator-vs-AI analysis must remain contrastive and explainable, not a universal AI detector;
+- future creator voice training or linguistic calibration may accept creator-authored exercises and calibration prompts as durable evidence;
+- the canonical linguistic state must persist independently from any single LLM conversation, so no prompt-only personalization is allowed;
+- future modeling may use deterministic linguistic statistics, lexical analysis, syntactic and discourse features, lightweight ML, embeddings where justified, and controlled LLM revision, but the architecture must remain replaceable and evidence-driven;
+- document ingestion beyond video/audio transcription is approved for future phases, including PDF, DOCX, TXT, Markdown, scripts, published scripts, and manually pasted long-form text;
+- short-form evidence such as titles, hooks, captions, CTAs, posts, and emoji-containing text is first-class and must not be treated identically to long-form scripts;
+- language authenticity is distinct from performance, so metrics like views or CTR must not determine whether language is authentic;
+- all linguistic statistics, samples, calibration responses, and model state must remain creator-scoped;
+- linguistic modeling must not infer sensitive traits or turn into personality profiling.
+
 ## Current Approved Architecture Direction
 
 The initial AI stage is hybrid:

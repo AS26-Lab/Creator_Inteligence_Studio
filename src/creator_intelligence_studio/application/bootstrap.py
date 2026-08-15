@@ -110,6 +110,10 @@ from creator_intelligence_studio.application.services.creator_voice_workflow_app
     CreatorVoiceWorkflowApplicationService,
     build_creator_voice_workflow_application_service,
 )
+from creator_intelligence_studio.application.services.integration_service import (
+    IntegrationService,
+    build_integration_service,
+)
 from creator_intelligence_studio.application.services.creative_packaging_service import (
     CreativePackagingService,
     build_creative_packaging_service,
@@ -174,6 +178,9 @@ from creator_intelligence_studio.infrastructure.diagnostics.environment_diagnost
 )
 from creator_intelligence_studio.infrastructure.diagnostics.models import (
     EnvironmentDiagnostic,
+)
+from creator_intelligence_studio.infrastructure.integrations import (
+    build_default_integration_registry_summary,
 )
 from creator_intelligence_studio.infrastructure.logging.logging_setup import (
     setup_logging,
@@ -325,6 +332,7 @@ class ServiceContext(BootstrapContext):
     creator_voice_profile_service: CreatorVoiceProfileService | None = None
     creator_voice_guidance_service: CreatorVoiceGuidanceService | None = None
     creator_voice_workflow_application_service: CreatorVoiceWorkflowApplicationService | None = None
+    integration_service: IntegrationService | None = None
     creative_packaging_service: CreativePackagingService | None = None
     youtube_service: YouTubeIntegrationService | None = None
     instagram_service: InstagramIntegrationService | None = None
@@ -353,6 +361,7 @@ def _load_context() -> BootstrapContext:
     diagnostic = collect_environment_diagnostic(
         settings=settings,
         paths=paths,
+        integration_summary=build_default_integration_registry_summary(),
     )
     return BootstrapContext(
         settings=settings,
@@ -373,6 +382,10 @@ def _load_service_context() -> ServiceContext:
         database=database,
     )
     ai_status = ai_runtime_service.status()
+    integration_service = build_integration_service(
+        logger=context.logger,
+    )
+    integration_summary = integration_service.summary()
     diagnostic = replace(
         context.diagnostic,
         ai_runtime_available=ai_status.ai_runtime_available,
@@ -381,6 +394,10 @@ def _load_service_context() -> ServiceContext:
         model_roles_configured=ai_status.model_roles_configured,
         budget_policy_configured=ai_status.budget_policy_configured,
         credential_store_available=ai_status.credential_store_available,
+        integration_contract_version=integration_summary.integration_contract_version,
+        registered_connector_count=integration_summary.registered_connector_count,
+        registered_connector_ids=integration_summary.registered_connector_ids,
+        integration_connectors=tuple(summary.to_dict() for summary in integration_summary.connector_summaries),
     )
     service = build_catalog_service(
         settings=context.settings,
@@ -804,6 +821,7 @@ def _load_service_context() -> ServiceContext:
         creator_voice_profile_service=creator_voice_profile_service,
         creator_voice_guidance_service=creator_voice_guidance_service,
         creator_voice_workflow_application_service=creator_voice_workflow_application_service,
+        integration_service=integration_service,
         creative_packaging_service=creative_packaging_service,
         youtube_service=youtube_service,
         instagram_service=instagram_service,
@@ -909,6 +927,7 @@ def run(argv: Sequence[str] | None = (), stdout=None, stderr=None) -> int:
             creator_voice_profile_service=context.creator_voice_profile_service,
             creator_voice_guidance_service=context.creator_voice_guidance_service,
             creator_voice_workflow_application_service=context.creator_voice_workflow_application_service,
+            integration_service=context.integration_service,
             analytics_service=context.analytics_service,
             analytics_lab_service=context.analytics_lab_service,
             experiment_service=context.experiment_service,
