@@ -68,6 +68,7 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-08-14 | Creator Voice guidance may consume the synthesized profile only as a deterministic preview boundary, with explicit overrides and no workflow application | approved | keep Creator Voice subordinate to explicit user, project, and confirmed-preference instructions while exposing a bounded diagnostic preview for future integration | `docs/CREATOR_VOICE_V34_C_PROFILE_CONSUMPTION.md`, `docs/CREATOR_VOICE_GUIDANCE_ARCHITECTURE.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md` | direct prompt mutation, automatic workflow application, and raw-corpus-to-guidance interpretation |
 | 2026-08-14 | Creator Voice guidance may be applied only through a controlled workflow boundary with shadow-first observability | approved | enable one approved workflow to consume the guidance bundle while keeping shadow comparison, explicit opt-in, bounded precedence, and request immutability outside the application boundary | `docs/CREATOR_VOICE_V34_D_WORKFLOW_APPLICATION.md`, `docs/CREATOR_VOICE_WORKFLOW_APPLICATION_ARCHITECTURE.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md`, `docs/CREATOR_VOICE_GUIDANCE_ARCHITECTURE.md` | global prompt injection, bypassing precedence, or applying voice across all workflows |
 | 2026-08-15 | Integrations v35-A must remain provider-neutral and fake-connector first | approved | future connectors need a stable creator-owned contract, secure credential references, and offline validation before any real provider integration is approved | `docs/INTEGRATIONS_V35_A_FOUNDATION.md`, `docs/INTEGRATION_ARCHITECTURE.md`, `docs/INTEGRATION_SECURITY_AND_CREDENTIALS.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md` | random SaaS integration sprawl, token-in-SQLite storage, and implicit write authority |
+| 2026-08-15 | YouTube is the first approved real integration connector and it must be read-first | approved | YouTube provides direct product value for creator identity, video inventory, metadata, and analytics while still fitting the controlled read-only connector boundary | `docs/INTEGRATIONS_V35_B_YOUTUBE_READ_FIRST.md`, `docs/YOUTUBE_CONNECTOR_ARCHITECTURE.md`, `docs/INTEGRATION_ARCHITECTURE.md`, `docs/INTEGRATION_SECURITY_AND_CREDENTIALS.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md` | delaying the first real connector or expanding into write/publish automation |
 
 ## Replaced Or Limited Decisions
 
@@ -89,6 +90,7 @@ This register keeps the canonical decisions, their status, and what they replace
 - whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.
 - runtime/model installer download and activation policy for v32-E and beyond.
 - v32-F readiness closure is implemented; v32-G guided UI can now consume the structured capability result.
+- real-account certification for the first real YouTube connector remains pending if no live credential smoke is executed.
 
 ## Additional Approved Decisions
 

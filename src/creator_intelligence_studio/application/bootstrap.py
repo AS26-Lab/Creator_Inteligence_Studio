@@ -180,6 +180,7 @@ from creator_intelligence_studio.infrastructure.diagnostics.models import (
     EnvironmentDiagnostic,
 )
 from creator_intelligence_studio.infrastructure.integrations import (
+    build_default_integration_registry,
     build_default_integration_registry_summary,
 )
 from creator_intelligence_studio.infrastructure.logging.logging_setup import (
@@ -361,7 +362,7 @@ def _load_context() -> BootstrapContext:
     diagnostic = collect_environment_diagnostic(
         settings=settings,
         paths=paths,
-        integration_summary=build_default_integration_registry_summary(),
+        integration_summary=build_default_integration_registry_summary(settings=settings, paths=paths),
     )
     return BootstrapContext(
         settings=settings,
@@ -383,6 +384,7 @@ def _load_service_context() -> ServiceContext:
     )
     ai_status = ai_runtime_service.status()
     integration_service = build_integration_service(
+        registry=build_default_integration_registry(settings=context.settings, paths=context.paths),
         logger=context.logger,
     )
     integration_summary = integration_service.summary()

@@ -24,6 +24,12 @@ The core product continues to work when no accounts are linked or when connector
 - `ExternalContentResource`
 - `IntegrationAnalyticsMetric`
 
+The current registry includes three connector implementations:
+
+- `fake.connector` for offline validation
+- `local.connector` for local no-auth flows
+- `youtube.connector` for the first real read-first provider adapter
+
 ## Key Rules
 
 - creator ownership is mandatory
@@ -48,6 +54,19 @@ It is used to prove:
 - rate limiting
 - provider unavailability
 - idempotent write behavior
+
+## YouTube Read-First Role
+
+`YouTubeIntegrationConnector` is the first real connector built behind this foundation.
+
+It is intentionally read-only in v35-B and is limited to:
+
+- account profile reads
+- content inventory reads
+- content metadata reads
+- analytics reads
+
+It does not expose write, publish, upload, schedule, update, delete, comment, or auto-ingest behavior.
 
 ## Future Expansion
 

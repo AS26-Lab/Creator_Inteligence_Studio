@@ -50,3 +50,6 @@ class YouTubeDataApiClient:
         data = self._request_json("videos", {"part": "snippet", "id": video_id, "pageToken": page_token, "maxResults": 1})
         return YouTubeApiPage(tuple(data.get("items", ())), data.get("nextPageToken"), data.get("prevPageToken"), json.dumps(data, ensure_ascii=False))
 
+    def list_playlist_items(self, *, playlist_id: str, page_token: str | None = None, max_results: int = 50, part: str = "snippet,contentDetails,status") -> YouTubeApiPage:
+        data = self._request_json("playlistItems", {"part": part, "playlistId": playlist_id, "pageToken": page_token, "maxResults": max_results})
+        return YouTubeApiPage(tuple(data.get("items", ())), data.get("nextPageToken"), data.get("prevPageToken"), json.dumps(data, ensure_ascii=False))

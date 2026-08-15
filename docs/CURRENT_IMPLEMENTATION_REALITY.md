@@ -16,6 +16,7 @@ This document records what is actually implemented in the repository through the
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
 - Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
 - v35-A adds the integration foundation: provider-neutral connector contracts, a registry, a fake connector, creator-scoped accounts, opaque credential references, and frozen-runtime diagnostics. No real provider integration is enabled yet.
+- v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; real-account certification remains pending.
 
 ## What Is Implemented
 
@@ -145,6 +146,16 @@ Status: `implemented`
 - multi-platform consolidation
 
 Status: `implemented`
+
+### Integrations v35-B
+
+- canonical YouTube connector behind the provider-neutral integration registry
+- read-only OAuth flow using secure credential storage
+- account profile, uploaded video inventory, video metadata, and analytics reads
+- offline/frozen validation passes with the connector registered
+- real-account certification remains pending because no live Google credential smoke was run in this closure
+
+Status: `implemented as first real connector`; real-account certification `pending`
 
 ### Strategic Foundations
 

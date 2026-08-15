@@ -27,6 +27,13 @@ The next approved major block after the Creator Voice workbench is Integrations.
 - it does not change Creator Voice application behavior
 - it does not alter the AI runtime or retrieval architecture
 
+- v35-B adds the first real connector, YouTube, as a read-first provider adapter for account identity, video inventory, metadata, and analytics
+- it keeps write/publish/update/delete/comment operations disabled
+- it uses official OAuth and least-privilege read scopes only
+- it does not auto-ingest YouTube content into Creator Corpus or Creator Voice
+
+The integration pillar now has a provider-neutral foundation and one approved real read-only connector.
+
 Future connector phases must still follow the approved roadmap and product-value ordering.
 
 ## Future Creator Voice / Script Intelligence Differentiator

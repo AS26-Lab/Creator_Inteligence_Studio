@@ -88,6 +88,57 @@ def build_integrations_parser(subparsers) -> None:
     fake_write.add_argument("--payload-json")
     fake_write.add_argument("--json", action="store_true")
 
+    youtube_parser = integrations_sub.add_parser("youtube", help="Conector YouTube read-first")
+    youtube_sub = youtube_parser.add_subparsers(dest="youtube_action", required=True)
+
+    youtube_auth_start = youtube_sub.add_parser("auth-start", help="Iniciar OAuth para YouTube")
+    youtube_auth_start.add_argument("--creator-id", required=True)
+    youtube_auth_start.add_argument("--client-id")
+    youtube_auth_start.add_argument("--client-secret")
+    youtube_auth_start.add_argument("--redirect-uri")
+    youtube_auth_start.add_argument("--scopes-json")
+    youtube_auth_start.add_argument("--json", action="store_true")
+
+    youtube_auth_status = youtube_sub.add_parser("auth-status", help="Mostrar estado de autenticacion de YouTube")
+    youtube_auth_status.add_argument("--creator-id", required=True)
+    youtube_auth_status.add_argument("--account-id", required=True)
+    youtube_auth_status.add_argument("--json", action="store_true")
+
+    youtube_account = youtube_sub.add_parser("account", help="Leer perfil de cuenta autenticada")
+    youtube_account.add_argument("--creator-id", required=True)
+    youtube_account.add_argument("--account-id", required=True)
+    youtube_account.add_argument("--json", action="store_true")
+
+    youtube_videos = youtube_sub.add_parser("videos", help="Listar videos del creador")
+    youtube_videos.add_argument("--creator-id", required=True)
+    youtube_videos.add_argument("--account-id", required=True)
+    youtube_videos.add_argument("--page-token")
+    youtube_videos.add_argument("--max-results", type=int, default=10)
+    youtube_videos.add_argument("--json", action="store_true")
+
+    youtube_video = youtube_sub.add_parser("video", help="Leer metadatos de video")
+    youtube_video.add_argument("--creator-id", required=True)
+    youtube_video.add_argument("--account-id", required=True)
+    youtube_video.add_argument("--video-id", required=True)
+    youtube_video.add_argument("--json", action="store_true")
+
+    youtube_analytics = youtube_sub.add_parser("analytics", help="Leer analiticas de YouTube")
+    youtube_analytics.add_argument("--creator-id", required=True)
+    youtube_analytics.add_argument("--account-id", required=True)
+    youtube_analytics.add_argument("--start-date")
+    youtube_analytics.add_argument("--end-date")
+    youtube_analytics.add_argument("--video-id")
+    youtube_analytics.add_argument("--metrics-json")
+    youtube_analytics.add_argument("--dimensions-json")
+    youtube_analytics.add_argument("--filters-json")
+    youtube_analytics.add_argument("--max-results", type=int, default=200)
+    youtube_analytics.add_argument("--json", action="store_true")
+
+    youtube_disconnect = youtube_sub.add_parser("disconnect", help="Desconectar una cuenta de YouTube")
+    youtube_disconnect.add_argument("--creator-id", required=True)
+    youtube_disconnect.add_argument("--account-id", required=True)
+    youtube_disconnect.add_argument("--json", action="store_true")
+
 
 def _parse_capability(raw: str) -> IntegrationCapability:
     return IntegrationCapability(raw)
@@ -118,6 +169,13 @@ def _parse_capability_list(raw: str | None) -> tuple[IntegrationCapability, ...]
     if not isinstance(value, list):
         raise ValueError("El valor debe ser una lista JSON.")
     return tuple(IntegrationCapability(str(item)) for item in value)
+
+
+def _get_youtube_connector(service: IntegrationService):
+    connector = service.registry.get("youtube.connector")
+    if connector is None:
+        raise DomainError("Conector de YouTube no registrado.")
+    return connector
 
 
 def handle_integrations_command(args: argparse.Namespace, *, service: IntegrationService, stdout, stderr) -> int:
@@ -209,4 +267,111 @@ def handle_integrations_command(args: argparse.Namespace, *, service: Integratio
         result = service.write(request)
         print(_dump(result.to_dict()), file=stdout)
         return 0
+    if args.action == "youtube":
+        connector = _get_youtube_connector(service)
+        if args.youtube_action == "auth-start":
+            scopes = _parse_string_list(args.scopes_json)
+            result = connector.begin_authorization(
+                creator_id=args.creator_id,
+                client_id=args.client_id,
+                client_secret=args.client_secret,
+                redirect_uri=args.redirect_uri,
+                scopes=scopes or None,
+            )
+            payload = result.to_dict()
+            if args.json:
+                print(_dump(payload), file=stdout)
+            else:
+                print(f"Authorization URL: {payload['authorization_url']}", file=stdout)
+                print(f"State: {payload['state']}", file=stdout)
+                print(f"Redirect URI: {payload['redirect_uri']}", file=stdout)
+                print(f"Scopes: {payload['scopes']}", file=stdout)
+            return 0
+        if args.youtube_action == "auth-status":
+            account = connector.get_account(args.account_id)
+            health = connector.get_health(creator_id=args.creator_id, account_id=args.account_id)
+            payload = {
+                "account": None if account is None else account.to_dict(),
+                "health": health.to_dict(),
+                "creator_id": args.creator_id,
+                "account_id": args.account_id,
+            }
+            print(_dump(payload), file=stdout)
+            return 0
+        if args.youtube_action == "account":
+            request = IntegrationReadRequest(
+                request_id="youtube-account-read",
+                creator_id=args.creator_id,
+                connector_id="youtube.connector",
+                account_id=args.account_id,
+                capability=IntegrationCapability.ACCOUNT_PROFILE_READ,
+                timestamp=utc_now(),
+            )
+            result = service.read(request)
+            print(_dump(result.to_dict()), file=stdout)
+            return 0
+        if args.youtube_action == "videos":
+            request = IntegrationReadRequest(
+                request_id="youtube-videos-read",
+                creator_id=args.creator_id,
+                connector_id="youtube.connector",
+                account_id=args.account_id,
+                capability=IntegrationCapability.CONTENT_LIST_READ,
+                parameters={
+                    "page_token": args.page_token,
+                    "max_results": args.max_results,
+                },
+                timestamp=utc_now(),
+            )
+            result = service.read(request)
+            print(_dump(result.to_dict()), file=stdout)
+            return 0
+        if args.youtube_action == "video":
+            request = IntegrationReadRequest(
+                request_id="youtube-video-read",
+                creator_id=args.creator_id,
+                connector_id="youtube.connector",
+                account_id=args.account_id,
+                capability=IntegrationCapability.CONTENT_METADATA_READ,
+                parameters={"video_ids": [args.video_id]},
+                timestamp=utc_now(),
+            )
+            result = service.read(request)
+            print(_dump(result.to_dict()), file=stdout)
+            return 0
+        if args.youtube_action == "analytics":
+            parameters: dict[str, object] = {
+                "start_date": args.start_date,
+                "end_date": args.end_date,
+                "max_results": args.max_results,
+            }
+            if args.video_id:
+                parameters["video_id"] = args.video_id
+            metrics = _parse_string_list(args.metrics_json)
+            dimensions = _parse_string_list(args.dimensions_json)
+            filters = _parse_json_object(args.filters_json)
+            if metrics:
+                parameters["metrics"] = list(metrics)
+            if dimensions:
+                parameters["dimensions"] = list(dimensions)
+            if filters:
+                parameters["filters"] = filters
+            request = IntegrationReadRequest(
+                request_id="youtube-analytics-read",
+                creator_id=args.creator_id,
+                connector_id="youtube.connector",
+                account_id=args.account_id,
+                capability=IntegrationCapability.ANALYTICS_READ,
+                parameters=parameters,
+                timestamp=utc_now(),
+            )
+            result = service.read(request)
+            print(_dump(result.to_dict()), file=stdout)
+            return 0
+        if args.youtube_action == "disconnect":
+            result = connector.disconnect_account(creator_id=args.creator_id, account_id=args.account_id)
+            payload = {"creator_id": args.creator_id, "account_id": args.account_id, "disconnected": result}
+            print(_dump(payload), file=stdout)
+            return 0
+        raise DomainError("Accion de youtube no reconocida.")
     raise DomainError("Accion de integrations no reconocida.")

@@ -58,9 +58,9 @@ class IntegrationFoundationTests(unittest.TestCase):
         summary = service.summary()
 
         self.assertEqual(summary.integration_contract_version, "integration-contract-v1")
-        self.assertEqual(summary.registered_connector_count, 2)
-        self.assertEqual(summary.registered_connector_ids, ("fake.connector", "local.connector"))
-        self.assertEqual([item.connector_id for item in service.list_connectors()], ["fake.connector", "local.connector"])
+        self.assertEqual(summary.registered_connector_count, 3)
+        self.assertEqual(summary.registered_connector_ids, ("fake.connector", "local.connector", "youtube.connector"))
+        self.assertEqual([item.connector_id for item in service.list_connectors()], ["fake.connector", "local.connector", "youtube.connector"])
 
     def test_duplicate_connector_id_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -286,15 +286,15 @@ class IntegrationFoundationTests(unittest.TestCase):
                 paths=paths,
                 integration_summary={
                     "integration_contract_version": "integration-contract-v1",
-                    "registered_connector_count": 2,
-                    "registered_connector_ids": ["fake.connector", "local.connector"],
+                    "registered_connector_count": 3,
+                    "registered_connector_ids": ["fake.connector", "local.connector", "youtube.connector"],
                     "connectors": [],
                 },
             )
 
         self.assertEqual(diagnostic.integration_contract_version, "integration-contract-v1")
-        self.assertEqual(diagnostic.registered_connector_count, 2)
-        self.assertEqual(diagnostic.registered_connector_ids, ("fake.connector", "local.connector"))
+        self.assertEqual(diagnostic.registered_connector_count, 3)
+        self.assertEqual(diagnostic.registered_connector_ids, ("fake.connector", "local.connector", "youtube.connector"))
 
 
 if __name__ == "__main__":

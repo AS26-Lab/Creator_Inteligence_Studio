@@ -10,6 +10,13 @@ Allowed:
 - granted scopes / capabilities
 - safe metadata summaries
 
+For YouTube OAuth specifically:
+
+- access tokens and refresh tokens stay behind the approved secure credential store
+- account rows only retain opaque references and safe summaries
+- desktop authorization uses the official loopback-style installed-app flow, not manual token paste
+- client configuration is developer/distributor responsibility, not end-user database state
+
 Not allowed:
 
 - raw access tokens
@@ -41,3 +48,4 @@ Not allowed:
 - offline tests must pass without real accounts
 - provider errors should normalize to safe categories
 - connector failures must degrade gracefully
+- revocation or expiry should mark the account for relink rather than deleting creator-owned history

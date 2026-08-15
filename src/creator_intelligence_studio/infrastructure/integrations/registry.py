@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from creator_intelligence_studio.domain.integrations import INTEGRATION_CONTRACT_VERSION, IntegrationConnectorDefinition, IntegrationConnectorSummary
+from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
+from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
 from creator_intelligence_studio.shared.dates import utc_now
 
 from .fake_connector import FakeIntegrationConnector
 from .local_connector import LocalNoAuthIntegrationConnector
+from .youtube_connector import build_default_youtube_connector
 
 
 class IntegrationRegistry:
@@ -58,14 +62,38 @@ class IntegrationRegistry:
         }
 
 
-def build_default_integration_registry() -> IntegrationRegistry:
+def build_default_integration_registry(
+    *,
+    settings: AppSettings | None = None,
+    paths: object | None = None,
+    database: SQLiteDatabase | None = None,
+) -> IntegrationRegistry:
+    data_root: Path | None = None
+    environment = getattr(settings, "environment", None)
+    if paths is not None:
+        data_root = getattr(paths, "data_directory", None)
+    elif settings is not None:
+        try:
+            from creator_intelligence_studio.shared.paths import ProjectPaths
+
+            if hasattr(settings, "application_name"):
+                project_root = Path.cwd()
+                data_root = ProjectPaths.from_settings(project_root, settings).data_directory
+        except Exception:
+            data_root = None
     return IntegrationRegistry(
         connectors=(
             FakeIntegrationConnector(),
             LocalNoAuthIntegrationConnector(),
+            build_default_youtube_connector(data_root=(data_root / "integrations" / "youtube") if data_root is not None else None, environment=environment),
         )
     )
 
 
-def build_default_integration_registry_summary() -> dict[str, object]:
-    return build_default_integration_registry().summary()
+def build_default_integration_registry_summary(
+    *,
+    settings: AppSettings | None = None,
+    paths: object | None = None,
+    database: SQLiteDatabase | None = None,
+) -> dict[str, object]:
+    return build_default_integration_registry(settings=settings, paths=paths, database=database).summary()
