@@ -30,6 +30,7 @@ The next approved major block after the Creator Voice workbench is Integrations.
 - v35-B adds the first real connector, YouTube, as a read-first provider adapter for account identity, video inventory, metadata, and analytics
 - it keeps write/publish/update/delete/comment operations disabled
 - it uses official OAuth and least-privilege read scopes only
+- the distributed Windows bundle materializes the public OAuth client identity into bundled configuration at build time; developer JSON is bootstrap-only and not a runtime dependency
 - it does not auto-ingest YouTube content into Creator Corpus or Creator Voice
 
 The integration pillar now has a provider-neutral foundation and one approved real read-only connector.

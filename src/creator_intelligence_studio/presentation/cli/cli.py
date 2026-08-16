@@ -550,7 +550,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     youtube_connect = youtube_sub.add_parser("connect", help="Conectar una cuenta")
     youtube_connect.add_argument("--creator-id", required=True)
-    youtube_connect.add_argument("--client-id", required=True)
+    youtube_connect.add_argument("--client-id")
     youtube_connect.add_argument("--client-secret")
     youtube_connect.add_argument("--authorization-code")
     youtube_connect.add_argument("--redirect-uri")
@@ -3975,6 +3975,7 @@ def _handle_youtube(args, service: YouTubeIntegrationService, stdout, stderr) ->
             "authorization_code": command.authorization_code,
             "redirect_uri": command.redirect_uri,
             "google_account_identifier": command.google_account_identifier,
+            "interactive": command.authorization_code is None,
         }
         if command.scopes_json:
             connect_kwargs["scopes"] = tuple(json.loads(command.scopes_json))

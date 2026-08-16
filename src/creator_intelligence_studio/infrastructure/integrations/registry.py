@@ -85,7 +85,11 @@ def build_default_integration_registry(
         connectors=(
             FakeIntegrationConnector(),
             LocalNoAuthIntegrationConnector(),
-            build_default_youtube_connector(data_root=(data_root / "integrations" / "youtube") if data_root is not None else None, environment=environment),
+            build_default_youtube_connector(
+                data_root=(data_root / "integrations" / "youtube") if data_root is not None else None,
+                environment=environment,
+                client_id=getattr(settings, "youtube_oauth_client_id", None),
+            ),
         )
     )
 

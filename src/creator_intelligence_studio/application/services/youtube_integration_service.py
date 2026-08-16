@@ -221,6 +221,17 @@ class YouTubeIntegrationService:
         self._thumbnails_root.mkdir(parents=True, exist_ok=True)
         self._download_thumbnails_locally = False
 
+    def _resolve_oauth_client_id(self, client_id: str | None = None, *, required: bool = False) -> str:
+        resolved = (client_id or getattr(self.settings, "youtube_oauth_client_id", None) or "").strip()
+        if resolved:
+            return resolved
+        if required:
+            raise YouTubeAuthorizationError(
+                "Falta la configuracion OAuth publica de YouTube para esta aplicacion. "
+                "El build distribuible debe incluir youtube_oauth_client_id."
+            )
+        return ""
+
     def _build_default_credential_store(self) -> CredentialStore:
         credential_root = self.paths.data_directory / "youtube" / "credentials"
         try:
@@ -264,14 +275,17 @@ class YouTubeIntegrationService:
         self,
         *,
         creator_id: str,
-        client_id: str,
+        client_id: str | None = None,
         client_secret: str | None = None,
         authorization_code: str | None = None,
         redirect_uri: str | None = None,
         scopes: tuple[str, ...] = READ_ONLY_SCOPES,
         google_account_identifier: str | None = None,
+        interactive: bool = False,
+        open_browser: bool = True,
     ) -> YouTubeConnectionResult:
         self._ensure_read_only_scopes(scopes)
+        resolved_client_id = self._resolve_oauth_client_id(client_id, required=True)
         connection = self.repository.upsert_connection(
             YouTubeConnection(
                 id=str(uuid4()),
@@ -288,9 +302,31 @@ class YouTubeIntegrationService:
             )
         )
         if authorization_code is None:
-            auth = self.oauth_client.begin_authorization(client_id=client_id, scopes=scopes, redirect_uri=redirect_uri)
-            return YouTubeConnectionResult(connection=connection, authorization_url=auth.authorization_url, warnings=("pending_authorization",))
-        token = self.oauth_client.exchange_code(client_id=client_id, client_secret=client_secret, code=authorization_code, redirect_uri=redirect_uri or "http://127.0.0.1:8765/callback")
+            if interactive:
+                auth, authorization_code = self.oauth_client.authorize_interactively(
+                    client_id=resolved_client_id,
+                    scopes=scopes,
+                    open_browser=open_browser,
+                )
+                redirect_uri = auth.redirect_uri
+                code_verifier = auth.code_verifier
+            else:
+                auth = self.oauth_client.begin_authorization(
+                    client_id=resolved_client_id,
+                    scopes=scopes,
+                    redirect_uri=redirect_uri,
+                )
+                return YouTubeConnectionResult(connection=connection, authorization_url=auth.authorization_url, warnings=("pending_authorization",))
+        else:
+            auth = None
+            code_verifier = None
+        token = self.oauth_client.exchange_code(
+            client_id=resolved_client_id,
+            client_secret=client_secret,
+            code=authorization_code,
+            redirect_uri=redirect_uri or (auth.redirect_uri if auth is not None else "http://localhost/callback"),
+            code_verifier=code_verifier,
+        )
         self.credential_store.save(
             connection.credential_reference,
             CredentialBundle(
@@ -314,7 +350,11 @@ class YouTubeIntegrationService:
             raise YouTubeAuthorizationError("No hay credenciales almacenadas para esta conexion.")
         if bundle.refresh_token and self.oauth_client is not None:
             try:
-                refreshed = self.oauth_client.refresh_token(client_id="", client_secret=None, refresh_token=bundle.refresh_token)
+                refreshed = self.oauth_client.refresh_token(
+                    client_id=self._resolve_oauth_client_id(required=False),
+                    client_secret=None,
+                    refresh_token=bundle.refresh_token,
+                )
                 bundle = CredentialBundle(
                     access_token=refreshed.access_token,
                     refresh_token=refreshed.refresh_token,

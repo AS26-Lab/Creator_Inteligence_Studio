@@ -67,6 +67,7 @@ def make_settings() -> AppSettings:
         audio_extraction_timeout_seconds=60.0,
         audio_cache_version="v1",
         preferred_audio_language=None,
+        youtube_oauth_client_id="client-app-test",
     )
 
 
@@ -92,15 +93,16 @@ class FakeOAuthClient(YouTubeOAuthClient):
         self.revoke_calls: list[str] = []
         self.verify_calls: list[tuple[str, tuple[str, ...]]] = []
 
-    def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None) -> OAuthAuthorizationResult:
+    def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None, code_verifier: str | None = None) -> OAuthAuthorizationResult:
         self.begin_calls.append((client_id, scopes, redirect_uri))
         return OAuthAuthorizationResult(
             authorization_url="https://accounts.google.com/o/oauth2/v2/auth?stub=1",
             state=state or "state",
-            redirect_uri=redirect_uri or "http://127.0.0.1:8765/callback",
+            redirect_uri=redirect_uri or "http://localhost/callback",
+            code_verifier=code_verifier or "verifier",
         )
 
-    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str) -> OAuthTokenResult:
+    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str, code_verifier: str | None = None) -> OAuthTokenResult:
         self.exchange_calls.append((client_id, client_secret, code, redirect_uri))
         return OAuthTokenResult(
             access_token="access-token",
@@ -133,6 +135,10 @@ class FakeOAuthClient(YouTubeOAuthClient):
             "granted_scopes": scopes,
             "missing_scopes": (),
         }
+
+    def authorize_interactively(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True) -> tuple[OAuthAuthorizationResult, str]:  # noqa: ARG002
+        result = self.begin_authorization(client_id=client_id, scopes=scopes)
+        return result, "interactive-auth-code"
 
 
 @dataclass(frozen=True, slots=True)

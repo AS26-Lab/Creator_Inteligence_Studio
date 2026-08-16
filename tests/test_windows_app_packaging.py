@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 import sys
@@ -217,10 +218,33 @@ class WindowsAppPackagingTests(unittest.TestCase):
 
     def test_build_script_writes_manifest_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
             staging_root = Path(temp_dir) / "dist"
+            config_dir = project_root / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            (config_dir / "default.json").write_text(
+                json.dumps(
+                    {
+                        "application_name": "Creator Intelligence Studio",
+                        "environment": "development",
+                        "log_level": "INFO",
+                        "data_directory": "data",
+                        "logs_directory": "logs",
+                        "models_directory": "models",
+                        "artifacts_directory": "artifacts",
+                        "preferred_compute_backend": "cuda",
+                        "allow_cpu_basic_mode": True,
+                        "external_ai_enabled": False,
+                        "youtube_oauth_client_id": "client-app-test",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
             with patch.object(build_windows_app_script, "_detect_pyinstaller", return_value=("PyInstaller", "6.14.2")):
                 report = build_windows_app_script.build_windows_app(
-                    project_root=Path(temp_dir),
+                    project_root=project_root,
                     staging_root=staging_root,
                     invoke_packager=False,
                 )

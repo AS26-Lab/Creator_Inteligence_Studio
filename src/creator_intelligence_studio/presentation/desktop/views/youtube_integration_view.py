@@ -116,20 +116,24 @@ class YouTubeIntegrationView(QWidget):
         self.connection_table.setColumnHidden(5, True)
         self.connection_table.itemSelectionChanged.connect(self._selection_changed)
         self.connection_empty = EmptyStateWidget("Sin conexiones", "Conecta una cuenta de Google/YouTube con scopes de lectura.")
+        oauth_configured = bool(getattr(self.workspace.settings, "youtube_oauth_client_id", None))
+        self.oauth_identity_label = QLabel(
+            "Identidad OAuth de la aplicacion: configurada"
+            if oauth_configured
+            else "Identidad OAuth de la aplicacion: falta configuracion de build"
+        )
+        self.oauth_identity_label.setObjectName("MutedLabel")
+        self.oauth_identity_label.setWordWrap(True)
         self.status_label = QLabel("Estado YouTube: No conectado")
         self.status_label.setObjectName("TitleLabel")
         self.status_detail = QLabel("Selecciona o vincula una cuenta para ver el estado de cuota y autenticación.")
         self.status_detail.setObjectName("MutedLabel")
         self.status_detail.setWordWrap(True)
-        self.client_id = QLineEdit()
-        self.client_id.setPlaceholderText("Client ID")
         self.google_account_identifier = QLineEdit()
         self.google_account_identifier.setPlaceholderText("account@example.com")
         self.scopes = QTextEdit()
         self.scopes.setPlainText("\n".join(READ_ONLY_SCOPES))
         self.scopes.setFixedHeight(80)
-        self.authorization_url = QLineEdit()
-        self.authorization_url.setReadOnly(True)
         self.connect_button = QPushButton("Iniciar conexion")
         self.verify_button = QPushButton("Verificar seleccionada")
         self.disconnect_button = QPushButton("Desconectar")
@@ -140,10 +144,8 @@ class YouTubeIntegrationView(QWidget):
         self.revoke_button.clicked.connect(self._revoke_selected_connection)
 
         form = QFormLayout()
-        form.addRow("Client ID", self.client_id)
         form.addRow("Cuenta Google", self.google_account_identifier)
         form.addRow("Scopes lectura", self.scopes)
-        form.addRow("Authorization URL", self.authorization_url)
 
         actions = QHBoxLayout()
         for widget in (self.connect_button, self.verify_button, self.disconnect_button, self.revoke_button):
@@ -151,6 +153,7 @@ class YouTubeIntegrationView(QWidget):
         actions.addStretch(1)
 
         layout = QVBoxLayout(self.connection_tab)
+        layout.addWidget(self.oauth_identity_label)
         layout.addWidget(self.status_label)
         layout.addWidget(self.status_detail)
         layout.addLayout(form)
@@ -316,20 +319,18 @@ class YouTubeIntegrationView(QWidget):
         if not creator_id:
             QMessageBox.information(self, "YouTube", "Selecciona un creador primero.")
             return
-        client_id = self.client_id.text().strip()
-        if not client_id:
-            QMessageBox.information(self, "YouTube", "Proporciona un Client ID.")
-            return
         scopes_text = self.scopes.toPlainText().strip()
         scopes = tuple(line.strip() for line in scopes_text.splitlines() if line.strip()) or READ_ONLY_SCOPES
         result = self.service.connect_account(
             creator_id=creator_id,
-            client_id=client_id,
             google_account_identifier=self.google_account_identifier.text().strip() or None,
             scopes=scopes,
+            interactive=True,
         )
-        self.authorization_url.setText(result.authorization_url or "")
-        QMessageBox.information(self, "YouTube", "Conexion iniciada. Revisa la URL de autorizacion si se mostro.")
+        if result.authorization_url:
+            QMessageBox.information(self, "YouTube", "Conexion iniciada. Revisa la URL de autorizacion si se mostro.")
+        else:
+            QMessageBox.information(self, "YouTube", "Cuenta de YouTube conectada correctamente.")
         self.refresh()
 
     def _verify_selected_connection(self) -> None:

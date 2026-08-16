@@ -40,6 +40,7 @@ class AppSettings:
     audio_extraction_timeout_seconds: float = 60.0
     audio_cache_version: str = "v1"
     preferred_audio_language: str | None = None
+    youtube_oauth_client_id: str | None = None
 
     @classmethod
     def from_file(cls, config_path: Path) -> "AppSettings":
@@ -88,6 +89,15 @@ class AppSettings:
                 raise SettingsError(f"El campo '{key}' debe ser una cadena no vacia.")
             return value.strip()
 
+        def optional_text(key: str) -> str | None:
+            value = payload.get(key)
+            if value is None:
+                return None
+            if not isinstance(value, str):
+                raise SettingsError(f"El campo '{key}' debe ser una cadena.")
+            text = value.strip()
+            return text or None
+
         def optional_int(key: str, default: int) -> int:
             value = payload.get(key, default)
             if isinstance(value, bool):
@@ -124,6 +134,7 @@ class AppSettings:
             audio_extraction_timeout_seconds=optional_number("audio_extraction_timeout_seconds", 60.0),
             audio_cache_version=optional_str("audio_cache_version", "v1"),
             preferred_audio_language=optional_path("preferred_audio_language"),
+            youtube_oauth_client_id=optional_text("youtube_oauth_client_id"),
         )
         settings.validate()
         return settings

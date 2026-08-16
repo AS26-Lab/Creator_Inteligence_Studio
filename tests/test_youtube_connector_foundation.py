@@ -24,14 +24,15 @@ from creator_intelligence_studio.shared.dates import utc_now
 
 
 class _FakeOAuthClient:
-    def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None) -> OAuthAuthorizationResult:
+    def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None, code_verifier: str | None = None) -> OAuthAuthorizationResult:
         return OAuthAuthorizationResult(
             authorization_url=f"https://auth.local/start?client_id={client_id}&scope={' '.join(scopes)}",
             state=state or "state-1",
             redirect_uri=redirect_uri or "http://127.0.0.1:8765/callback",
+            code_verifier=code_verifier or "verifier-1",
         )
 
-    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str) -> OAuthTokenResult:  # noqa: ARG002
+    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str, code_verifier: str | None = None) -> OAuthTokenResult:  # noqa: ARG002
         return OAuthTokenResult(
             access_token="access-token-secret",
             refresh_token="refresh-token-secret",
@@ -56,6 +57,10 @@ class _FakeOAuthClient:
 
     def verify_token(self, token: str, scopes: tuple[str, ...]) -> dict[str, object]:  # noqa: ARG002
         return {"google_account_identifier": "google-account-1", "granted_scopes": scopes}
+
+    def authorize_interactively(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True) -> tuple[OAuthAuthorizationResult, str]:  # noqa: ARG002
+        result = self.begin_authorization(client_id=client_id, scopes=scopes)
+        return result, "interactive-auth-code"
 
 
 class _FakeDataApiClient:
@@ -178,6 +183,7 @@ def _build_connector(tmpdir: Path) -> YouTubeIntegrationConnector:
         data_root=tmpdir / "youtube",
         credential_root=tmpdir / "credentials",
         environment="test",
+        client_id="client-1",
         oauth_client=_FakeOAuthClient(),
         data_api_client=_FakeDataApiClient(),
         analytics_api_client=_FakeAnalyticsClient(),
@@ -190,7 +196,7 @@ def _link_account(connector: YouTubeIntegrationConnector, creator_id: str = "cre
         authorization_code="authorization-code",
         client_id="client-1",
         client_secret="secret-1",
-        redirect_uri="http://127.0.0.1:8765/callback",
+        redirect_uri="http://localhost/callback",
         display_name="Creator Uno",
     )
     return result.account

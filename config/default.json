@@ -17,5 +17,6 @@
   "audio_normalization_sample_rate_hz": 16000,
   "audio_extraction_timeout_seconds": 60.0,
   "audio_cache_version": "v1",
-  "preferred_audio_language": null
+  "preferred_audio_language": null,
+  "youtube_oauth_client_id": null
 }

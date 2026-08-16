@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import tempfile
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -42,6 +41,7 @@ from creator_intelligence_studio.infrastructure.youtube.credential_store import 
     EncryptedLocalCredentialStore,
 )
 from creator_intelligence_studio.infrastructure.youtube.data_api_client import YouTubeApiPage, YouTubeDataApiClient
+from creator_intelligence_studio.infrastructure.youtube.oauth_config import resolve_youtube_oauth_client_id
 from creator_intelligence_studio.infrastructure.youtube.oauth_client import (
     DesktopYouTubeOAuthClient,
     OAuthAuthorizationResult,
@@ -306,8 +306,8 @@ class YouTubeIntegrationConnector:
         self._oauth_client = oauth_client or DesktopYouTubeOAuthClient()
         self._data_api_factory = data_api_client or YouTubeDataApiClient()
         self._analytics_api_factory = analytics_api_client or YouTubeAnalyticsApiClient()
-        self._client_id = client_id or os.environ.get("CIS_YOUTUBE_CLIENT_ID")
-        self._client_secret = client_secret or os.environ.get("CIS_YOUTUBE_CLIENT_SECRET")
+        self._client_id = client_id
+        self._client_secret = client_secret
         self._required_scopes = READ_ONLY_SCOPES
         self._available = True
         self._rate_limits: dict[str, IntegrationRateLimitState] = {}
@@ -355,6 +355,12 @@ class YouTubeIntegrationConnector:
             return None
         return self._credential_store.load(account.credential_ref)
 
+    def _resolved_client_id(self, explicit_client_id: str | None = None) -> str:
+        resolved = resolve_youtube_oauth_client_id(configured_client_id=explicit_client_id or self._client_id)
+        if not resolved:
+            raise ValueError("YouTube OAuth client_id is not configured.")
+        return resolved
+
     def _refresh_if_needed(self, account: IntegrationAccount) -> CredentialBundle | None:
         bundle = self._credential_bundle(account)
         if bundle is None:
@@ -369,7 +375,7 @@ class YouTubeIntegrationConnector:
             return bundle
         try:
             refreshed = self._oauth_client.refresh_token(
-                client_id=self._client_id or "",
+                client_id=self._resolved_client_id(),
                 client_secret=self._client_secret,
                 refresh_token=bundle.refresh_token,
             )
@@ -476,7 +482,7 @@ class YouTubeIntegrationConnector:
         if not set(requested_scopes).issubset(set(self._required_scopes)):
             raise ValueError("YouTube read-first connector only requests read-only scopes.")
         auth = self._oauth_client.begin_authorization(
-            client_id=client_id or self._client_id or "",
+            client_id=self._resolved_client_id(client_id),
             scopes=requested_scopes,
             redirect_uri=redirect_uri,
         )
@@ -490,13 +496,15 @@ class YouTubeIntegrationConnector:
         client_id: str | None = None,
         client_secret: str | None = None,
         redirect_uri: str | None = None,
+        code_verifier: str | None = None,
         display_name: str | None = None,
     ) -> YouTubeAuthCompleteResult:
         token_result = self._oauth_client.exchange_code(
-            client_id=client_id or self._client_id or "",
+            client_id=self._resolved_client_id(client_id),
             client_secret=client_secret or self._client_secret,
             code=authorization_code,
-            redirect_uri=redirect_uri or "http://127.0.0.1:8765/callback",
+            redirect_uri=redirect_uri or "http://localhost/callback",
+            code_verifier=code_verifier,
         )
         if not set(token_result.granted_scopes).issubset(set(self._required_scopes)):
             raise ValueError("YouTube read-first connector only accepts read-only scopes.")
@@ -1121,5 +1129,11 @@ class YouTubeIntegrationConnector:
         )
 
 
-def build_default_youtube_connector(*, data_root: Path | None = None, environment: str | None = None) -> YouTubeIntegrationConnector:
-    return YouTubeIntegrationConnector(data_root=data_root, environment=environment)
+def build_default_youtube_connector(
+    *,
+    data_root: Path | None = None,
+    environment: str | None = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+) -> YouTubeIntegrationConnector:
+    return YouTubeIntegrationConnector(data_root=data_root, environment=environment, client_id=client_id, client_secret=client_secret)

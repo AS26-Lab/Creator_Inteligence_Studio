@@ -68,6 +68,7 @@ It is intentionally read-only in v35-B and is limited to:
 - analytics reads
 
 It does not expose write, publish, upload, schedule, update, delete, comment, or auto-ingest behavior.
+Its OAuth application identity is resolved from the bundled application configuration at runtime; developer JSON bootstrap files are used only at build time to seed that bundle configuration.
 
 ## Future Expansion
 

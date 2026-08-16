@@ -15,6 +15,9 @@ For YouTube OAuth specifically:
 - access tokens and refresh tokens stay behind the approved secure credential store
 - account rows only retain opaque references and safe summaries
 - desktop authorization uses the official loopback-style installed-app flow, not manual token paste
+- the public OAuth application identity is materialized in the distributed bundle configuration at build time
+- `H:\ALEJANDRO_2\ClientGoogle.json` and similar developer bootstrap files are build-only inputs, not runtime dependencies
+- if the desktop OAuth bootstrap contains a `client_secret`, it is only used as a development/distributor bootstrap detail and is not stored in normal app state
 - client configuration is developer/distributor responsibility, not end-user database state
 
 Not allowed:

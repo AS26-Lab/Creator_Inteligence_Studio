@@ -14,7 +14,7 @@ class ListYouTubeConnectionsCommand:
 @dataclass(frozen=True, slots=True)
 class ConnectYouTubeCommand:
     creator_id: str
-    client_id: str
+    client_id: str | None = None
     client_secret: str | None = None
     authorization_code: str | None = None
     redirect_uri: str | None = None
