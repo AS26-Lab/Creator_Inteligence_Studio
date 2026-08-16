@@ -455,6 +455,8 @@ class YouTubeIntegrationConnector:
             connector_available=True,
             account_authenticated=bundle is not None and account.status == IntegrationAccountStatus.CONNECTED,
             permissions_valid=bundle is not None and set(bundle.granted_scopes).issuperset(self._required_scopes),
+            rate_limit_state=rate_limit,
+            last_success_at=account.last_verified_at,
             last_error_category=last_error_category,
             last_error_message=last_error_message,
             status=status,

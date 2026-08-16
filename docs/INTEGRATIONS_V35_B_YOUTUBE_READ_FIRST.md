@@ -43,7 +43,15 @@ The implementation was aligned to official Google documentation only:
 
 - offline validation: implemented
 - frozen packaging validation: implemented
-- real-account certification: pending unless a live Google OAuth smoke has been run
+- real-account certification: pending because no valid developer OAuth configuration was available in this closure
+
+## Quota And Rate-Limit UX
+
+- quota and rate-limit failures are normalized into a user-visible `quota_exhausted` state
+- `auth_expired`, `needs_attention`, and `provider_unavailable` remain separate user states for auth and provider failures
+- last-updated and retry/reset information is shown only when the connector or provider can supply it
+- no quota reset time is invented when the provider does not provide a reliable retry or reset value
+- stale successful data remains visible when refresh is blocked by quota
 
 ## Product Meaning
 

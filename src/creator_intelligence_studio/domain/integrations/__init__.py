@@ -21,6 +21,7 @@ from .contracts import (
     IntegrationReadRequest,
     IntegrationReadResult,
     IntegrationSyncMode,
+    IntegrationUserStatus,
     IntegrationWriteRequest,
     IntegrationWriteResult,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "IntegrationReadRequest",
     "IntegrationReadResult",
     "IntegrationSyncMode",
+    "IntegrationUserStatus",
     "IntegrationWriteRequest",
     "IntegrationWriteResult",
 ]

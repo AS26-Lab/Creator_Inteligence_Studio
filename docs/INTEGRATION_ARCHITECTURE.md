@@ -35,6 +35,7 @@ The current registry includes three connector implementations:
 - creator ownership is mandatory
 - read and write are different capabilities
 - destructive capabilities remain separate and explicit
+- connector health and user-visible quota/auth states are derived separately; quota exhaustion is surfaced as a user-facing state without inventing retry/reset times
 - provider-specific raw metadata stays behind the connector boundary
 - opaque `credential_ref` values are used instead of tokens in normal records
 - network I/O lives only inside connector implementations

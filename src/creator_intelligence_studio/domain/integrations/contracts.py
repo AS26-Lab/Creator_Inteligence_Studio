@@ -40,6 +40,39 @@ class IntegrationHealthStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+class IntegrationUserStatus(str, Enum):
+    CONNECTED = "connected"
+    QUOTA_WARNING = "quota_warning"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    AUTH_EXPIRED = "auth_expired"
+    NEEDS_ATTENTION = "needs_attention"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
+
+    @property
+    def label(self) -> str:
+        labels = {
+            IntegrationUserStatus.CONNECTED: "Conectado",
+            IntegrationUserStatus.QUOTA_WARNING: "Advertencia de cuota",
+            IntegrationUserStatus.QUOTA_EXHAUSTED: "Límite de API alcanzado",
+            IntegrationUserStatus.AUTH_EXPIRED: "Autenticación expirada",
+            IntegrationUserStatus.NEEDS_ATTENTION: "Requiere atención",
+            IntegrationUserStatus.PROVIDER_UNAVAILABLE: "Proveedor no disponible",
+        }
+        return labels[self]
+
+    @property
+    def message(self) -> str:
+        messages = {
+            IntegrationUserStatus.CONNECTED: "La conexión está lista.",
+            IntegrationUserStatus.QUOTA_WARNING: "La cuota disponible es baja.",
+            IntegrationUserStatus.QUOTA_EXHAUSTED: "No podemos actualizar los datos de YouTube temporalmente.",
+            IntegrationUserStatus.AUTH_EXPIRED: "La autorización expiró y requiere reconexión.",
+            IntegrationUserStatus.NEEDS_ATTENTION: "La conexión requiere atención.",
+            IntegrationUserStatus.PROVIDER_UNAVAILABLE: "El proveedor no está disponible.",
+        }
+        return messages[self]
+
+
 class IntegrationErrorCategory(str, Enum):
     AUTHENTICATION_REQUIRED = "authentication_required"
     AUTHENTICATION_EXPIRED = "authentication_expired"
@@ -195,6 +228,40 @@ class IntegrationHealth:
     status: IntegrationHealthStatus = IntegrationHealthStatus.UNKNOWN
     checked_at: datetime | None = None
 
+    @property
+    def user_status(self) -> IntegrationUserStatus:
+        if not self.connector_available:
+            return IntegrationUserStatus.PROVIDER_UNAVAILABLE
+        if self.rate_limit_state is not None and (self.rate_limit_state.limited or (self.rate_limit_state.remaining is not None and self.rate_limit_state.remaining <= 0)):
+            return IntegrationUserStatus.QUOTA_EXHAUSTED
+        if self.last_error_category == IntegrationErrorCategory.AUTHENTICATION_EXPIRED:
+            return IntegrationUserStatus.AUTH_EXPIRED
+        if self.last_error_category in {
+            IntegrationErrorCategory.AUTHENTICATION_REQUIRED,
+            IntegrationErrorCategory.PERMISSION_DENIED,
+            IntegrationErrorCategory.PROVIDER_UNAVAILABLE,
+            IntegrationErrorCategory.PROVIDER_ERROR,
+            IntegrationErrorCategory.INVALID_REQUEST,
+            IntegrationErrorCategory.RESOURCE_NOT_FOUND,
+            IntegrationErrorCategory.CONFLICT,
+        }:
+            return IntegrationUserStatus.NEEDS_ATTENTION
+        if not self.account_authenticated or not self.permissions_valid:
+            return IntegrationUserStatus.NEEDS_ATTENTION
+        if self.status == IntegrationHealthStatus.UNAVAILABLE:
+            return IntegrationUserStatus.PROVIDER_UNAVAILABLE
+        if self.status == IntegrationHealthStatus.DEGRADED:
+            return IntegrationUserStatus.NEEDS_ATTENTION
+        return IntegrationUserStatus.CONNECTED
+
+    @property
+    def user_status_label(self) -> str:
+        return self.user_status.label
+
+    @property
+    def user_status_message(self) -> str:
+        return self.user_status.message
+
     def to_dict(self) -> dict[str, object]:
         return {
             "connector_id": self.connector_id,
@@ -206,6 +273,9 @@ class IntegrationHealth:
             "last_error_category": None if self.last_error_category is None else self.last_error_category.value,
             "last_error_message": self.last_error_message,
             "status": self.status.value,
+            "user_status": self.user_status.value,
+            "user_status_label": self.user_status_label,
+            "user_status_message": self.user_status_message,
             "checked_at": _to_iso(self.checked_at),
         }
 

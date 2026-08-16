@@ -16,7 +16,7 @@ This document records what is actually implemented in the repository through the
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
 - Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
 - v35-A adds the integration foundation: provider-neutral connector contracts, a registry, a fake connector, creator-scoped accounts, opaque credential references, and frozen-runtime diagnostics. No real provider integration is enabled yet.
-- v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; real-account certification remains pending.
+- v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; real-account certification remains pending because no valid developer OAuth configuration was available in this closure.
 
 ## What Is Implemented
 
@@ -154,6 +154,10 @@ Status: `implemented`
 - account profile, uploaded video inventory, video metadata, and analytics reads
 - offline/frozen validation passes with the connector registered
 - real-account certification remains pending because no live Google credential smoke was run in this closure
+- quota and rate-limit UX is surfaced through derived user statuses such as `quota_exhausted`, `auth_expired`, `needs_attention`, and `provider_unavailable`
+- last-updated and retry/reset information is shown only when the provider or connector can supply it; no invented reset time is displayed
+- quota exhaustion keeps previously retrieved data visible and suppresses aggressive retries instead of crashing or clearing state
+- the current closure did not certify a live YouTube account, so real-account certification remains pending
 
 Status: `implemented as first real connector`; real-account certification `pending`
 

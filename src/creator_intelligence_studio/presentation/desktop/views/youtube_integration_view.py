@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from creator_intelligence_studio.domain.integrations import IntegrationHealth, IntegrationUserStatus
 from creator_intelligence_studio.domain.youtube_integration.services import READ_ONLY_SCOPES
 from creator_intelligence_studio.presentation.desktop.view_models.workspace import WorkspaceViewModel
 from creator_intelligence_studio.presentation.desktop.widgets.cards import EmptyStateWidget
@@ -27,6 +28,25 @@ from creator_intelligence_studio.presentation.desktop.widgets.cards import Empty
 
 def _item(value: object) -> QTableWidgetItem:
     return QTableWidgetItem("" if value is None else str(value))
+
+
+def _health_status_line(health: IntegrationHealth | None) -> tuple[str, str]:
+    if health is None:
+        return "No conectado", "Selecciona o vincula una cuenta de YouTube."
+    label = health.user_status_label
+    message = health.user_status_message
+    if health.user_status == IntegrationUserStatus.QUOTA_EXHAUSTED:
+        retry_parts: list[str] = []
+        if health.rate_limit_state is not None:
+            if health.rate_limit_state.retry_after_seconds is not None:
+                retry_parts.append(f"Reintento sugerido: {int(health.rate_limit_state.retry_after_seconds)} s")
+            if health.rate_limit_state.reset_at is not None:
+                retry_parts.append(f"Restablecimiento estimado: {health.rate_limit_state.reset_at.isoformat()}")
+        if retry_parts:
+            message = f"{message} {' '.join(retry_parts)}"
+    elif health.user_status == IntegrationUserStatus.CONNECTED and health.last_success_at is not None:
+        message = f"{message} Última actualización: {health.last_success_at.isoformat()}"
+    return label, message
 
 
 class YouTubeIntegrationView(QWidget):
@@ -96,6 +116,11 @@ class YouTubeIntegrationView(QWidget):
         self.connection_table.setColumnHidden(5, True)
         self.connection_table.itemSelectionChanged.connect(self._selection_changed)
         self.connection_empty = EmptyStateWidget("Sin conexiones", "Conecta una cuenta de Google/YouTube con scopes de lectura.")
+        self.status_label = QLabel("Estado YouTube: No conectado")
+        self.status_label.setObjectName("TitleLabel")
+        self.status_detail = QLabel("Selecciona o vincula una cuenta para ver el estado de cuota y autenticación.")
+        self.status_detail.setObjectName("MutedLabel")
+        self.status_detail.setWordWrap(True)
         self.client_id = QLineEdit()
         self.client_id.setPlaceholderText("Client ID")
         self.google_account_identifier = QLineEdit()
@@ -126,6 +151,8 @@ class YouTubeIntegrationView(QWidget):
         actions.addStretch(1)
 
         layout = QVBoxLayout(self.connection_tab)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.status_detail)
         layout.addLayout(form)
         layout.addLayout(actions)
         layout.addWidget(self.connection_empty)
@@ -256,6 +283,14 @@ class YouTubeIntegrationView(QWidget):
             return None
         item = self.history_table.item(rows[0].row(), 6)
         return item.text() if item else None
+
+    def _active_connection(self, connections):
+        selected_id = self._selected_connection_id()
+        if selected_id:
+            for connection in connections:
+                if connection.id == selected_id:
+                    return connection
+        return connections[0] if connections else None
 
     def _selection_changed(self) -> None:
         enabled = self._selected_connection_id() is not None
@@ -419,6 +454,13 @@ class YouTubeIntegrationView(QWidget):
         sync_runs = self.service.list_sync_runs(creator.id)
         links = self.service.list_content_links(creator.id)
         imports = self.service.list_metric_imports(creator.id)
+        active_connection = self._active_connection(connections)
+        active_health = self.service.get_health(creator_id=creator.id, account_id=active_connection.id) if active_connection is not None else None
+        status_label, status_detail = _health_status_line(active_health)
+        self.status_label.setText(f"Estado YouTube: {status_label}")
+        if active_health is not None and active_health.user_status == IntegrationUserStatus.QUOTA_EXHAUSTED and active_health.last_success_at is not None:
+            status_detail = f"{status_detail} Última actualización: {active_health.last_success_at.isoformat()}"
+        self.status_detail.setText(status_detail)
 
         self._populate(
             self.connection_table,

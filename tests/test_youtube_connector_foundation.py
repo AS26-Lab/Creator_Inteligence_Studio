@@ -329,8 +329,10 @@ class YouTubeConnectorFoundationTests(unittest.TestCase):
         self.assertFalse(rate_limited.success)
         self.assertEqual(rate_limited.error.category.value, "rate_limited")
         self.assertTrue(rate_limited.rate_limit_state.limited)
+        self.assertEqual(rate_limited.health.user_status.value, "quota_exhausted")
         self.assertFalse(expired.success)
         self.assertEqual(expired.error.category.value, "authentication_expired")
+        self.assertEqual(expired.health.user_status.value, "auth_expired")
 
     def test_cli_youtube_commands_surface(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -348,12 +350,19 @@ class YouTubeConnectorFoundationTests(unittest.TestCase):
             stdout_value = stdout.getvalue()
 
             stdout = io.StringIO()
+            auth_status_args = parser.parse_args(["integrations", "youtube", "auth-status", "--creator-id", account.creator_id, "--account-id", account.id, "--json"])
+            auth_status_code = handle_integrations_command(auth_status_args, service=service, stdout=stdout, stderr=stderr)
+            auth_status_payload = json.loads(stdout.getvalue())
+
+            stdout = io.StringIO()
             account_args = parser.parse_args(["integrations", "youtube", "account", "--creator-id", account.creator_id, "--account-id", account.id, "--json"])
             account_code = handle_integrations_command(account_args, service=service, stdout=stdout, stderr=stderr)
             account_payload = json.loads(stdout.getvalue())
 
         self.assertEqual(auth_start_code, 0)
         self.assertIn("authorization_url", stdout_value)
+        self.assertEqual(auth_status_code, 0)
+        self.assertEqual(auth_status_payload["health"]["user_status"], "connected")
         self.assertEqual(account_code, 0)
         self.assertTrue(account_payload["success"])
         self.assertEqual(account_payload["capability"], IntegrationCapability.ACCOUNT_PROFILE_READ.value)
