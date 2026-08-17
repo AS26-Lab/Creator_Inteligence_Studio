@@ -113,7 +113,7 @@ Synthetic coverage uses two creators:
 
 ## Next phase
 
-The next phase is Instagram Read-Only Integration.
+The next approved phase is Instagram Read-Only Integration (v35-C). After that comes TikTok Read-Only Integration (v35-D), then Multi-Platform Integration Consolidation (v35-E), and then Market / Trend Intelligence Foundation (v36).
 ## TikTok Read-Only Integration
 
 TikTok Read-Only Integration contributes aggregated, creator-scoped evidence only. It can add public consumption and engagement signals, profile growth when available, and content affinity hints from official snapshots. It does not invent acquisition source, returning viewers, demographics, retention, completion or follower conversion.

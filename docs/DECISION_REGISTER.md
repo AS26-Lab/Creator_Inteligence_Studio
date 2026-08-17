@@ -70,6 +70,7 @@ This register keeps the canonical decisions, their status, and what they replace
 | 2026-08-15 | Integrations v35-A must remain provider-neutral and fake-connector first | approved | future connectors need a stable creator-owned contract, secure credential references, and offline validation before any real provider integration is approved | `docs/INTEGRATIONS_V35_A_FOUNDATION.md`, `docs/INTEGRATION_ARCHITECTURE.md`, `docs/INTEGRATION_SECURITY_AND_CREDENTIALS.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md` | random SaaS integration sprawl, token-in-SQLite storage, and implicit write authority |
 | 2026-08-15 | YouTube is the first approved real integration connector and it must be read-first | approved | YouTube provides direct product value for creator identity, video inventory, metadata, and analytics while still fitting the controlled read-only connector boundary | `docs/INTEGRATIONS_V35_B_YOUTUBE_READ_FIRST.md`, `docs/YOUTUBE_CONNECTOR_ARCHITECTURE.md`, `docs/INTEGRATION_ARCHITECTURE.md`, `docs/INTEGRATION_SECURITY_AND_CREDENTIALS.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md` | delaying the first real connector or expanding into write/publish automation |
 | 2026-08-16 | YouTube OAuth release builds must materialize the public application identity into the bundle configuration | approved | packaged Creator Intelligence Studio builds resolve YouTube OAuth from bundled `config/default.json`; developer bootstrap files such as `H:\ALEJANDRO_2\ClientGoogle.json` are build-only inputs and not runtime dependencies | `docs/INTEGRATION_SECURITY_AND_CREDENTIALS.md`, `docs/INTEGRATION_ARCHITECTURE.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md` | runtime dependence on external OAuth JSON, developer env vars, or hiding a desktop client secret as if it were a runtime secret |
+| 2026-08-17 | Approved integrations sequence after YouTube certification is v35-C Instagram Read-Only, v35-D TikTok Read-Only, v35-E Multi-Platform Integration Consolidation, then v36 Market / Trend Intelligence Foundation | approved | lock the post-YouTube integration order and prevent convenience reordering | `docs/PROJECT_BIBLE.md`, `docs/AI_IMPLEMENTATION_ROADMAP.md`, `docs/CURRENT_IMPLEMENTATION_REALITY.md`, `docs/PLATFORM_CONNECTORS.md`, `docs/INSTAGRAM_READ_ONLY_INTEGRATION.md`, `docs/MULTI_PLATFORM_INTEGRATION_CONSOLIDATION.md` | reordering, skipping, or inventing integration phases |
 
 ## Replaced Or Limited Decisions
 
@@ -91,7 +92,7 @@ This register keeps the canonical decisions, their status, and what they replace
 - whether the catch-up PDF is already present in every downstream workspace or must be copied manually before use.
 - runtime/model installer download and activation policy for v32-E and beyond.
 - v32-F readiness closure is implemented; v32-G guided UI can now consume the structured capability result.
-- real-account certification for the first real YouTube connector remains pending if no live credential smoke is executed.
+- real-account certification for the first real YouTube connector is closed after live credential smoke execution.
 
 ## Additional Approved Decisions
 

@@ -15,6 +15,8 @@
 2. Instagram.
 3. TikTok Read-Only Integration.
 
+This order corresponds to the approved rollout sequence: v35-B YouTube Read-First, v35-C Instagram Read-Only, v35-D TikTok Read-Only, v35-E Multi-Platform Integration Consolidation, and v36 Market / Trend Intelligence Foundation.
+
 ## Consolidacion multi-plataforma
 
 La capa comun de consolidacion coordina conexiones, salud, capacidades, disponibilidad de datos,
@@ -98,7 +100,7 @@ YouTube será la primera plataforma objetivo para:
 ## Relacion con market intelligence
 
 Market and Trend Intelligence Foundation consume conectores ya existentes como fuentes de evidencia local y no sustituye sus semanticas nativas.
-La siguiente fase prevista despues de esa consolidacion es Opportunity and Recommendation Engine.
+La siguiente fase aprobada despues de esa consolidacion es Market / Trend Intelligence Foundation. Opportunity and Recommendation Engine remains a later block after that foundation.
 
 - cada conector debe tener su propio contrato;
 - cada proveedor debe fallar de forma independiente;

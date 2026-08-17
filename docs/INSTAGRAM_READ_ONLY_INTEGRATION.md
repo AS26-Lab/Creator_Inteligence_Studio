@@ -103,7 +103,9 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 
 ## Next phase
 
-The next phase is Multi-Platform Integration Consolidation.
+The next approved phase is TikTok Read-Only Integration.
+
+After TikTok, the approved sequence continues with Multi-Platform Integration Consolidation and then Market / Trend Intelligence Foundation.
 
 ## Market intelligence note
 

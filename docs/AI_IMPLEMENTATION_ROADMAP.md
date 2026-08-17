@@ -20,7 +20,7 @@ The collective server and predictive ML come later, once there are enough users 
 
 ## v35 Integrations
 
-The next approved major block after the Creator Voice workbench is Integrations.
+The next approved major block after the Creator Voice workbench is Integrations, and the approved connector order is locked by the decision register.
 
 - v35-A establishes provider-neutral connector contracts, creator-owned accounts, secure credential references, and offline fake-connector validation
 - it does not enable real social/video/storage provider publishing flows
@@ -33,9 +33,14 @@ The next approved major block after the Creator Voice workbench is Integrations.
 - the distributed Windows bundle materializes the public OAuth client identity into bundled configuration at build time; developer JSON is bootstrap-only and not a runtime dependency
 - it does not auto-ingest YouTube content into Creator Corpus or Creator Voice
 
+- v35-C adds Instagram Read-Only as the next approved connector and keeps the phase read-only
+- v35-D adds TikTok Read-Only as the next approved connector and keeps the phase read-only
+- v35-E consolidates YouTube, Instagram, TikTok, and manual sources behind the shared integration layer without changing native connector semantics
+- v36 introduces Market / Trend Intelligence Foundation after the connector block is complete
+
 The integration pillar now has a provider-neutral foundation and one approved real read-only connector.
 
-Future connector phases must still follow the approved roadmap and product-value ordering.
+Future connector phases must still follow this approved roadmap and product-value ordering unless the user explicitly approves a revision.
 
 ## Future Creator Voice / Script Intelligence Differentiator
 

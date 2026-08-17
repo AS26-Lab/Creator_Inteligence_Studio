@@ -16,7 +16,7 @@ This document records what is actually implemented in the repository through the
 - Creator Corpus now spans v33-A through v33-J: corpus foundation, deterministic ingestion and normalization, lexical retrieval, context assembly, workflow grounding, semantic evaluation, an adopted optional product semantic lifecycle, creator-scoped feedback/learning-signals, deterministic preference synthesis with explicit confirmation surfaces, and bounded confirmed-preference application.
 - Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
 - v35-A adds the integration foundation: provider-neutral connector contracts, a registry, a fake connector, creator-scoped accounts, opaque credential references, and frozen-runtime diagnostics. No real provider integration is enabled yet.
-- v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; the distributed bundle now materializes the public YouTube OAuth client identity into `config/default.json` during build, while `H:\ALEJANDRO_2\ClientGoogle.json` remains a build-only developer bootstrap input. Real-account certification remains pending because no live Google login smoke was run in this closure.
+- v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; the distributed bundle now materializes the public YouTube OAuth client identity into `config/default.json` during build, while `H:\ALEJANDRO_2\ClientGoogle.json` remains a build-only developer bootstrap input. The live read path has now been certified with a real account.
 - v35-B now has a live real-account certification on the read path: the canonical stored credential was reused across restart, `channels.list` profile read succeeded, bounded video listing and metadata reads succeeded, non-monetary analytics succeeded, and the browser was not reopened during recovery. The isolated certification database required one creator seed row before the first YouTube persistence write, which is a test-environment artifact of an empty local database rather than a Google/OAuth issue.
 - The Google OAuth consent screen for the bundled YouTube client is currently `External` + `Testing`, so refresh tokens issued for YouTube scopes may expire according to Google policy after a short testing window. That behavior is external to CIS and must not be interpreted as a product regression by itself.
 
@@ -155,14 +155,13 @@ Status: `implemented`
 - read-only OAuth flow using secure credential storage
 - account profile, uploaded video inventory, video metadata, and analytics reads
 - offline/frozen validation passes with the connector registered
-- real-account certification remains pending because no live Google credential smoke was run in this closure
+- real-account certification is complete on the read path
 - Testing-mode refresh-token expiry is a Google-side policy behavior, not a CIS storage bug
 - quota and rate-limit UX is surfaced through derived user statuses such as `quota_exhausted`, `auth_expired`, `needs_attention`, and `provider_unavailable`
 - last-updated and retry/reset information is shown only when the provider or connector can supply it; no invented reset time is displayed
 - quota exhaustion keeps previously retrieved data visible and suppresses aggressive retries instead of crashing or clearing state
-- the current closure did not certify a live YouTube account, so real-account certification remains pending
 
-Status: `implemented as first real connector`; real-account certification `pending`
+Status: `implemented as first real connector`; real-account certification `closed`
 
 ### Strategic Foundations
 
