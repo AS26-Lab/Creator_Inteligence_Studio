@@ -10,15 +10,21 @@ Allowed:
 - granted scopes / capabilities
 - safe metadata summaries
 
-For YouTube OAuth specifically:
+For provider OAuth generally:
 
 - access tokens and refresh tokens stay behind the approved secure credential store
 - account rows only retain opaque references and safe summaries
 - desktop authorization uses the official loopback-style installed-app flow, not manual token paste
-- the public OAuth application identity is materialized in the distributed bundle configuration at build time
-- `H:\ALEJANDRO_2\ClientGoogle.json` and similar developer bootstrap files are build-only inputs, not runtime dependencies
-- if the desktop OAuth bootstrap contains a `client_secret`, it is only used as a development/distributor bootstrap detail and is not stored in normal app state
+- the public OAuth application identity is materialized in the distributed bundle configuration at build time only when the provider architecture explicitly allows it
+- developer bootstrap files such as `H:\ALEJANDRO_2\ClientGoogle.json` are build-only inputs, not runtime dependencies
+- provider secrets that must remain confidential do not ship inside the public client and do not belong in normal app state
 - client configuration is developer/distributor responsibility, not end-user database state
+
+For Instagram OAuth specifically:
+
+- the Meta App Secret stays server-side in the AS26 OAuth broker
+- the public Windows client never stores or receives the Meta App Secret
+- the broker returns only the user authorization result and secure opaque references needed by CIS
 
 Not allowed:
 

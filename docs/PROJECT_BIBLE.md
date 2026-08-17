@@ -221,6 +221,7 @@ If a feature is ambiguous, classify it as paused until the next approved contrac
 
 - The repository already contains deterministic, structural, and workflow infrastructure for many future AI features. Those modules are not equivalent to creative intelligence.
 - The approved integrations sequence after v35-B is locked by the Decision Register: v35-C Instagram Read-Only, v35-D TikTok Read-Only, v35-E Multi-Platform Integration Consolidation, then v36 Market / Trend Intelligence Foundation. Codex must not reorder or skip those blocks without explicit user approval.
+- The approved Instagram OAuth architecture for v35-C uses Instagram API with Instagram Login and an AS26 OAuth broker so the Meta App Secret stays server-side and out of the public Windows client.
 - The older `docs/AI_ML_ARCHITECTURE.md` was conceptual. It is now subordinate to this Project Bible and to the catch-up decisions.
 - `Human-Guided Script Drafting Foundation` is still not started. The next approved block is `AI Runtime and Provider Orchestration Foundation`, but it is not implemented yet.
 - The approved IA/ML catch-up PDF is a canonical reference, but the workspace may not always contain a local copy. If it is missing, the repository must keep the expected path documented and the file must be copied in without regeneration.

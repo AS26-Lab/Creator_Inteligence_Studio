@@ -1,6 +1,6 @@
 # Instagram Read-Only Integration
 
-Instagram Read-Only Integration adds an official, local-only connector for Instagram professional accounts. It is limited to observation and local persistence. It does not publish content, delete content, edit remote content, manage comments, manage messages or scrape remote pages.
+Instagram Read-Only Integration adds an official, local-first connector for Instagram professional accounts. OAuth exchange for the confidential Meta App Secret is delegated to the AS26 OAuth broker; the desktop app keeps only opaque credential references and local persistence. It does not publish content, delete content, edit remote content, manage comments, manage messages or scrape remote pages.
 
 ## Documentation checked
 
@@ -46,11 +46,12 @@ Personal accounts are rejected with a clear validation error. The connector keep
 
 ## OAuth and access model
 
-- OAuth uses the official Instagram login path for professional accounts.
+- OAuth uses the official Instagram API with Instagram Login path for professional accounts.
 - The implementation keeps scopes on an allowlist and rejects any write scope.
 - Access level and app access status are tracked explicitly so development, standard access, advanced access and review-related states stay visible.
 - Disconnect and revoke are separate actions.
-- Credential references are stored locally; secrets remain in a protected credential backend when available.
+- Credential references are stored locally; the Meta App Secret stays server-side in AS26.
+- The approved read-only scopes are `instagram_business_basic` and `instagram_business_manage_insights`.
 
 ## Imported data
 
@@ -101,11 +102,19 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 - production desktop auth may require a backend or public redirect URI depending on the Meta flow in use;
 - the connector does not implement Instagram publishing.
 
-## Next phase
+## Approved v35-C slices
 
-The next approved phase is TikTok Read-Only Integration.
+- `v35-C1` Instagram OAuth Broker Foundation
+- `v35-C2` Instagram Account/Profile Read
+- `v35-C3` Owned Media Listing + Metadata
+- `v35-C4` Account + Media Insights
+- `v35-C5` Real-Account Certification + Packaging/Recovery Closure
 
-After TikTok, the approved sequence continues with Multi-Platform Integration Consolidation and then Market / Trend Intelligence Foundation.
+## Roadmap
+
+v35-C is the current approved phase.
+
+After v35-C, the approved sequence continues with v35-D TikTok Read-Only, v35-E Multi-Platform Integration Consolidation, and v36 Market / Trend Intelligence Foundation.
 
 ## Market intelligence note
 

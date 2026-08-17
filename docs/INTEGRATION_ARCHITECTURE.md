@@ -70,6 +70,16 @@ It is intentionally read-only in v35-B and is limited to:
 It does not expose write, publish, upload, schedule, update, delete, comment, or auto-ingest behavior.
 Its OAuth application identity is resolved from the bundled application configuration at runtime; developer JSON bootstrap files are used only at build time to seed that bundle configuration.
 
+## Instagram OAuth Role
+
+`InstagramIntegrationConnector` should follow the same provider-neutral connector boundary, but its OAuth boundary is different from the Google desktop model.
+
+- use Instagram API with Instagram Login for the provider path;
+- keep the Meta App Secret server-side in the AS26 OAuth broker;
+- return only opaque credential references and safe metadata to the desktop app;
+- keep raw access tokens and refresh tokens out of normal SQLite rows;
+- preserve the local-first product boundary while delegating only the confidential OAuth exchange step to AS26.
+
 ## Future Expansion
 
 Future real connectors can be added one by one without changing the contract version or the core product architecture.

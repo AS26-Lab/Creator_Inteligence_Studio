@@ -33,10 +33,18 @@ The next approved major block after the Creator Voice workbench is Integrations,
 - the distributed Windows bundle materializes the public OAuth client identity into bundled configuration at build time; developer JSON is bootstrap-only and not a runtime dependency
 - it does not auto-ingest YouTube content into Creator Corpus or Creator Voice
 
-- v35-C adds Instagram Read-Only as the next approved connector and keeps the phase read-only
+- v35-C adds Instagram Read-Only as the current approved connector, keeps the phase read-only, and uses the AS26 OAuth broker for the sensitive Instagram token exchange boundary
 - v35-D adds TikTok Read-Only as the next approved connector and keeps the phase read-only
 - v35-E consolidates YouTube, Instagram, TikTok, and manual sources behind the shared integration layer without changing native connector semantics
 - v36 introduces Market / Trend Intelligence Foundation after the connector block is complete
+
+Approved v35-C slices:
+
+- v35-C1 Instagram OAuth Broker Foundation
+- v35-C2 Instagram Account/Profile Read
+- v35-C3 Owned Media Listing + Metadata
+- v35-C4 Account + Media Insights
+- v35-C5 Real-Account Certification + Packaging/Recovery Closure
 
 The integration pillar now has a provider-neutral foundation and one approved real read-only connector.
 
