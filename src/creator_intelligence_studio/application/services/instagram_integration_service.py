@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -17,6 +17,13 @@ from creator_intelligence_studio.domain.analytics.services import build_metric_s
 from creator_intelligence_studio.domain.analytics.value_objects import AnalyticsContentType, AnalyticsImportStatus, AnalyticsQualityStatus, AnalyticsSourceType
 from creator_intelligence_studio.domain.creative_packaging.entities import PackagingAsset, ThumbnailVersion
 from creator_intelligence_studio.domain.creative_packaging.value_objects import PackagingAssetStatus, PackagingAssetType
+from creator_intelligence_studio.domain.integrations.contracts import (
+    IntegrationErrorCategory,
+    IntegrationErrorDetails,
+    IntegrationHealth,
+    IntegrationHealthStatus,
+    IntegrationRateLimitState,
+)
 from creator_intelligence_studio.domain.instagram_integration.connection_types import (
     InstagramAccessLevel,
     InstagramAppAccessStatus,
@@ -73,7 +80,7 @@ from creator_intelligence_studio.domain.instagram_integration.oauth_broker impor
 )
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.instagram.account_mapper import map_account_payload
-from creator_intelligence_studio.infrastructure.instagram.api_client import InstagramApiClient
+from creator_intelligence_studio.infrastructure.instagram.api_client import InstagramApiClient, InstagramApiError
 from creator_intelligence_studio.infrastructure.instagram.api_version import DEFAULT_INSTAGRAM_API_VERSION
 from creator_intelligence_studio.infrastructure.instagram.credential_store import (
     DevelopmentInstagramCredentialStore,
@@ -208,6 +215,20 @@ def _analytics_platform_for_content_type(content_type: InstagramContentType) -> 
     }[content_type]
 
 
+PROFILE_READ_FIELDS: tuple[str, ...] = (
+    "id",
+    "username",
+    "name",
+    "biography",
+    "website",
+    "profile_picture_url",
+    "followers_count",
+    "follows_count",
+    "media_count",
+    "account_type",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class InstagramConnectionResult:
     connection: InstagramConnection
@@ -218,6 +239,28 @@ class InstagramConnectionResult:
         return {
             "connection": self.connection.to_dict(),
             "authorization_url": self.authorization_url,
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class InstagramProfileReadResult:
+    connection: InstagramConnection
+    account: InstagramAccount | None
+    health: IntegrationHealth
+    success: bool
+    error: IntegrationErrorDetails | None = None
+    provider_metadata: dict[str, object] = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "connection": self.connection.to_dict(),
+            "account": None if self.account is None else self.account.to_dict(),
+            "health": self.health.to_dict(),
+            "success": self.success,
+            "error": None if self.error is None else self.error.to_dict(),
+            "provider_metadata": dict(self.provider_metadata),
             "warnings": list(self.warnings),
         }
 
@@ -326,6 +369,208 @@ class InstagramIntegrationService:
         if bundle is None or not bundle.access_token:
             raise InstagramAuthorizationError("No hay credenciales disponibles para la conexion.")
         return bundle
+
+    def _profile_read_health(
+        self,
+        *,
+        connection: InstagramConnection,
+        success: bool,
+        error: IntegrationErrorDetails | None = None,
+        rate_limit_state: IntegrationRateLimitState | None = None,
+    ) -> IntegrationHealth:
+        if success:
+            return IntegrationHealth(
+                connector_id=connection.provider,
+                connector_available=True,
+                account_authenticated=True,
+                permissions_valid=True,
+                rate_limit_state=rate_limit_state,
+                last_success_at=_now(),
+                status=IntegrationHealthStatus.HEALTHY,
+                checked_at=_now(),
+            )
+        status = IntegrationHealthStatus.DEGRADED
+        if error is not None and error.category == IntegrationErrorCategory.PROVIDER_UNAVAILABLE:
+            status = IntegrationHealthStatus.UNAVAILABLE
+        return IntegrationHealth(
+            connector_id=connection.provider,
+            connector_available=status != IntegrationHealthStatus.UNAVAILABLE,
+            account_authenticated=False,
+            permissions_valid=False,
+            rate_limit_state=rate_limit_state,
+            last_error_category=None if error is None else error.category,
+            last_error_message=None if error is None else error.message,
+            status=status,
+            checked_at=_now(),
+        )
+
+    def _profile_read_error(
+        self,
+        *,
+        connection: InstagramConnection,
+        category: IntegrationErrorCategory,
+        message: str,
+        provider_code: str | None = None,
+        provider_request_id: str | None = None,
+        retryable: bool = False,
+        safe_detail: str | None = None,
+    ) -> InstagramProfileReadResult:
+        error = IntegrationErrorDetails(
+            category=category,
+            message=message,
+            provider_code=provider_code,
+            provider_request_id=provider_request_id,
+            retryable=retryable,
+            safe_detail=safe_detail,
+        )
+        updated_connection = self.repository.upsert_connection(
+            self._connection_to_status(connection, status=InstagramConnectionStatus.ERROR)
+        )
+        return InstagramProfileReadResult(
+            connection=updated_connection,
+            account=None,
+            health=self._profile_read_health(connection=updated_connection, success=False, error=error),
+            success=False,
+            error=error,
+            provider_metadata={},
+            warnings=(),
+        )
+
+    def _profile_read_error_from_api_error(self, connection: InstagramConnection, error: InstagramApiError) -> InstagramProfileReadResult:
+        details = error.details
+        http_status = details.http_status
+        reason = (details.reason or "").lower()
+        message = details.message.strip() or "No se pudo leer el perfil de Instagram."
+        code = details.code
+        safe_detail = "provider_error"
+        category = IntegrationErrorCategory.PROVIDER_ERROR
+        retryable = False
+        if http_status == 429 or "rate" in reason or "limit" in reason or "rate" in message.lower() or "limit" in message.lower():
+            category = IntegrationErrorCategory.RATE_LIMITED
+            safe_detail = "rate_limited"
+            retryable = True
+        elif http_status in {401, 403} and (
+            code in {"190", "102", "190.0"}
+            or "expired" in reason
+            or "invalid" in reason
+            or "auth" in reason
+            or "auth" in message.lower()
+        ):
+            category = IntegrationErrorCategory.AUTHENTICATION_EXPIRED
+            safe_detail = "authentication_expired"
+            retryable = True
+        elif http_status == 403 and ("permission" in reason or "permission" in message.lower() or "insufficient" in message.lower()):
+            category = IntegrationErrorCategory.PERMISSION_DENIED
+            safe_detail = "insufficient_permissions"
+            retryable = True
+        elif http_status is None:
+            category = IntegrationErrorCategory.PROVIDER_UNAVAILABLE
+            safe_detail = "network_unavailable"
+            retryable = True
+        elif http_status >= 500:
+            category = IntegrationErrorCategory.PROVIDER_UNAVAILABLE
+            safe_detail = "provider_unavailable"
+            retryable = True
+        elif http_status == 400:
+            category = IntegrationErrorCategory.INVALID_REQUEST
+            safe_detail = "invalid_request"
+        error_details = IntegrationErrorDetails(
+            category=category,
+            message=message,
+            provider_code=code,
+            provider_request_id=details.request_path,
+            retryable=retryable,
+            safe_detail=safe_detail,
+        )
+        updated_connection = self.repository.upsert_connection(self._connection_to_status(connection, status=InstagramConnectionStatus.ERROR))
+        self._record_rate_limit(updated_connection.id, "account_profile", error)
+        rate_limit_state = IntegrationRateLimitState(limited=True) if category == IntegrationErrorCategory.RATE_LIMITED else None
+        return InstagramProfileReadResult(
+            connection=updated_connection,
+            account=None,
+            health=self._profile_read_health(connection=updated_connection, success=False, error=error_details, rate_limit_state=rate_limit_state),
+            success=False,
+            error=error_details,
+            provider_metadata={
+                "http_status": http_status,
+                "provider_reason": details.reason,
+            },
+            warnings=(),
+        )
+
+    def _profile_read_success(
+        self,
+        *,
+        connection: InstagramConnection,
+        account_payload: dict[str, object],
+        bundle: InstagramCredentialBundle,
+        response: object | None = None,
+    ) -> InstagramProfileReadResult:
+        account_identifier = _safe_str(account_payload.get("id")) or connection.account_identifier or bundle.instagram_user_id
+        if not account_identifier:
+            raise InstagramConnectionError("No se pudo resolver el identificador de cuenta de Instagram.")
+        mapped_account = map_account_payload(
+            account_payload,
+            creator_id=connection.creator_id,
+            connection_id=connection.id,
+            instagram_user_id=account_identifier,
+            api_version=self.api_client.api_version,
+        )
+        if mapped_account.account_type == InstagramProfessionalAccountType.PERSONAL:
+            return self._profile_read_error(
+                connection=replace(connection, account_identifier=account_identifier),
+                category=IntegrationErrorCategory.UNSUPPORTED_OPERATION,
+                message="unsupported_account_type",
+                safe_detail="personal_account",
+            )
+        existing_account = self.repository.get_account_by_instagram_user_id(connection.creator_id, account_identifier)
+        if existing_account is not None:
+            mapped_account = replace(
+                mapped_account,
+                id=existing_account.id,
+                selected_for_sync=existing_account.selected_for_sync,
+                last_synced_at=existing_account.last_synced_at,
+                created_at=existing_account.created_at,
+            )
+        updated_account = self.repository.upsert_account(mapped_account)
+        self._record_rate_limit(connection.id, "account_profile", response)
+        verified_connection = self.repository.upsert_connection(
+            self._connection_to_status(
+                replace(connection, account_identifier=account_identifier),
+                status=InstagramConnectionStatus.VERIFIED,
+                verified=True,
+            )
+        )
+        return InstagramProfileReadResult(
+            connection=verified_connection,
+            account=updated_account,
+            health=self._profile_read_health(connection=verified_connection, success=True),
+            success=True,
+            error=None,
+            provider_metadata={
+                "provider_account_id": updated_account.instagram_user_id,
+                "username": updated_account.username,
+                "account_type": updated_account.account_type.value,
+            },
+            warnings=(),
+        )
+
+    def _read_account_profile_from_connection(self, connection: InstagramConnection) -> InstagramProfileReadResult:
+        bundle = self._load_connection_bundle(connection)
+        account_identifier = connection.account_identifier or bundle.instagram_user_id
+        if not account_identifier:
+            return self._profile_read_error(
+                connection=connection,
+                category=IntegrationErrorCategory.AUTHENTICATION_REQUIRED,
+                message="No se pudo resolver el identificador de cuenta de Instagram.",
+                safe_detail="account_identifier_missing",
+            )
+        try:
+            response = self.api_client.fetch_account(token=bundle.access_token or "", instagram_user_id=account_identifier, fields=PROFILE_READ_FIELDS)
+        except InstagramApiError as exc:
+            return self._profile_read_error_from_api_error(connection, exc)
+        payload = _dict_payload(response)
+        return self._profile_read_success(connection=connection, account_payload=payload, bundle=bundle, response=response)
 
     def _connection_to_status(self, connection: InstagramConnection, *, status: InstagramConnectionStatus, verified: bool = False, disconnected: bool = False) -> InstagramConnection:
         now = _now()
@@ -515,27 +760,20 @@ class InstagramIntegrationService:
         missing = token_verification.get("missing_scopes") or ()
         if missing:
             raise InstagramAuthorizationError(f"Scopes faltantes: {missing}")
-        verified = self._connection_to_status(connection, status=InstagramConnectionStatus.VERIFIED, verified=True)
-        if token_verification.get("instagram_user_id"):
-            verified = replace(verified, account_identifier=str(token_verification.get("instagram_user_id")))
-            account_payload = _dict_payload(
-                self.api_client.fetch_account(
-                    token=bundle.access_token or "",
-                    instagram_user_id=str(token_verification.get("instagram_user_id")),
-                    fields=("id", "username", "name", "biography", "website", "profile_picture_url", "followers_count", "follows_count", "media_count", "account_type"),
-                )
-            )
-            imported_account = map_account_payload(
-                account_payload,
-                creator_id=connection.creator_id,
-                connection_id=connection.id,
-                instagram_user_id=str(token_verification.get("instagram_user_id")),
-                api_version=self.api_client.api_version,
-            )
-            if imported_account.account_type == InstagramProfessionalAccountType.PERSONAL:
-                raise InstagramAccountValidationError("professional_account_required")
-            self.repository.upsert_account(imported_account)
-        return InstagramConnectionResult(connection=self.repository.upsert_connection(verified), authorization_url=None, warnings=())
+        if token_verification.get("instagram_user_id") and not connection.account_identifier:
+            connection = replace(connection, account_identifier=str(token_verification.get("instagram_user_id")))
+        profile_result = self._read_account_profile_from_connection(connection)
+        if not profile_result.success or profile_result.account is None:
+            if profile_result.error is not None and profile_result.error.category == IntegrationErrorCategory.UNSUPPORTED_OPERATION:
+                raise InstagramAccountValidationError(profile_result.error.message)
+            raise InstagramAuthorizationError(profile_result.error.message if profile_result.error is not None else "No se pudo verificar la conexion de Instagram.")
+        return InstagramConnectionResult(connection=profile_result.connection, authorization_url=None, warnings=profile_result.warnings)
+
+    def read_account_profile(self, connection_id: str) -> InstagramProfileReadResult:
+        connection = self.repository.get_connection(connection_id)
+        if connection is None:
+            raise InstagramConnectionError("La conexion no existe.")
+        return self._read_account_profile_from_connection(connection)
 
     def disconnect_connection(self, connection_id: str) -> InstagramConnectionResult:
         connection = self.repository.get_connection(connection_id)

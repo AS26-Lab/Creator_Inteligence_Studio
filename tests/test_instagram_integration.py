@@ -17,17 +17,22 @@ except Exception:  # pragma: no cover - optional GUI dependency
     QApplication = None
 
 from creator_intelligence_studio.application import bootstrap
-from creator_intelligence_studio.application.services.instagram_integration_service import build_instagram_integration_service
+from creator_intelligence_studio.application.services.instagram_integration_service import PROFILE_READ_FIELDS, build_instagram_integration_service
 from creator_intelligence_studio.domain.instagram_integration.connection_types import (
     InstagramAuthProvider,
     InstagramConnectionStatus,
     InstagramProfessionalAccountType,
 )
+from creator_intelligence_studio.domain.integrations.contracts import IntegrationErrorCategory
 from creator_intelligence_studio.domain.instagram_integration.errors import InstagramAccountValidationError
+from creator_intelligence_studio.domain.instagram_integration.oauth_broker import generate_transaction_proof
+from creator_intelligence_studio.infrastructure.instagram.api_client import InstagramApiError, InstagramApiErrorDetails
+from creator_intelligence_studio.infrastructure.instagram.oauth_broker import InMemoryInstagramOAuthBrokerStore, InstagramOAuthBrokerService
 from creator_intelligence_studio.domain.instagram_integration.value_objects import (
     READ_ONLY_SCOPES,
     InstagramOAuthAuthorizationResult,
     InstagramOAuthTokenResult,
+    build_instagram_credential_reference,
     is_write_scope,
 )
 from creator_intelligence_studio.domain.analytics.entities import AnalyticsChannel, AnalyticsPlatform
@@ -332,8 +337,11 @@ class FakeInstagramApiClient:
         self.account_insight_calls: list[tuple[str, str, tuple[str, ...], str]] = []
         self.media_insight_calls: list[tuple[str, str, tuple[str, ...], str]] = []
         self._media_call_count: dict[str, int] = {}
+        self.profile_errors: dict[str, InstagramApiErrorDetails] = {}
 
     def fetch_account(self, *, token: str, instagram_user_id: str, fields: tuple[str, ...]):
+        if instagram_user_id in self.profile_errors:
+            raise InstagramApiError(self.profile_errors[instagram_user_id])
         self.account_calls.append((token, instagram_user_id, fields))
         return FakeInstagramResponse(self.account_payloads[instagram_user_id], headers={"x-app-usage": "{\"call_count\":1}"})
 
@@ -357,7 +365,7 @@ class FakeInstagramApiClient:
         return FakeInstagramResponse(self.media_insights.get(media_id, {"data": [], "status": "empty"}), headers={"x-app-usage": "{\"call_count\":4}"})
 
 
-def _make_bundle(root: Path, api_client: FakeInstagramApiClient | None = None, oauth_client: FakeInstagramOAuthClient | None = None):
+def _make_bundle(root: Path, api_client: FakeInstagramApiClient | None = None, oauth_client: FakeInstagramOAuthClient | None = None, oauth_broker: InstagramOAuthBrokerService | None = None):
     settings = make_settings()
     paths = ProjectPaths.from_settings(root, settings)
     paths.ensure_runtime_directories()
@@ -376,11 +384,24 @@ def _make_bundle(root: Path, api_client: FakeInstagramApiClient | None = None, o
         analytics_repository=analytics_repository,
         creative_packaging_repository=creative_packaging_repository,
         oauth_client=oauth_client or FakeInstagramOAuthClient(),
+        oauth_broker=oauth_broker,
         credential_store=MemoryInstagramCredentialStore(),
         api_client=api_client or FakeInstagramApiClient(),
         logger=logging.getLogger("test"),
     )
     return settings, paths, database, catalog, analytics_repository, creative_packaging_repository, instagram_repository, service
+
+
+def _make_broker(oauth_client: FakeInstagramOAuthClient) -> InstagramOAuthBrokerService:
+    return InstagramOAuthBrokerService(
+        client_id="client-id",
+        client_secret="client-secret",
+        callback_url="https://broker.example.test/oauth/instagram/callback",
+        oauth_client=oauth_client,
+        store=InMemoryInstagramOAuthBrokerStore(),
+        transaction_ttl_seconds=60,
+        logger=logging.getLogger("test"),
+    )
 
 
 def _seed_analytics_channel(analytics_repository: SQLiteAnalyticsRepository, *, creator_id: str, channel_id: str) -> None:
@@ -577,6 +598,189 @@ class InstagramIntegrationTests(unittest.TestCase):
                 service.connect_account(creator_id=creator.id, client_id="client-x", authorization_code="code-personal")
             self.assertFalse(any(is_write_scope(scope) for scope in READ_ONLY_SCOPES))
 
+    def test_profile_read_creates_canonical_account_and_preserves_creator_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, _, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator_a = catalog.create_creator(display_name="Creator A")
+            creator_b = catalog.create_creator(display_name="Creator B")
+
+            proof_a = generate_transaction_proof()
+            start_a = service.start_oauth_transaction(creator_id=creator_a.id, client_id="client-id", transaction_proof=proof_a)
+            broker.handle_callback(state=start_a.state, code="code-a")
+            pending_a = service.complete_oauth_transaction(creator_id=creator_a.id, transaction_id=start_a.transaction_id, transaction_proof=proof_a)
+            before_begin_calls = len(oauth_client.begin_calls)
+            before_exchange_calls = len(oauth_client.exchange_calls)
+            before_verify_calls = len(oauth_client.verify_calls)
+            result_a = service.read_account_profile(pending_a.connection.id)
+            expected_ref_a = build_instagram_credential_reference(creator_id=creator_a.id, instagram_user_id="ig-a")
+
+            proof_b = generate_transaction_proof()
+            start_b = service.start_oauth_transaction(creator_id=creator_b.id, client_id="client-id", transaction_proof=proof_b)
+            broker.handle_callback(state=start_b.state, code="code-b")
+            pending_b = service.complete_oauth_transaction(creator_id=creator_b.id, transaction_id=start_b.transaction_id, transaction_proof=proof_b)
+            result_b = service.read_account_profile(pending_b.connection.id)
+            expected_ref_b = build_instagram_credential_reference(creator_id=creator_b.id, instagram_user_id="ig-b")
+
+            self.assertTrue(result_a.success)
+            self.assertTrue(result_b.success)
+            self.assertEqual(result_a.connection.status, InstagramConnectionStatus.VERIFIED)
+            self.assertEqual(result_b.connection.status, InstagramConnectionStatus.VERIFIED)
+            self.assertEqual(result_a.connection.credential_reference, expected_ref_a)
+            self.assertEqual(result_b.connection.credential_reference, expected_ref_b)
+            self.assertEqual(result_a.connection.credential_reference, pending_a.connection.credential_reference)
+            self.assertEqual(result_b.connection.credential_reference, pending_b.connection.credential_reference)
+            self.assertEqual(result_a.account.account_type, InstagramProfessionalAccountType.CREATOR)
+            self.assertEqual(result_b.account.account_type, InstagramProfessionalAccountType.BUSINESS)
+            self.assertEqual(result_a.account.username, "creator_a")
+            self.assertEqual(result_b.account.username, "creator_b")
+            self.assertEqual(len(service.list_accounts(creator_a.id)), 1)
+            self.assertEqual(len(service.list_accounts(creator_b.id)), 1)
+            self.assertEqual(service.list_accounts(creator_a.id)[0].creator_id, creator_a.id)
+            self.assertEqual(service.list_accounts(creator_b.id)[0].creator_id, creator_b.id)
+            self.assertEqual(len(service.list_connections(creator_a.id)), 1)
+            self.assertEqual(len(service.list_connections(creator_b.id)), 1)
+            self.assertEqual(len(api_client.account_calls), 2)
+            self.assertEqual(api_client.account_calls[0][0], "access-code-a")
+            self.assertEqual(api_client.account_calls[0][1], "ig-a")
+            self.assertEqual(api_client.account_calls[0][2], PROFILE_READ_FIELDS)
+            self.assertEqual(api_client.account_calls[1][0], "access-code-b")
+            self.assertEqual(api_client.account_calls[1][1], "ig-b")
+            self.assertEqual(api_client.account_calls[1][2], PROFILE_READ_FIELDS)
+            self.assertEqual(len(oauth_client.begin_calls), before_begin_calls + 1)
+            self.assertEqual(len(oauth_client.exchange_calls), before_exchange_calls + 1)
+            self.assertEqual(len(oauth_client.verify_calls), before_verify_calls)
+
+    def test_profile_read_preserves_nullable_fields_and_text_normalization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            api_client.account_payloads["ig-a"] = {
+                "id": "ig-a",
+                "username": "Creator_Emoji",
+                "name": "Creator Emoji",
+                "biography": "Hola, mundo! ✨ #Creador?",
+                "website": None,
+                "profile_picture_url": None,
+                "followers_count": None,
+                "follows_count": None,
+                "media_count": None,
+                "account_type": "creator",
+            }
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, _, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator = catalog.create_creator(display_name="Creator Emoji")
+
+            proof = generate_transaction_proof()
+            start = service.start_oauth_transaction(creator_id=creator.id, client_id="client-id", transaction_proof=proof)
+            broker.handle_callback(state=start.state, code="code-a")
+            pending = service.complete_oauth_transaction(creator_id=creator.id, transaction_id=start.transaction_id, transaction_proof=proof)
+            result = service.read_account_profile(pending.connection.id)
+
+            self.assertTrue(result.success)
+            self.assertEqual(result.account.username, "Creator_Emoji")
+            self.assertEqual(result.account.biography, "Hola, mundo! ✨ #Creador?")
+            self.assertIsNone(result.account.website)
+            self.assertIsNone(result.account.profile_picture_url)
+            self.assertIsNone(result.account.followers_count)
+            self.assertIsNone(result.account.follows_count)
+            self.assertIsNone(result.account.media_count)
+
+    def test_profile_read_reports_sanitized_provider_failures_without_browser(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, _, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator = catalog.create_creator(display_name="Creator Errors")
+
+            proof = generate_transaction_proof()
+            start = service.start_oauth_transaction(creator_id=creator.id, client_id="client-id", transaction_proof=proof)
+            broker.handle_callback(state=start.state, code="code-a")
+            pending = service.complete_oauth_transaction(creator_id=creator.id, transaction_id=start.transaction_id, transaction_proof=proof)
+
+            scenarios = [
+                (
+                    "auth_expired",
+                    InstagramApiErrorDetails(
+                        http_status=401,
+                        code="190",
+                        reason="OAuthException",
+                        message="Error validating access token: Session expired.",
+                        request_path="ig-a",
+                        request_url="https://graph.instagram.com/v25.0/ig-a?fields=id",
+                        response_headers={"x-app-usage": "{\"call_count\":90}"},
+                    ),
+                    IntegrationErrorCategory.AUTHENTICATION_EXPIRED,
+                ),
+                (
+                    "provider_unavailable",
+                    InstagramApiErrorDetails(
+                        http_status=503,
+                        code="2",
+                        reason="ServiceUnavailable",
+                        message="Service temporarily unavailable.",
+                        request_path="ig-a",
+                        request_url="https://graph.instagram.com/v25.0/ig-a?fields=id",
+                        response_headers={},
+                    ),
+                    IntegrationErrorCategory.PROVIDER_UNAVAILABLE,
+                ),
+                (
+                    "rate_limited",
+                    InstagramApiErrorDetails(
+                        http_status=429,
+                        code="4",
+                        reason="rate limit",
+                        message="Too many calls.",
+                        request_path="ig-a",
+                        request_url="https://graph.instagram.com/v25.0/ig-a?fields=id",
+                        response_headers={"x-app-usage": "{\"call_count\":100}"},
+                    ),
+                    IntegrationErrorCategory.RATE_LIMITED,
+                ),
+                (
+                    "malformed_response",
+                    InstagramApiErrorDetails(
+                        http_status=400,
+                        code=None,
+                        reason=None,
+                        message="Respuesta invalida del proveedor.",
+                        request_path="ig-a",
+                        request_url="https://graph.instagram.com/v25.0/ig-a?fields=id",
+                        response_headers={},
+                    ),
+                    IntegrationErrorCategory.INVALID_REQUEST,
+                ),
+            ]
+            for label, error_details, expected_category in scenarios:
+                with self.subTest(label=label):
+                    api_client.profile_errors["ig-a"] = error_details
+                    before_begin_calls = len(oauth_client.begin_calls)
+                    before_exchange_calls = len(oauth_client.exchange_calls)
+                    before_verify_calls = len(oauth_client.verify_calls)
+                    result = service.read_account_profile(pending.connection.id)
+                    self.assertFalse(result.success)
+                    self.assertIsNone(result.account)
+                    self.assertIsNotNone(result.error)
+                    self.assertEqual(result.error.category, expected_category)
+                    self.assertEqual(result.error.message, error_details.message)
+                    expected_user_status = {
+                        IntegrationErrorCategory.AUTHENTICATION_EXPIRED: "auth_expired",
+                        IntegrationErrorCategory.PROVIDER_UNAVAILABLE: "provider_unavailable",
+                        IntegrationErrorCategory.RATE_LIMITED: "quota_exhausted",
+                    }.get(expected_category, "needs_attention")
+                    self.assertEqual(result.health.user_status.value, expected_user_status)
+                    self.assertEqual(len(oauth_client.begin_calls), before_begin_calls)
+                    self.assertEqual(len(oauth_client.exchange_calls), before_exchange_calls)
+                    self.assertEqual(len(oauth_client.verify_calls), before_verify_calls)
+                    api_client.profile_errors.pop("ig-a", None)
+
     def test_cli_dispatch_and_gui_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -631,6 +835,7 @@ class InstagramIntegrationTests(unittest.TestCase):
                 disconnect_instagram_connection=lambda connection_id: service.disconnect_connection(connection_id),
                 revoke_instagram_connection=lambda connection_id: service.revoke_connection(connection_id),
                 select_instagram_account=lambda account_id: service.select_account(account_id),
+                read_instagram_account_profile=lambda connection_id: service.read_account_profile(connection_id),
                 sync_instagram_account=lambda account_id, **kwargs: service.sync_account(account_id=account_id, **kwargs),
                 sync_instagram_media=lambda account_id, **kwargs: service.sync_media(account_id=account_id, **kwargs),
                 sync_instagram_insights=lambda account_id, **kwargs: service.sync_insights(account_id=account_id, **kwargs),

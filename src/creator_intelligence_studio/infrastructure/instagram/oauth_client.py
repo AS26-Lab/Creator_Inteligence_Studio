@@ -116,7 +116,7 @@ class InstagramLoginOAuthClient:
             return 200 <= response.status < 300
 
     def verify_token(self, token: str, scopes: tuple[str, ...]) -> dict[str, object]:
-        query = urllib.parse.urlencode({"fields": "id,username,name", "access_token": token})
+        query = urllib.parse.urlencode({"fields": "id,username,name"})
         request = urllib.request.Request(f"{self.VERIFY_ENDPOINT}?{query}", headers={"Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(request, timeout=30) as response:
             body = json.loads(response.read().decode("utf-8"))
@@ -163,4 +163,3 @@ class InstagramLoginOAuthClient:
         if "code" not in authorization_code:
             raise TimeoutError("No se recibio el codigo de autorizacion.")
         return result, authorization_code["code"]
-

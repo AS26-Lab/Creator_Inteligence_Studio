@@ -96,15 +96,17 @@ class InstagramIntegrationView(QWidget):
         self.connection_empty = EmptyStateWidget("Sin conexiones", "Conecta una cuenta profesional mediante Instagram Login oficial.")
         self.connection_refresh = QPushButton("Actualizar")
         self.connection_verify = QPushButton("Verificar")
+        self.connection_profile = QPushButton("Actualizar perfil")
         self.connection_disconnect = QPushButton("Desconectar")
         self.connection_revoke = QPushButton("Revocar")
         self.connection_refresh.clicked.connect(self.refresh)
         self.connection_verify.clicked.connect(self._verify_connection)
+        self.connection_profile.clicked.connect(self._refresh_profile)
         self.connection_disconnect.clicked.connect(self._disconnect_connection)
         self.connection_revoke.clicked.connect(self._revoke_connection)
         layout = QVBoxLayout(self.connection_tab)
         actions = QHBoxLayout()
-        for widget in (self.connection_refresh, self.connection_verify, self.connection_disconnect, self.connection_revoke):
+        for widget in (self.connection_refresh, self.connection_verify, self.connection_profile, self.connection_disconnect, self.connection_revoke):
             actions.addWidget(widget)
         actions.addStretch(1)
         layout.addLayout(actions)
@@ -367,6 +369,25 @@ class InstagramIntegrationView(QWidget):
         QMessageBox.information(self, "Instagram", f"Conexion verificada: {result.connection.status.value}")
         self.refresh()
 
+    def _refresh_profile(self) -> None:
+        connection_id = self._selected_connection_id()
+        if not connection_id:
+            return
+        try:
+            result = self.workspace.read_instagram_account_profile(connection_id)
+        except Exception as exc:  # pragma: no cover - UI feedback only
+            QMessageBox.warning(self, "Instagram", str(exc))
+            return
+        if not getattr(result, "success", False):
+            error = getattr(result, "error", None)
+            message = getattr(error, "message", "No se pudo leer el perfil de Instagram.")
+            QMessageBox.warning(self, "Instagram", message)
+        else:
+            account = result.account
+            username = f"@{account.username}" if account and account.username else "perfil"
+            QMessageBox.information(self, "Instagram", f"Perfil actualizado: {username}")
+        self.refresh()
+
     def _disconnect_connection(self) -> None:
         connection_id = self._selected_connection_id()
         if not connection_id:
@@ -422,4 +443,3 @@ class InstagramIntegrationView(QWidget):
             return
         self.workspace.sync_instagram_repair(account_id)
         self.refresh()
-

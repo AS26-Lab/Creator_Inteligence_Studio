@@ -3803,6 +3803,11 @@ class WorkspaceViewModel:
             return None
         return self.instagram_service.show_account(account_id)
 
+    def read_instagram_account_profile(self, connection_id: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.read_account_profile(connection_id)
+
     def show_tiktok_profile(self, profile_id: str):
         if self.tiktok_service is None:
             return None

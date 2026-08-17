@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v34-D slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v35-C2 slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -20,6 +20,7 @@ This document records what is actually implemented in the repository through the
 - v35-B now has a live real-account certification on the read path: the canonical stored credential was reused across restart, `channels.list` profile read succeeded, bounded video listing and metadata reads succeeded, non-monetary analytics succeeded, and the browser was not reopened during recovery. The isolated certification database required one creator seed row before the first YouTube persistence write, which is a test-environment artifact of an empty local database rather than a Google/OAuth issue.
 - The Google OAuth consent screen for the bundled YouTube client is currently `External` + `Testing`, so refresh tokens issued for YouTube scopes may expire according to Google policy after a short testing window. That behavior is external to CIS and must not be interpreted as a product regression by itself.
 - v35-C1 Instagram OAuth Broker Foundation is now implemented as a broker-first transaction layer with short-lived transaction state, proof-bound redemption, and single-use result handoff. The desktop no longer needs to embed the Meta App Secret for the approved Instagram OAuth path, and raw Instagram tokens remain out of normal SQLite state.
+- v35-C2 Instagram Account/Profile Read is now implemented on top of the broker-issued credential reference. The desktop can resolve the authenticated professional account profile, persist safe profile metadata, preserve creator isolation, and keep Instagram profile metadata out of Creator Corpus and Creator Voice.
 
 ## What Is Implemented
 
