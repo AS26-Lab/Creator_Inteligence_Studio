@@ -24,7 +24,9 @@ For Instagram OAuth specifically:
 
 - the Meta App Secret stays server-side in the AS26 OAuth broker
 - the public Windows client never stores or receives the Meta App Secret
+- the broker uses short-lived, single-use transaction state plus a desktop-side proof/verifier to prevent transaction-id replay
 - the broker returns only the user authorization result and secure opaque references needed by CIS
+- token material is redeemed once and then removed from the broker result cache
 
 Not allowed:
 

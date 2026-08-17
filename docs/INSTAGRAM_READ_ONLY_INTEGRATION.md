@@ -110,6 +110,8 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 - `v35-C4` Account + Media Insights
 - `v35-C5` Real-Account Certification + Packaging/Recovery Closure
 
+`v35-C1` is implemented as the broker-first OAuth transaction layer. It introduces the short-lived broker transaction, proof-bound redemption, and the single-use handoff that keeps the Meta App Secret server-side.
+
 ## Roadmap
 
 v35-C is the current approved phase.

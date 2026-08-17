@@ -58,12 +58,19 @@ from creator_intelligence_studio.domain.instagram_integration.value_objects impo
     InstagramAuthProviderClient,
     InstagramOAuthAuthorizationResult,
     InstagramOAuthTokenResult,
+    build_instagram_credential_reference,
     READ_ONLY_SCOPES,
     build_instagram_fingerprint,
     is_write_scope,
 )
 from creator_intelligence_studio.domain.instagram_integration.value_objects import InstagramOAuthAuthorizationResult as OAuthAuthorizationResult
 from creator_intelligence_studio.domain.instagram_integration.value_objects import InstagramOAuthTokenResult as OAuthTokenResult
+from creator_intelligence_studio.domain.instagram_integration.oauth_broker import (
+    InstagramOAuthBrokerClient,
+    InstagramOAuthBrokerRedeemResult,
+    InstagramOAuthBrokerStartResult,
+    InstagramOAuthBrokerStatusResult,
+)
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.instagram.account_mapper import map_account_payload
 from creator_intelligence_studio.infrastructure.instagram.api_client import InstagramApiClient
@@ -258,6 +265,7 @@ class InstagramIntegrationService:
         analytics_repository: SQLiteAnalyticsRepository | None = None,
         creative_packaging_repository: SQLiteCreativePackagingRepository | None = None,
         oauth_client: InstagramAuthProviderClient | None = None,
+        oauth_broker: InstagramOAuthBrokerClient | None = None,
         credential_store: InstagramCredentialStore | None = None,
         api_client: InstagramApiClient | None = None,
         rate_limit_tracker: InstagramRateLimitTracker | None = None,
@@ -271,6 +279,7 @@ class InstagramIntegrationService:
         self.creative_packaging_repository = creative_packaging_repository
         self.logger = logger or logging.getLogger("creator_intelligence_studio.instagram")
         self.oauth_client = oauth_client or InstagramLoginOAuthClient()
+        self.oauth_broker = oauth_broker
         self.credential_store = credential_store or self._build_default_credential_store()
         self.api_client = api_client or InstagramApiClient(api_version=DEFAULT_INSTAGRAM_API_VERSION)
         self.rate_limit_tracker = rate_limit_tracker or InstagramRateLimitTracker()
@@ -300,6 +309,17 @@ class InstagramIntegrationService:
 
     def _credential_bundle(self, connection: InstagramConnection) -> InstagramCredentialBundle | None:
         return self.credential_store.load(connection.credential_reference)
+
+    def _existing_connection_for_account(self, creator_id: str, instagram_user_id: str | None, *, provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN) -> InstagramConnection | None:
+        if not instagram_user_id:
+            return None
+        for connection in self.repository.list_connections(creator_id):
+            if connection.provider == provider.value and connection.account_identifier == instagram_user_id:
+                return connection
+        return None
+
+    def _credential_reference_for(self, creator_id: str, instagram_user_id: str, *, provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN) -> str:
+        return build_instagram_credential_reference(creator_id=creator_id, instagram_user_id=instagram_user_id, provider=provider)
 
     def _load_connection_bundle(self, connection: InstagramConnection) -> InstagramCredentialBundle:
         bundle = self._credential_bundle(connection)
@@ -353,6 +373,8 @@ class InstagramIntegrationService:
         account_identifier: str | None = None,
         api_version: str | None = None,
     ) -> InstagramConnectionResult:
+        if self.settings.environment == "production" and self.oauth_broker is None:
+            raise InstagramAuthorizationError("El broker OAuth de Instagram es obligatorio en produccion.")
         self._ensure_read_only_scopes(scopes)
         auth_result = self.oauth_client.begin_authorization(client_id=client_id, scopes=scopes, redirect_uri=redirect_uri, state=state)
         if authorization_code is None:
@@ -374,7 +396,9 @@ class InstagramIntegrationService:
             raise InstagramAuthorizationError(f"Faltan scopes aprobados: {missing}")
         if provider == InstagramAuthProvider.INSTAGRAM_LOGIN and not token_result.instagram_user_id:
             raise InstagramAuthorizationError("No se pudo verificar el identificador de usuario de Instagram.")
-        credential_reference = uuid4().hex
+        resolved_account_identifier = account_identifier or token_result.instagram_user_id
+        existing_connection = self._existing_connection_for_account(creator_id, resolved_account_identifier, provider=provider)
+        credential_reference = existing_connection.credential_reference if existing_connection is not None else self._credential_reference_for(creator_id, resolved_account_identifier or uuid4().hex, provider=provider)
         self.credential_store.save(
             credential_reference,
             InstagramCredentialBundle(
@@ -395,11 +419,92 @@ class InstagramIntegrationService:
             api_version=api_version or DEFAULT_INSTAGRAM_API_VERSION.configured_version,
             access_level=InstagramAccessLevel.DEVELOPMENT_MODE if self.settings.environment != "production" else InstagramAccessLevel.STANDARD_ACCESS,
             app_access_status=InstagramAppAccessStatus.DEVELOPMENT_MODE if self.settings.environment != "production" else InstagramAppAccessStatus.STANDARD_ACCESS,
-            account_identifier=account_identifier or token_result.instagram_user_id,
+            account_identifier=resolved_account_identifier,
             authorization_url=auth_result.authorization_url,
         )
         verified = self.verify_connection(connection.connection.id)
         return replace(connection, connection=verified.connection, warnings=verified.warnings)
+
+    def start_oauth_transaction(
+        self,
+        *,
+        creator_id: str,
+        client_id: str,
+        scopes: tuple[str, ...] = READ_ONLY_SCOPES,
+        provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN,
+        transaction_proof: str | None = None,
+    ) -> InstagramOAuthBrokerStartResult:
+        if self.oauth_broker is None:
+            raise InstagramAuthorizationError("No hay broker OAuth de Instagram configurado.")
+        return self.oauth_broker.start_transaction(
+            creator_id=creator_id,
+            client_id=client_id,
+            scopes=scopes,
+            transaction_proof=transaction_proof,
+            provider=provider,
+        )
+
+    def poll_oauth_transaction(self, *, transaction_id: str, transaction_proof: str) -> InstagramOAuthBrokerStatusResult:
+        if self.oauth_broker is None:
+            raise InstagramAuthorizationError("No hay broker OAuth de Instagram configurado.")
+        return self.oauth_broker.poll_transaction(transaction_id=transaction_id, transaction_proof=transaction_proof)
+
+    def complete_oauth_transaction(
+        self,
+        *,
+        creator_id: str,
+        transaction_id: str,
+        transaction_proof: str,
+        provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN,
+        api_version: str | None = None,
+        account_identifier: str | None = None,
+    ) -> InstagramConnectionResult:
+        if self.oauth_broker is None:
+            raise InstagramAuthorizationError("No hay broker OAuth de Instagram configurado.")
+        redeem_result = self.oauth_broker.redeem_transaction(transaction_id=transaction_id, transaction_proof=transaction_proof)
+        if redeem_result.token_result is None:
+            raise InstagramAuthorizationError("No hay token recuperable para la transaccion de Instagram.")
+        token_result = redeem_result.token_result
+        if provider == InstagramAuthProvider.INSTAGRAM_LOGIN and not token_result.instagram_user_id:
+            raise InstagramAuthorizationError("No se pudo verificar el identificador de usuario de Instagram.")
+        resolved_account_identifier = account_identifier or token_result.instagram_user_id
+        if not resolved_account_identifier:
+            raise InstagramAuthorizationError("No se pudo resolver el identificador de cuenta de Instagram.")
+        existing_connection = self._existing_connection_for_account(creator_id, resolved_account_identifier, provider=provider)
+        credential_reference = existing_connection.credential_reference if existing_connection is not None else self._credential_reference_for(creator_id, resolved_account_identifier, provider=provider)
+        self.credential_store.save(
+            credential_reference,
+            InstagramCredentialBundle(
+                access_token=token_result.access_token,
+                refresh_token=token_result.refresh_token,
+                token_type=token_result.token_type,
+                expires_at=token_result.expires_at,
+                granted_scopes=token_result.granted_scopes,
+                instagram_user_id=token_result.instagram_user_id,
+                provider=provider.value,
+            ),
+        )
+        connection = self.repository.upsert_connection(
+            InstagramConnection(
+                id=existing_connection.id if existing_connection is not None else str(uuid4()),
+                creator_id=creator_id,
+                provider=provider.value,
+                account_identifier=resolved_account_identifier,
+                professional_account_type=None,
+                status=InstagramConnectionStatus.PENDING,
+                granted_scopes_json=_json_dumps(list(token_result.granted_scopes)),
+                credential_reference=credential_reference,
+                api_version=api_version or DEFAULT_INSTAGRAM_API_VERSION.configured_version,
+                access_level=InstagramAccessLevel.DEVELOPMENT_MODE if self.settings.environment != "production" else InstagramAccessLevel.STANDARD_ACCESS,
+                app_access_status=InstagramAppAccessStatus.DEVELOPMENT_MODE if self.settings.environment != "production" else InstagramAppAccessStatus.STANDARD_ACCESS,
+                connected_at=_now(),
+                last_verified_at=None,
+                disconnected_at=None,
+                created_at=existing_connection.created_at if existing_connection is not None else _now(),
+                updated_at=_now(),
+            )
+        )
+        return InstagramConnectionResult(connection=connection, authorization_url=None, warnings=("authorized_pending_profile",))
 
     def verify_connection(self, connection_id: str) -> InstagramConnectionResult:
         connection = self.repository.get_connection(connection_id)
@@ -978,6 +1083,7 @@ def build_instagram_integration_service(
     analytics_repository: SQLiteAnalyticsRepository | None = None,
     creative_packaging_repository: SQLiteCreativePackagingRepository | None = None,
     oauth_client: InstagramAuthProviderClient | None = None,
+    oauth_broker: InstagramOAuthBrokerClient | None = None,
     credential_store: InstagramCredentialStore | None = None,
     api_client: InstagramApiClient | None = None,
     rate_limit_tracker: InstagramRateLimitTracker | None = None,
@@ -991,6 +1097,7 @@ def build_instagram_integration_service(
         analytics_repository=analytics_repository,
         creative_packaging_repository=creative_packaging_repository,
         oauth_client=oauth_client,
+        oauth_broker=oauth_broker,
         credential_store=credential_store,
         api_client=api_client,
         rate_limit_tracker=rate_limit_tracker,

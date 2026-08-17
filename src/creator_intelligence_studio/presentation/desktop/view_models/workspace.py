@@ -136,6 +136,8 @@ from creator_intelligence_studio.application.services.video_pipeline_service imp
     VideoWorkflowStepResult,
 )
 from creator_intelligence_studio.domain.creators.entities import CreatorStatus
+from creator_intelligence_studio.domain.instagram_integration.connection_types import InstagramAuthProvider
+from creator_intelligence_studio.domain.instagram_integration.value_objects import READ_ONLY_SCOPES
 from creator_intelligence_studio.domain.acoustic_analysis.entities import AcousticAnalysis, AcousticEvent, AcousticTimelineWindow
 from creator_intelligence_studio.domain.multimodal_analysis.entities import MultimodalAnalysis, MultimodalMomentCandidate, MultimodalTimelineWindow
 from creator_intelligence_studio.domain.visual_analysis.entities import VisualAnalysis, VisualEvent, VisualScene, VisualTimelineWindow
@@ -3752,6 +3754,34 @@ class WorkspaceViewModel:
         if self.instagram_service is None:
             return None
         return self.instagram_service.revoke_connection(connection_id)
+
+    def start_instagram_oauth_transaction(self, *, creator_id: str, client_id: str, scopes: tuple[str, ...] | None = None, transaction_proof: str | None = None, provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.start_oauth_transaction(
+            creator_id=creator_id,
+            client_id=client_id,
+            scopes=scopes or READ_ONLY_SCOPES,
+            transaction_proof=transaction_proof,
+            provider=provider,
+        )
+
+    def poll_instagram_oauth_transaction(self, *, transaction_id: str, transaction_proof: str):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.poll_oauth_transaction(transaction_id=transaction_id, transaction_proof=transaction_proof)
+
+    def complete_instagram_oauth_transaction(self, *, creator_id: str, transaction_id: str, transaction_proof: str, provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN, api_version: str | None = None, account_identifier: str | None = None):
+        if self.instagram_service is None:
+            return None
+        return self.instagram_service.complete_oauth_transaction(
+            creator_id=creator_id,
+            transaction_id=transaction_id,
+            transaction_proof=transaction_proof,
+            provider=provider,
+            api_version=api_version,
+            account_identifier=account_identifier,
+        )
 
     def list_instagram_accounts(self, creator_id: str):
         if self.instagram_service is None:

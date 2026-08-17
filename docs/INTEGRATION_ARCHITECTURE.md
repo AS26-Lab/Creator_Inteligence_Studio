@@ -76,6 +76,8 @@ Its OAuth application identity is resolved from the bundled application configur
 
 - use Instagram API with Instagram Login for the provider path;
 - keep the Meta App Secret server-side in the AS26 OAuth broker;
+- start authorization, callback completion, and one-time redemption are broker responsibilities, not desktop responsibilities;
+- the desktop only receives opaque transaction identifiers, safe status, and securely redeemed credential material;
 - return only opaque credential references and safe metadata to the desktop app;
 - keep raw access tokens and refresh tokens out of normal SQLite rows;
 - preserve the local-first product boundary while delegating only the confidential OAuth exchange step to AS26.

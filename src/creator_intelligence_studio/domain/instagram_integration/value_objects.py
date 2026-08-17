@@ -13,7 +13,6 @@ from .connection_types import InstagramAuthProvider
 READ_ONLY_SCOPES: tuple[str, ...] = (
     "instagram_business_basic",
     "instagram_business_manage_insights",
-    "pages_read_engagement",
 )
 
 FORBIDDEN_WRITE_SCOPES = {
@@ -32,6 +31,10 @@ FORBIDDEN_WRITE_SCOPES = {
 def build_instagram_fingerprint(payload: dict[str, object]) -> str:
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_instagram_credential_reference(*, creator_id: str, instagram_user_id: str, provider: InstagramAuthProvider = InstagramAuthProvider.INSTAGRAM_LOGIN) -> str:
+    return f"instagram:{provider.value}:{creator_id}:{instagram_user_id}"
 
 
 def is_write_scope(scope: str) -> bool:
@@ -65,4 +68,3 @@ class InstagramAuthProviderClient(Protocol):
     def refresh_token(self, *, client_id: str, client_secret: str | None, refresh_token: str) -> InstagramOAuthTokenResult: ...
     def revoke(self, token: str) -> bool: ...
     def verify_token(self, token: str, scopes: tuple[str, ...]) -> dict[str, object]: ...
-
