@@ -484,6 +484,12 @@ class SQLiteCreativePackagingRepository(CreativePackagingRepository):
         return [_row_to_title_version(row) for row in rows]
 
     def upsert_thumbnail_version(self, thumbnail: ThumbnailVersion) -> ThumbnailVersion:
+        existing = self._fetch_one(
+            "SELECT * FROM thumbnail_versions WHERE packaging_asset_id = ? AND file_fingerprint = ?",
+            (thumbnail.packaging_asset_id, thumbnail.file_fingerprint),
+        )
+        if existing is not None:
+            return _row_to_thumbnail_version(existing)
         with self._database.connect() as connection:
             connection.execute(
                 """
@@ -1052,4 +1058,3 @@ class SQLiteCreativePackagingRepository(CreativePackagingRepository):
     def list_experiment_links(self, packaging_asset_id: str) -> list[PackagingExperimentLink]:
         rows = self._fetch_all("SELECT * FROM packaging_experiment_links WHERE packaging_asset_id = ? ORDER BY created_at DESC", (packaging_asset_id,))
         return [_row_to_link(row) for row in rows]
-

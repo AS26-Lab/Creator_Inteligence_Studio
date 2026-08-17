@@ -104,6 +104,7 @@ def build_instagram_parser(subparsers: argparse._SubParsersAction[argparse.Argum
     sync_media = sub.add_parser("sync-media", help="Sincronizar medios")
     sync_media.add_argument("--account-id", required=True)
     sync_media.add_argument("--cursor")
+    sync_media.add_argument("--limit", type=int, default=25)
     sync_media.add_argument("--json", action="store_true")
 
     sync_insights = sub.add_parser("sync-insights", help="Sincronizar insights")
@@ -227,7 +228,7 @@ def handle_instagram(args: argparse.Namespace, *, service: InstagramIntegrationS
         print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
         return 0
     if args.action == "sync-media":
-        payload = service.sync_media(account_id=args.account_id, cursor=args.cursor)
+        payload = service.sync_media(account_id=args.account_id, cursor=args.cursor, limit=args.limit)
         print(json.dumps(payload.to_dict(), ensure_ascii=False, indent=2, default=_json_default), file=stdout)
         return 0
     if args.action == "sync-insights":

@@ -59,13 +59,14 @@ The integration imports only official read data that the API exposes for the con
 
 - basic account metadata;
 - own media catalog;
-- Reels, posts, carousels, Stories and Lives when the API exposes them;
 - captions and media metadata;
+- carousel children when the API exposes them;
 - media URLs and thumbnail or cover metadata only as references, not as downloaded assets;
-- official insights for account and media scopes;
 - pagination cursors and incremental sync state;
 - local snapshots and historical versions for captions and covers;
 - local links to publications, video assets and packaging assets.
+
+Official account and media insights are reserved for `v35-C4`; they are not part of the `v35-C3` media listing slice.
 
 Missing data stays missing. It is not converted to zero and is not inferred.
 
@@ -112,6 +113,7 @@ Missing data stays missing. It is not converted to zero and is not inferred.
 
 `v35-C1` is implemented as the broker-first OAuth transaction layer. It introduces the short-lived broker transaction, proof-bound redemption, and the single-use handoff that keeps the Meta App Secret server-side.
 `v35-C2` is implemented as the account/profile read slice on top of that secure credential boundary. It resolves the authenticated professional account profile, normalizes safe metadata, and keeps profile data out of Creator Corpus and Creator Voice.
+`v35-C3` is implemented as the owned-media read slice on top of the same canonical connection. It pages the authenticated professional account's own media, preserves captions and carousel children, keeps cursor pagination bounded, and does not invoke Insights or corpus ingestion.
 
 ## Roadmap
 

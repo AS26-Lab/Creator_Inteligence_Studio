@@ -19,6 +19,13 @@ def _safe_str(value: Any | None) -> str | None:
     return text or None
 
 
+def _preserve_text(value: Any | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
 def _safe_int(value: Any | None) -> int | None:
     if value is None or isinstance(value, bool):
         return None
@@ -90,7 +97,7 @@ def map_remote_media_payload(
         media_type=media_type,
         media_product_type=media_product_type,
         content_type=content_type,
-        caption=_safe_str(payload.get("caption")),
+        caption=_preserve_text(payload.get("caption")),
         permalink=_safe_str(payload.get("permalink")),
         media_url=_safe_str(payload.get("media_url")),
         thumbnail_url=_safe_str(payload.get("thumbnail_url")),
@@ -163,4 +170,3 @@ def map_cover_version(
         observed_at=now,
         created_at=now,
     )
-

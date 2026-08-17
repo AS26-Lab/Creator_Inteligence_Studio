@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records what is actually implemented in the repository through the current v35-C2 slice. It is not a wish list.
+This document records what is actually implemented in the repository through the current v35-C3 slice. It is not a wish list.
 
 ## Cut-Off State
 
@@ -21,6 +21,7 @@ This document records what is actually implemented in the repository through the
 - The Google OAuth consent screen for the bundled YouTube client is currently `External` + `Testing`, so refresh tokens issued for YouTube scopes may expire according to Google policy after a short testing window. That behavior is external to CIS and must not be interpreted as a product regression by itself.
 - v35-C1 Instagram OAuth Broker Foundation is now implemented as a broker-first transaction layer with short-lived transaction state, proof-bound redemption, and single-use result handoff. The desktop no longer needs to embed the Meta App Secret for the approved Instagram OAuth path, and raw Instagram tokens remain out of normal SQLite state.
 - v35-C2 Instagram Account/Profile Read is now implemented on top of the broker-issued credential reference. The desktop can resolve the authenticated professional account profile, persist safe profile metadata, preserve creator isolation, and keep Instagram profile metadata out of Creator Corpus and Creator Voice.
+- v35-C3 Instagram Owned Media Listing + Metadata is now implemented on top of the canonical Instagram connection. The desktop can page owned media through cursor-based reads, normalize captions and media metadata, persist carousel children, keep repeated syncs idempotent, and preserve the provider media boundary without pulling Insights into the media-read path.
 
 ## What Is Implemented
 

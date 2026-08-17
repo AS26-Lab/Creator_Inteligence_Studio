@@ -215,6 +215,16 @@ def _analytics_platform_for_content_type(content_type: InstagramContentType) -> 
     }[content_type]
 
 
+def _bounded_media_limit(limit: int | None) -> int:
+    if limit is None:
+        return DEFAULT_MEDIA_PAGE_LIMIT
+    try:
+        numeric = int(limit)
+    except (TypeError, ValueError):
+        return DEFAULT_MEDIA_PAGE_LIMIT
+    return max(1, min(numeric, MAX_MEDIA_PAGE_LIMIT))
+
+
 PROFILE_READ_FIELDS: tuple[str, ...] = (
     "id",
     "username",
@@ -227,6 +237,23 @@ PROFILE_READ_FIELDS: tuple[str, ...] = (
     "media_count",
     "account_type",
 )
+
+MEDIA_READ_FIELDS: tuple[str, ...] = (
+    "id",
+    "caption",
+    "media_type",
+    "media_product_type",
+    "media_url",
+    "thumbnail_url",
+    "permalink",
+    "timestamp",
+    "shortcode",
+    "children_count",
+    "children{id,media_type,media_url,thumbnail_url}",
+)
+
+DEFAULT_MEDIA_PAGE_LIMIT = 25
+MAX_MEDIA_PAGE_LIMIT = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -867,6 +894,83 @@ class InstagramIntegrationService:
         )
         return self.repository.upsert_rate_limit_usage(usage)
 
+    def _resolve_media_cursor(self, *, account: InstagramAccount, connection: InstagramConnection, cursor: str | None) -> str | None:
+        if cursor is not None:
+            return cursor
+        for run in self.repository.list_sync_runs(account.creator_id):
+            if run.connection_id != connection.id or run.account_id != account.id or not run.cursor_json:
+                continue
+            payload = _json_loads(run.cursor_json, {})
+            if isinstance(payload, dict):
+                next_cursor = payload.get("cursor")
+                if isinstance(next_cursor, str) and next_cursor:
+                    return next_cursor
+        return None
+
+    def _failed_media_sync_result(
+        self,
+        *,
+        connection: InstagramConnection,
+        account: InstagramAccount,
+        run: InstagramSyncRun,
+        error_message: str,
+        error_code: str | None = None,
+        warnings: list[str] | None = None,
+        sync_type: InstagramSyncType = InstagramSyncType.MEDIA_CATALOG,
+    ) -> InstagramSyncResult:
+        errors = [error_message]
+        finalized = self._finalize_sync_run(
+            run,
+            discovered=0,
+            imported=0,
+            updated=0,
+            unchanged=0,
+            skipped=0,
+            warnings=warnings or [],
+            errors=errors,
+            status=InstagramSyncStatus.FAILED,
+        )
+        report = InstagramSyncReport(
+            connection_id=connection.id,
+            account_id=account.id,
+            provider=connection.provider,
+            professional_account_type=account.account_type.value,
+            api_version=connection.api_version,
+            granted_scopes=tuple(json.loads(connection.granted_scopes_json)),
+            access_level=None if connection.access_level is None else connection.access_level.value,
+            sync_type=sync_type.value,
+            period=None,
+            discovered_count=0,
+            imported_count=0,
+            updated_count=0,
+            unchanged_count=0,
+            skipped_count=0,
+            linked_count=0,
+            unlinked_count=0,
+            insights_imported_count=0,
+            unavailable_metrics=tuple(),
+            partial_periods=tuple(),
+            warnings=tuple(sorted(set(warnings or []))),
+            errors=tuple(errors),
+            estimated_usage=None,
+            duration_seconds=None,
+            next_recommended_action="review",
+        )
+        return InstagramSyncResult(
+            run=replace(finalized, error_code=error_code or error_message, error_message=error_message),
+            report=report,
+            accounts=(account,),
+            media=tuple(),
+            captions=tuple(),
+            covers=tuple(),
+            children=tuple(),
+            insight_imports=tuple(),
+            insight_values=tuple(),
+            links=tuple(),
+            sync_items=tuple(),
+            warnings=tuple(sorted(set(warnings or []))),
+        )
+
     def _create_publication_if_needed(self, *, creator_id: str, account_id: str, media: InstagramRemoteMedia) -> AnalyticsPublication | None:
         if self.analytics_repository is None:
             return None
@@ -1012,7 +1116,7 @@ class InstagramIntegrationService:
         account = map_account_payload(account_payload, creator_id=creator_id, connection_id=connection.id, instagram_user_id=_safe_str(account_payload.get("id")), api_version=self.api_client.api_version)
         return self.repository.upsert_account(account)
 
-    def _sync_media_items(self, *, creator_id: str, connection: InstagramConnection, account: InstagramAccount, media_items: tuple[dict[str, object], ...], sync_run: InstagramSyncRun, include_children: bool = True) -> tuple[list[InstagramRemoteMedia], list[InstagramCaptionVersion], list[InstagramCoverVersion], list[InstagramCarouselChild], list[InstagramSyncItem], list[str], list[str]]:
+    def _sync_media_items(self, *, creator_id: str, connection: InstagramConnection, account: InstagramAccount, media_items: tuple[dict[str, object], ...], sync_run: InstagramSyncRun, include_children: bool = True, capture_analytics: bool = False, credential_bundle: InstagramCredentialBundle | None = None) -> tuple[list[InstagramRemoteMedia], list[InstagramCaptionVersion], list[InstagramCoverVersion], list[InstagramCarouselChild], list[InstagramSyncItem], list[str], list[str]]:
         remote_media: list[InstagramRemoteMedia] = []
         captions: list[InstagramCaptionVersion] = []
         covers: list[InstagramCoverVersion] = []
@@ -1020,13 +1124,15 @@ class InstagramIntegrationService:
         items: list[InstagramSyncItem] = []
         warnings: list[str] = []
         errors: list[str] = []
-        analytics_import = self._ensure_analytics_import(
-            creator_id=creator_id,
-            channel_id=account.id,
-            platform="instagram",
-            source_filename=f"instagram:{sync_run.id}",
-            sync_run=sync_run,
-        )
+        analytics_import = None
+        if capture_analytics and self.analytics_repository is not None:
+            analytics_import = self._ensure_analytics_import(
+                creator_id=creator_id,
+                channel_id=account.id,
+                platform="instagram",
+                source_filename=f"instagram:{sync_run.id}",
+                sync_run=sync_run,
+            )
         for payload in media_items:
             discovered_media = map_remote_media_payload(payload, creator_id=creator_id, account_id=account.id)
             existing = self.repository.get_remote_media_by_instagram_id(creator_id, discovered_media.instagram_media_id)
@@ -1046,11 +1152,23 @@ class InstagramIntegrationService:
                     iterable = tuple(item for item in child_items if isinstance(item, dict))
                 else:
                     iterable = tuple()
+                if not iterable and payload.get("id") and credential_bundle is not None:
+                    try:
+                        child_response = self.api_client.fetch_children(
+                            token=credential_bundle.access_token or "",
+                            media_id=discovered_media.instagram_media_id,
+                            fields=("id", "media_type", "media_url", "thumbnail_url", "timestamp"),
+                        )
+                        child_page = _page_items(child_response)
+                        if child_page:
+                            iterable = child_page
+                    except InstagramApiError as exc:
+                        errors.append(exc.details.message)
                 for idx, child_payload in enumerate(iterable, start=1):
                     child = map_carousel_child_payload(child_payload, remote_media_id=remote_media[-1].id, child_order=idx)
                     children.append(self.repository.upsert_carousel_child(child))
                     items.append(self.repository.upsert_sync_item(InstagramSyncItem(id=str(uuid4()), sync_run_id=sync_run.id, remote_type="carousel_child", remote_id=child.instagram_child_id, local_type="instagram_carousel_child", local_id=child.id, action="upsert", status="completed", warnings_json="[]", error_code=None, error_message=None, created_at=_now())))
-            if self.analytics_repository is not None:
+            if capture_analytics and self.analytics_repository is not None:
                 publication = self._create_publication_if_needed(creator_id=creator_id, account_id=account.id, media=remote_media[-1])
                 if publication is not None:
                     metrics = {
@@ -1116,11 +1234,11 @@ class InstagramIntegrationService:
                 completed_at=_now(),
                 error_code=errors[0] if errors else None,
                 error_message=errors[0] if errors else None,
-                cursor_json=_json_dumps({"cursor": cursor}) if cursor else run.cursor_json,
+                cursor_json=_json_dumps({"cursor": cursor}) if cursor is not None else None,
             )
         )
 
-    def sync_account(self, *, account_id: str, cursor: str | None = None, full_resync: bool = False) -> InstagramSyncResult:
+    def sync_account(self, *, account_id: str, cursor: str | None = None, full_resync: bool = False, limit: int = DEFAULT_MEDIA_PAGE_LIMIT) -> InstagramSyncResult:
         account = self.repository.get_account(account_id)
         if account is None:
             raise InstagramConnectionError("La cuenta no existe.")
@@ -1131,7 +1249,9 @@ class InstagramIntegrationService:
         if connection.status in {InstagramConnectionStatus.DISCONNECTED, InstagramConnectionStatus.REVOKED}:
             raise InstagramAuthorizationError("La conexion no esta activa.")
         bundle = self._load_connection_bundle(connection)
-        run = self._prepare_sync_run(creator_id=account.creator_id, connection=connection, account_id=account.id, sync_type=InstagramSyncType.ACCOUNT_METADATA, configuration={"full_resync": full_resync}, cursor=cursor)
+        bounded_limit = _bounded_media_limit(limit)
+        resolved_cursor = self._resolve_media_cursor(account=account, connection=connection, cursor=cursor)
+        run = self._prepare_sync_run(creator_id=account.creator_id, connection=connection, account_id=account.id, sync_type=InstagramSyncType.ACCOUNT_METADATA, configuration={"full_resync": full_resync, "limit": bounded_limit, "cursor": resolved_cursor}, cursor=resolved_cursor)
         warnings: list[str] = []
         errors: list[str] = []
         account_response = self.api_client.fetch_account(token=bundle.access_token or "", instagram_user_id=account.instagram_user_id, fields=("id", "username", "name", "biography", "website", "profile_picture_url", "followers_count", "follows_count", "media_count", "account_type"))
@@ -1147,10 +1267,10 @@ class InstagramIntegrationService:
             raise InstagramAccountValidationError("professional_account_required")
         updated_account = self.repository.upsert_account(mapped_account)
         self._record_rate_limit(connection.id, "account_metadata", account_response)
-        media_response = self.api_client.fetch_media(token=bundle.access_token or "", instagram_user_id=account.instagram_user_id, fields=("id", "caption", "media_type", "media_product_type", "media_url", "thumbnail_url", "permalink", "timestamp", "shortcode", "children_count"))
+        media_response = self.api_client.fetch_media(token=bundle.access_token or "", instagram_user_id=account.instagram_user_id, fields=MEDIA_READ_FIELDS, after=resolved_cursor, limit=bounded_limit)
         media_items = _page_items(media_response)
         cursor_value = _page_cursor(media_response)
-        remote_media, captions, covers, children, sync_items, media_warnings, media_errors = self._sync_media_items(creator_id=account.creator_id, connection=connection, account=updated_account, media_items=media_items, sync_run=run, include_children=True)
+        remote_media, captions, covers, children, sync_items, media_warnings, media_errors = self._sync_media_items(creator_id=account.creator_id, connection=connection, account=updated_account, media_items=media_items, sync_run=run, include_children=True, credential_bundle=bundle)
         warnings.extend(media_warnings)
         errors.extend(media_errors)
         self._record_rate_limit(connection.id, "media_catalog", media_response)
@@ -1158,8 +1278,110 @@ class InstagramIntegrationService:
         report = InstagramSyncReport(connection_id=connection.id, account_id=updated_account.id, provider=connection.provider, professional_account_type=None if updated_account.account_type is None else updated_account.account_type.value, api_version=connection.api_version, granted_scopes=tuple(json.loads(connection.granted_scopes_json)), access_level=None if connection.access_level is None else connection.access_level.value, sync_type=run.sync_type.value, period=None, discovered_count=len(media_items), imported_count=len(remote_media), updated_count=0, unchanged_count=0, skipped_count=0, linked_count=0, unlinked_count=0, insights_imported_count=0, unavailable_metrics=tuple(), partial_periods=tuple(), warnings=tuple(sorted(set(warnings))), errors=tuple(sorted(set(errors))), estimated_usage=None, duration_seconds=None, next_recommended_action="review" if warnings or errors else "incremental_sync")
         return InstagramSyncResult(run=run, report=report, accounts=(updated_account,), media=tuple(remote_media), captions=tuple(captions), covers=tuple(covers), children=tuple(children), insight_imports=tuple(), insight_values=tuple(), links=tuple(), sync_items=tuple(sync_items), warnings=tuple(sorted(set(warnings))))
 
-    def sync_media(self, *, account_id: str, cursor: str | None = None) -> InstagramSyncResult:
-        return self.sync_account(account_id=account_id, cursor=cursor, full_resync=False)
+    def sync_media(self, *, account_id: str, cursor: str | None = None, limit: int = DEFAULT_MEDIA_PAGE_LIMIT) -> InstagramSyncResult:
+        account = self.repository.get_account(account_id)
+        if account is None:
+            raise InstagramConnectionError("La cuenta no existe.")
+        connection = self.repository.get_connection(account.connection_id)
+        if connection is None:
+            raise InstagramConnectionError("La conexion no existe.")
+        self._assert_creator_isolation(connection, account.creator_id)
+        if connection.status in {InstagramConnectionStatus.DISCONNECTED, InstagramConnectionStatus.REVOKED}:
+            raise InstagramAuthorizationError("La conexion no esta activa.")
+        bundle = self._load_connection_bundle(connection)
+        bounded_limit = _bounded_media_limit(limit)
+        resolved_cursor = self._resolve_media_cursor(account=account, connection=connection, cursor=cursor)
+        run = self._prepare_sync_run(
+            creator_id=account.creator_id,
+            connection=connection,
+            account_id=account.id,
+            sync_type=InstagramSyncType.MEDIA_CATALOG,
+            configuration={"limit": bounded_limit, "cursor": resolved_cursor},
+            cursor=resolved_cursor,
+        )
+        try:
+            media_response = self.api_client.fetch_media(
+                token=bundle.access_token or "",
+                instagram_user_id=account.instagram_user_id,
+                fields=MEDIA_READ_FIELDS,
+                after=resolved_cursor,
+                limit=bounded_limit,
+            )
+        except InstagramApiError as exc:
+            self._record_rate_limit(connection.id, "media_catalog", exc)
+            return self._failed_media_sync_result(
+                connection=connection,
+                account=account,
+                run=run,
+                error_message=exc.details.message,
+                error_code=exc.details.code or exc.details.reason,
+                sync_type=InstagramSyncType.MEDIA_CATALOG,
+            )
+        media_items = _page_items(media_response)
+        next_cursor = _page_cursor(media_response)
+        remote_media, captions, covers, children, sync_items, media_warnings, media_errors = self._sync_media_items(
+            creator_id=account.creator_id,
+            connection=connection,
+            account=account,
+            media_items=media_items,
+            sync_run=run,
+            include_children=True,
+            capture_analytics=False,
+            credential_bundle=bundle,
+        )
+        self._record_rate_limit(connection.id, "media_catalog", media_response)
+        run = self._finalize_sync_run(
+            run,
+            discovered=len(media_items),
+            imported=len(remote_media),
+            updated=0,
+            unchanged=0,
+            skipped=0,
+            warnings=media_warnings,
+            errors=media_errors,
+            cursor=next_cursor,
+            status=InstagramSyncStatus.COMPLETED_WITH_WARNINGS if media_warnings or media_errors else InstagramSyncStatus.COMPLETED,
+        )
+        report = InstagramSyncReport(
+            connection_id=connection.id,
+            account_id=account.id,
+            provider=connection.provider,
+            professional_account_type=account.account_type.value,
+            api_version=connection.api_version,
+            granted_scopes=tuple(json.loads(connection.granted_scopes_json)),
+            access_level=None if connection.access_level is None else connection.access_level.value,
+            sync_type=InstagramSyncType.MEDIA_CATALOG.value,
+            period=None,
+            discovered_count=len(media_items),
+            imported_count=len(remote_media),
+            updated_count=0,
+            unchanged_count=0,
+            skipped_count=0,
+            linked_count=0,
+            unlinked_count=0,
+            insights_imported_count=0,
+            unavailable_metrics=tuple(),
+            partial_periods=tuple(),
+            warnings=tuple(sorted(set(media_warnings))),
+            errors=tuple(sorted(set(media_errors))),
+            estimated_usage=None,
+            duration_seconds=None,
+            next_recommended_action="review" if media_warnings or media_errors else "incremental_sync",
+        )
+        return InstagramSyncResult(
+            run=run,
+            report=report,
+            accounts=(account,),
+            media=tuple(remote_media),
+            captions=tuple(captions),
+            covers=tuple(covers),
+            children=tuple(children),
+            insight_imports=tuple(),
+            insight_values=tuple(),
+            links=tuple(),
+            sync_items=tuple(sync_items),
+            warnings=tuple(sorted(set(media_warnings))),
+        )
 
     def sync_incremental(self, *, account_id: str, cursor: str | None = None) -> InstagramSyncResult:
         return self.sync_account(account_id=account_id, cursor=cursor, full_resync=False)

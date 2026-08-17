@@ -3818,10 +3818,10 @@ class WorkspaceViewModel:
             return None
         return self.instagram_service.sync_account(account_id=account_id, cursor=cursor, full_resync=full_resync)
 
-    def sync_instagram_media(self, account_id: str, *, cursor: str | None = None):
+    def sync_instagram_media(self, account_id: str, *, cursor: str | None = None, limit: int = 25):
         if self.instagram_service is None:
             return None
-        return self.instagram_service.sync_media(account_id=account_id, cursor=cursor)
+        return self.instagram_service.sync_media(account_id=account_id, cursor=cursor, limit=limit)
 
     def sync_instagram_insights(self, account_id: str, *, remote_media_id: str | None = None, period=None):
         if self.instagram_service is None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import io
 import json
 import logging
@@ -21,11 +22,14 @@ from creator_intelligence_studio.application.services.instagram_integration_serv
 from creator_intelligence_studio.domain.instagram_integration.connection_types import (
     InstagramAuthProvider,
     InstagramConnectionStatus,
+    InstagramContentType,
+    InstagramMediaType,
     InstagramProfessionalAccountType,
 )
 from creator_intelligence_studio.domain.integrations.contracts import IntegrationErrorCategory
 from creator_intelligence_studio.domain.instagram_integration.errors import InstagramAccountValidationError
 from creator_intelligence_studio.domain.instagram_integration.oauth_broker import generate_transaction_proof
+from creator_intelligence_studio.domain.instagram_integration.sync_types import InstagramSyncStatus
 from creator_intelligence_studio.infrastructure.instagram.api_client import InstagramApiError, InstagramApiErrorDetails
 from creator_intelligence_studio.infrastructure.instagram.oauth_broker import InMemoryInstagramOAuthBrokerStore, InstagramOAuthBrokerService
 from creator_intelligence_studio.domain.instagram_integration.value_objects import (
@@ -35,9 +39,9 @@ from creator_intelligence_studio.domain.instagram_integration.value_objects impo
     build_instagram_credential_reference,
     is_write_scope,
 )
-from creator_intelligence_studio.domain.analytics.entities import AnalyticsChannel, AnalyticsPlatform
+from creator_intelligence_studio.domain.analytics.entities import AnalyticsChannel, AnalyticsPlatform, AnalyticsPublication
 from creator_intelligence_studio.domain.analytics.entities import AnalyticsMetricDefinition
-from creator_intelligence_studio.domain.analytics.value_objects import AnalyticsAggregationType, AnalyticsMetricCategory, AnalyticsPlatformStatus, AnalyticsValueType
+from creator_intelligence_studio.domain.analytics.value_objects import AnalyticsAggregationType, AnalyticsContentType, AnalyticsMetricCategory, AnalyticsPlatformStatus, AnalyticsSourceType, AnalyticsValueType
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.instagram.api_version import DEFAULT_INSTAGRAM_API_VERSION
 from creator_intelligence_studio.infrastructure.persistence.database import build_database
@@ -338,6 +342,7 @@ class FakeInstagramApiClient:
         self.media_insight_calls: list[tuple[str, str, tuple[str, ...], str]] = []
         self._media_call_count: dict[str, int] = {}
         self.profile_errors: dict[str, InstagramApiErrorDetails] = {}
+        self.media_errors: dict[str, InstagramApiErrorDetails] = {}
 
     def fetch_account(self, *, token: str, instagram_user_id: str, fields: tuple[str, ...]):
         if instagram_user_id in self.profile_errors:
@@ -346,11 +351,16 @@ class FakeInstagramApiClient:
         return FakeInstagramResponse(self.account_payloads[instagram_user_id], headers={"x-app-usage": "{\"call_count\":1}"})
 
     def fetch_media(self, *, token: str, instagram_user_id: str, fields: tuple[str, ...], after: str | None = None, before: str | None = None, limit: int = 25):
+        if instagram_user_id in self.media_errors:
+            raise InstagramApiError(self.media_errors[instagram_user_id])
         self.media_calls.append((instagram_user_id, after, before, limit))
         count = self._media_call_count.get(instagram_user_id, 0)
         self._media_call_count[instagram_user_id] = count + 1
         sequence = self.media_sequences[instagram_user_id]
-        payload = sequence[min(count, len(sequence) - 1)]
+        page_index = min(1 if after is not None else 0, len(sequence) - 1)
+        payload = copy.deepcopy(sequence[page_index])
+        if "data" in payload and isinstance(payload["data"], list):
+            payload["data"] = payload["data"][:limit]
         return FakeInstagramResponse(payload, headers={"x-app-usage": "{\"call_count\":2}"})
 
     def fetch_children(self, *, token: str, media_id: str, fields: tuple[str, ...]):
@@ -469,6 +479,26 @@ def _seed_instagram_metric_definitions(analytics_repository: SQLiteAnalyticsRepo
         )
 
 
+def _connect_instagram_account(
+    service,
+    catalog,
+    creator_display_name: str,
+    *,
+    broker: InstagramOAuthBrokerService,
+    client_id: str = "client-id",
+    code: str = "code-a",
+) -> tuple[object, object, object]:
+    creator = catalog.create_creator(display_name=creator_display_name)
+    proof = generate_transaction_proof()
+    start = service.start_oauth_transaction(creator_id=creator.id, client_id=client_id, transaction_proof=proof)
+    broker.handle_callback(state=start.state, code=code)
+    pending = service.complete_oauth_transaction(creator_id=creator.id, transaction_id=start.transaction_id, transaction_proof=proof)
+    profile = service.read_account_profile(pending.connection.id)
+    if profile.account is None:
+        raise AssertionError("Instagram profile was not created during setup.")
+    return creator, pending.connection, profile.account
+
+
 class InstagramIntegrationTests(unittest.TestCase):
     def test_migration_v23_schema_and_idempotence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -553,9 +583,31 @@ class InstagramIntegrationTests(unittest.TestCase):
             self.assertEqual(instagram_repository.list_remote_media(creator_a.id)[0].creator_id, creator_a.id)
             self.assertEqual(instagram_repository.list_remote_media(creator_b.id)[0].creator_id, creator_b.id)
 
-            self.assertGreaterEqual(len(analytics_repository.list_publications(creator_a.id)), 2)
-            self.assertEqual({publication.creator_id for publication in analytics_repository.list_publications(creator_a.id)}, {creator_a.id})
-            self.assertEqual({publication.creator_id for publication in analytics_repository.list_publications(creator_b.id)}, {creator_b.id})
+            self.assertEqual(len(analytics_repository.list_publications(creator_a.id)), 0)
+            self.assertEqual(len(analytics_repository.list_publications(creator_b.id)), 0)
+            publication = analytics_repository.upsert_publication(
+                AnalyticsPublication(
+                    id=f"publication-{creator_a.id}",
+                    creator_id=creator_a.id,
+                    channel_id=account_a.id,
+                    video_asset_id=None,
+                    external_publication_id="shared-media",
+                    platform="instagram_reel",
+                    content_type=AnalyticsContentType.REEL,
+                    title="Shared media",
+                    description="Shared media",
+                    published_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+                    duration_seconds=None,
+                    url="https://instagram.com/p/shared-media",
+                    thumbnail_path=None,
+                    status="observed",
+                    source_type=AnalyticsSourceType.MANUAL,
+                    source_fingerprint="publication-shared-media",
+                    dedupe_key="publication-shared-media",
+                    created_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                    updated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                )
+            )
 
             account_insights_a = service.sync_insights(account_id=account_a.id)
             media_insights_a = service.sync_insights(account_id=account_a.id, remote_media_id="shared-media")
@@ -578,7 +630,7 @@ class InstagramIntegrationTests(unittest.TestCase):
             self.assertEqual(len(service.list_cover_versions(remote_media.id)), 2)
             self.assertEqual(result_a_2.report.next_recommended_action, "incremental_sync")
 
-            link = service.link_content(remote_media_id=remote_media.id, publication_id=analytics_repository.list_publications(creator_a.id)[0].id, confidence_level="high", status="linked")
+            link = service.link_content(remote_media_id=remote_media.id, publication_id=publication.id, confidence_level="high", status="linked")
             self.assertEqual(link.creator_id, creator_a.id)
             self.assertEqual(len(service.list_content_links(creator_b.id)), 0)
 
@@ -780,6 +832,182 @@ class InstagramIntegrationTests(unittest.TestCase):
                     self.assertEqual(len(oauth_client.exchange_calls), before_exchange_calls)
                     self.assertEqual(len(oauth_client.verify_calls), before_verify_calls)
                     api_client.profile_errors.pop("ig-a", None)
+
+    def test_media_sync_is_bounded_paginates_and_updates_canonically(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, instagram_repository, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator_a, connection_a, account_a = _connect_instagram_account(service, catalog, "Creator A", broker=broker, client_id="client-id", code="code-a")
+            creator_b, connection_b, account_b = _connect_instagram_account(service, catalog, "Creator B", broker=broker, client_id="client-id", code="code-b")
+
+            before_begin_calls = len(oauth_client.begin_calls)
+            before_exchange_calls = len(oauth_client.exchange_calls)
+            before_verify_calls = len(oauth_client.verify_calls)
+            before_publications = len(analytics_repository.list_publications(creator_a.id))
+
+            page_one = service.sync_media(account_id=account_a.id, limit=1)
+            self.assertEqual(api_client.media_calls[0], ("ig-a", None, None, 1))
+            self.assertEqual(page_one.report.sync_type, "media_catalog")
+            self.assertEqual(len(page_one.media), 1)
+            self.assertEqual(page_one.media[0].instagram_media_id, "shared-media")
+            self.assertEqual(page_one.media[0].caption, "Topic high reach low conversion")
+            self.assertEqual(json.loads(page_one.run.cursor_json or "{}").get("cursor"), "cursor-a-2")
+            self.assertEqual(len(oauth_client.begin_calls), before_begin_calls)
+            self.assertEqual(len(oauth_client.exchange_calls), before_exchange_calls)
+            self.assertEqual(len(oauth_client.verify_calls), before_verify_calls)
+            self.assertEqual(len(analytics_repository.list_publications(creator_a.id)), before_publications)
+            self.assertEqual(len(api_client.account_insight_calls), 0)
+            self.assertEqual(len(api_client.media_insight_calls), 0)
+
+            page_two = service.sync_media(account_id=account_a.id, limit=1)
+            self.assertEqual(api_client.media_calls[1], ("ig-a", "cursor-a-2", None, 1))
+            self.assertEqual(len(page_two.media), 1)
+            self.assertEqual(page_two.media[0].caption, "Topic high reach low conversion updated")
+            self.assertEqual(len(service.list_media(account_a.id)), 1)
+            self.assertEqual(service.list_media(account_a.id)[0].caption, "Topic high reach low conversion updated")
+            self.assertEqual(len(service.list_caption_versions(service.list_media(account_a.id)[0].id)), 2)
+
+            page_b = service.sync_media(account_id=account_b.id, limit=25)
+            self.assertEqual(page_b.media[0].creator_id, creator_b.id)
+            self.assertEqual(len(service.list_media(account_b.id)), 1)
+            self.assertEqual(len(instagram_repository.list_remote_media(creator_a.id)), 1)
+            self.assertEqual(len(instagram_repository.list_remote_media(creator_b.id)), 1)
+            self.assertEqual(page_b.media[0].media_type, InstagramMediaType.VIDEO)
+            self.assertEqual(page_b.media[0].media_product_type, "feed")
+            self.assertEqual(page_b.media[0].content_type, InstagramContentType.INSTAGRAM_VIDEO)
+
+    def test_media_sync_preserves_carousel_children_and_caption_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            api_client.media_sequences["ig-a"][0]["data"][1]["caption"] = "L1\nL2 ✨ #Etiqueta @mencion"
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, instagram_repository, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator, connection, account = _connect_instagram_account(service, catalog, "Creator A", broker=broker, client_id="client-id", code="code-a")
+
+            result = service.sync_media(account_id=account.id, limit=25)
+            self.assertEqual(api_client.media_calls[0], ("ig-a", None, None, 25))
+            self.assertEqual(len(result.media), 2)
+            shared = instagram_repository.get_remote_media_by_instagram_id(creator.id, "shared-media")
+            carousel = instagram_repository.get_remote_media_by_instagram_id(creator.id, "carousel-a")
+            self.assertIsNotNone(shared)
+            self.assertIsNotNone(carousel)
+            self.assertEqual(shared.media_type, InstagramMediaType.REELS)
+            self.assertEqual(shared.media_product_type, "reels")
+            self.assertEqual(shared.content_type, InstagramContentType.INSTAGRAM_REEL)
+            self.assertEqual(carousel.media_type, InstagramMediaType.CAROUSEL_ALBUM)
+            self.assertEqual(carousel.media_product_type, "feed")
+            self.assertEqual(carousel.content_type, InstagramContentType.INSTAGRAM_CAROUSEL)
+            self.assertEqual(carousel.caption, "L1\nL2 ✨ #Etiqueta @mencion")
+            children = instagram_repository.list_carousel_children(carousel.id)
+            self.assertEqual(len(children), 2)
+            self.assertEqual(children[0].instagram_child_id, "child-a-1")
+            self.assertEqual(children[0].media_type, InstagramMediaType.IMAGE)
+            self.assertEqual(children[1].instagram_child_id, "child-a-2")
+            self.assertEqual(children[1].media_type, InstagramMediaType.VIDEO)
+            self.assertEqual(len(analytics_repository.list_publications(creator.id)), 0)
+            self.assertEqual(len(api_client.account_insight_calls), 0)
+            self.assertEqual(len(api_client.media_insight_calls), 0)
+
+    def test_media_sync_normalizes_provider_failures_without_browser_or_oauth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            api_client = FakeInstagramApiClient()
+            oauth_client = FakeInstagramOAuthClient()
+            broker = _make_broker(oauth_client)
+            settings, paths, database, catalog, analytics_repository, _, instagram_repository, service = _make_bundle(root, api_client=api_client, oauth_client=oauth_client, oauth_broker=broker)
+            creator, connection, account = _connect_instagram_account(service, catalog, "Creator A", broker=broker, client_id="client-id", code="code-a")
+
+            scenarios = [
+                (
+                    "auth_expired",
+                    InstagramApiErrorDetails(
+                        http_status=401,
+                        code="190",
+                        reason="OAuthException",
+                        message="Error validating access token: Session expired.",
+                        request_path="ig-a/media",
+                        request_url="https://graph.instagram.com/v25.0/ig-a/media?fields=id",
+                        response_headers={"x-app-usage": "{\"call_count\":90}"},
+                    ),
+                    "190",
+                ),
+                (
+                    "permission_denied",
+                    InstagramApiErrorDetails(
+                        http_status=403,
+                        code="10",
+                        reason="insufficient_permissions",
+                        message="This request is not authorized.",
+                        request_path="ig-a/media",
+                        request_url="https://graph.instagram.com/v25.0/ig-a/media?fields=id",
+                        response_headers={},
+                    ),
+                    "10",
+                ),
+                (
+                    "rate_limited",
+                    InstagramApiErrorDetails(
+                        http_status=429,
+                        code="4",
+                        reason="rate limit",
+                        message="Too many calls.",
+                        request_path="ig-a/media",
+                        request_url="https://graph.instagram.com/v25.0/ig-a/media?fields=id",
+                        response_headers={"x-app-usage": "{\"call_count\":100}"},
+                    ),
+                    "4",
+                ),
+                (
+                    "provider_unavailable",
+                    InstagramApiErrorDetails(
+                        http_status=503,
+                        code="2",
+                        reason="ServiceUnavailable",
+                        message="Service temporarily unavailable.",
+                        request_path="ig-a/media",
+                        request_url="https://graph.instagram.com/v25.0/ig-a/media?fields=id",
+                        response_headers={},
+                    ),
+                    "2",
+                ),
+                (
+                    "malformed_response",
+                    InstagramApiErrorDetails(
+                        http_status=400,
+                        code=None,
+                        reason=None,
+                        message="Respuesta invalida del proveedor.",
+                        request_path="ig-a/media",
+                        request_url="https://graph.instagram.com/v25.0/ig-a/media?fields=id",
+                        response_headers={},
+                    ),
+                    "Respuesta invalida del proveedor.",
+                ),
+            ]
+            for label, error_details, expected_error_code in scenarios:
+                with self.subTest(label=label):
+                    api_client.media_errors["ig-a"] = error_details
+                    before_calls = len(api_client.media_calls)
+                    before_begin_calls = len(oauth_client.begin_calls)
+                    before_exchange_calls = len(oauth_client.exchange_calls)
+                    before_verify_calls = len(oauth_client.verify_calls)
+                    result = service.sync_media(account_id=account.id, limit=25)
+                    self.assertEqual(result.run.status, InstagramSyncStatus.FAILED)
+                    self.assertEqual(result.run.error_code, expected_error_code)
+                    self.assertEqual(result.run.error_message, error_details.message)
+                    self.assertFalse(result.media)
+                    self.assertIn(error_details.message, result.report.errors[0])
+                    self.assertEqual(len(api_client.media_calls), before_calls)
+                    self.assertEqual(len(oauth_client.begin_calls), before_begin_calls)
+                    self.assertEqual(len(oauth_client.exchange_calls), before_exchange_calls)
+                    self.assertEqual(len(oauth_client.verify_calls), before_verify_calls)
+                    self.assertEqual(len(analytics_repository.list_publications(creator.id)), 0)
+                    api_client.media_errors.pop("ig-a", None)
 
     def test_cli_dispatch_and_gui_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
