@@ -10,6 +10,10 @@ class YouTubeIntegrationError(RuntimeError):
 class YouTubeAuthorizationError(YouTubeIntegrationError):
     """Error durante OAuth o validacion de scopes."""
 
+    def __init__(self, message: str, *, diagnostics: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
 
 class YouTubeConnectionError(YouTubeIntegrationError):
     """Error al gestionar una conexion de YouTube."""
@@ -21,4 +25,3 @@ class YouTubeSyncError(YouTubeIntegrationError):
 
 class YouTubeQuotaError(YouTubeIntegrationError):
     """Error o limitacion de cuota estimada."""
-

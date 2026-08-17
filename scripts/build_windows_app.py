@@ -70,29 +70,37 @@ def _collect_output_paths(bundle_root: Path) -> tuple[str, ...]:
     return tuple(str(path) for path in paths)
 
 
-def _load_youtube_oauth_bootstrap(project_root: Path, *, developer_json_path: Path | None = None) -> tuple[str | None, bool, str | None]:
+def _load_youtube_oauth_bootstrap(
+    project_root: Path,
+    *,
+    developer_json_path: Path | None = None,
+) -> tuple[str | None, str | None, bool, str | None]:
     default_config_path = project_root / "config" / "default.json"
     configured_client_id: str | None = None
+    configured_client_secret: str | None = None
     try:
         payload = json.loads(default_config_path.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             configured_client_id = str(payload.get("youtube_oauth_client_id") or "").strip() or None
+            configured_client_secret = str(payload.get("youtube_oauth_client_secret") or "").strip() or None
     except Exception:
         configured_client_id = None
+        configured_client_secret = None
     if configured_client_id:
-        return configured_client_id, False, str(default_config_path)
+        return configured_client_id, configured_client_secret, False, str(default_config_path)
     if developer_json_path is None:
-        return None, False, None
+        return None, None, False, None
     bootstrap = load_google_desktop_client_bootstrap(developer_json_path)
-    return bootstrap.client_id, bootstrap.client_secret_present, bootstrap.source_path
+    return bootstrap.client_id, bootstrap.client_secret, bootstrap.client_secret_present, bootstrap.source_path
 
 
-def _write_bundle_default_config(bundle_root: Path, project_root: Path, youtube_client_id: str) -> Path:
+def _write_bundle_default_config(bundle_root: Path, project_root: Path, youtube_client_id: str, youtube_client_secret: str | None) -> Path:
     source_config_path = project_root / "config" / "default.json"
     payload = json.loads(source_config_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("config/default.json debe contener un objeto JSON.")
     payload["youtube_oauth_client_id"] = youtube_client_id
+    payload["youtube_oauth_client_secret"] = youtube_client_secret
     target_path = bundle_root / "config" / "default.json"
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -123,7 +131,7 @@ def build_windows_app(
     staging_root = (staging_root or (project_root / "dist")).resolve()
     bundle_root = staging_root / WINDOWS_APP_BUNDLE_NAME
     success = True
-    youtube_client_id, _client_secret_present, _oauth_source_path = _load_youtube_oauth_bootstrap(
+    youtube_client_id, youtube_client_secret, client_secret_present, _oauth_source_path = _load_youtube_oauth_bootstrap(
         project_root,
         developer_json_path=youtube_oauth_client_json,
     )
@@ -131,6 +139,11 @@ def build_windows_app(
         blockers.append(
             "No se pudo resolver la identidad OAuth de YouTube. "
             "El build distribuible requiere youtube_oauth_client_id o un bootstrap developer JSON."
+        )
+        success = False
+    if youtube_client_id is not None and not client_secret_present and youtube_client_secret is None:
+        blockers.append(
+            "No se pudo resolver el client_secret de YouTube para el build distribuible."
         )
         success = False
     packaging_tool, packaging_tool_version = _detect_pyinstaller()
@@ -203,7 +216,7 @@ def build_windows_app(
                 "docs/TRANSCRIPTION_RUNTIME_LICENSING.md",
             )
             if youtube_client_id is not None:
-                _write_bundle_default_config(bundle_root, project_root, youtube_client_id)
+                _write_bundle_default_config(bundle_root, project_root, youtube_client_id, youtube_client_secret)
             manifest_path = write_windows_runtime_manifest(bundle_root, manifest)
             if not manifest_path.exists():
                 blockers.append("El runtime manifest no quedo materializado en el bundle.")
@@ -217,7 +230,7 @@ def build_windows_app(
             blockers.append("El runtime manifest no quedo materializado en el bundle.")
             success = False
         if youtube_client_id is not None:
-            _write_bundle_default_config(bundle_root, project_root, youtube_client_id)
+            _write_bundle_default_config(bundle_root, project_root, youtube_client_id, youtube_client_secret)
         notes.append("Se omitio la ejecucion real del empaquetador.")
 
     return WindowsAppBuildReport(

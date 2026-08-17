@@ -236,6 +236,7 @@ class WindowsAppPackagingTests(unittest.TestCase):
                         "allow_cpu_basic_mode": True,
                         "external_ai_enabled": False,
                         "youtube_oauth_client_id": "client-app-test",
+                        "youtube_oauth_client_secret": "client-secret-test",
                     },
                     ensure_ascii=False,
                     indent=2,

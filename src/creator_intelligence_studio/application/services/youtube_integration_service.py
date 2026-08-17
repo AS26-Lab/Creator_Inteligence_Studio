@@ -91,7 +91,7 @@ from creator_intelligence_studio.infrastructure.youtube.credential_store import 
     CredentialBundle,
     CredentialStore,
     DevelopmentCredentialStore,
-    EncryptedLocalCredentialStore,
+    build_default_youtube_credential_store,
 )
 from creator_intelligence_studio.infrastructure.youtube.data_api_client import YouTubeDataApiClient
 from creator_intelligence_studio.infrastructure.youtube.metric_mapper import map_metric_values
@@ -100,6 +100,11 @@ from creator_intelligence_studio.infrastructure.youtube.oauth_client import (
     OAuthAuthorizationResult,
     OAuthTokenResult,
     YouTubeOAuthClient,
+)
+from creator_intelligence_studio.infrastructure.youtube.oauth_config import (
+    build_youtube_credential_reference,
+    resolve_youtube_oauth_client_id,
+    resolve_youtube_oauth_app_config,
 )
 from creator_intelligence_studio.infrastructure.youtube.quota_tracker import QuotaEstimate, QuotaTracker
 from creator_intelligence_studio.infrastructure.youtube.retry_policy import backoff_delay, is_retryable_status
@@ -222,7 +227,10 @@ class YouTubeIntegrationService:
         self._download_thumbnails_locally = False
 
     def _resolve_oauth_client_id(self, client_id: str | None = None, *, required: bool = False) -> str:
-        resolved = (client_id or getattr(self.settings, "youtube_oauth_client_id", None) or "").strip()
+        configured_client_id = client_id or getattr(self.settings, "youtube_oauth_client_id", None)
+        resolved = resolve_youtube_oauth_client_id(configured_client_id=configured_client_id)
+        if not resolved and getattr(self.paths, "project_root", None):
+            resolved, _ = resolve_youtube_oauth_app_config(self.paths.project_root / "config" / "default.json")
         if resolved:
             return resolved
         if required:
@@ -232,10 +240,46 @@ class YouTubeIntegrationService:
             )
         return ""
 
+    def _resolve_oauth_client_secret(self, client_secret: str | None = None) -> str | None:
+        configured_secret = client_secret or getattr(self.settings, "youtube_oauth_client_secret", None)
+        if configured_secret is not None:
+            resolved = configured_secret.strip()
+            if resolved:
+                return resolved
+        if getattr(self.paths, "project_root", None):
+            _, resolved_secret = resolve_youtube_oauth_app_config(self.paths.project_root / "config" / "default.json")
+            if resolved_secret:
+                return resolved_secret
+        return None
+
+    def _credential_reference_for(self, creator_id: str, google_account_identifier: str | None) -> str:
+        return build_youtube_credential_reference(creator_id=creator_id, google_account_identifier=google_account_identifier)
+
+    def _existing_connection_for_account(self, creator_id: str, google_account_identifier: str | None) -> YouTubeConnection | None:
+        normalized_identifier = (google_account_identifier or "").strip().casefold()
+        if not normalized_identifier:
+            return None
+        candidates = [
+            connection
+            for connection in self.list_connections(creator_id)
+            if (connection.google_account_identifier or "").strip().casefold() == normalized_identifier
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: (
+                item.status == YouTubeConnectionStatus.VERIFIED,
+                item.status == YouTubeConnectionStatus.CONNECTED,
+                item.last_verified_at or item.connected_at or item.updated_at,
+            ),
+            reverse=True,
+        )
+        return candidates[0]
+
     def _build_default_credential_store(self) -> CredentialStore:
         credential_root = self.paths.data_directory / "youtube" / "credentials"
         try:
-            return EncryptedLocalCredentialStore(credential_root)
+            return build_default_youtube_credential_store(credential_root, environment=self.settings.environment)
         except Exception as exc:
             if self.settings.environment in {"development", "test"}:
                 self.logger.warning("Cayendo a almacenamiento de desarrollo para credenciales de YouTube: %s", exc)
@@ -244,6 +288,34 @@ class YouTubeIntegrationService:
 
     def _credential_bundle(self, connection: YouTubeConnection) -> CredentialBundle | None:
         return self.credential_store.load(connection.credential_reference)
+
+    def _recoverable_connections(self, creator_id: str, *, google_account_identifier: str | None = None) -> tuple[YouTubeConnection, ...]:
+        requested_identifier = google_account_identifier.strip().casefold() if google_account_identifier else None
+        candidates: list[tuple[int, datetime, YouTubeConnection]] = []
+        for connection in self.list_connections(creator_id):
+            if connection.status in {YouTubeConnectionStatus.REVOKED, YouTubeConnectionStatus.DISCONNECTED}:
+                continue
+            bundle = self._credential_bundle(connection)
+            if bundle is None:
+                continue
+            if requested_identifier and bundle.google_account_identifier and bundle.google_account_identifier.strip().casefold() != requested_identifier:
+                continue
+            if requested_identifier and connection.google_account_identifier and connection.google_account_identifier.strip().casefold() != requested_identifier:
+                continue
+            status_priority = {
+                YouTubeConnectionStatus.VERIFIED: 4,
+                YouTubeConnectionStatus.CONNECTED: 3,
+                YouTubeConnectionStatus.PENDING: 2,
+                YouTubeConnectionStatus.ERROR: 1,
+            }.get(connection.status, 0)
+            freshness = connection.last_verified_at or connection.connected_at or connection.updated_at
+            candidates.append((status_priority, freshness, connection))
+        candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return tuple(item[2] for item in candidates)
+
+    def find_recoverable_connection(self, creator_id: str, *, google_account_identifier: str | None = None) -> YouTubeConnection | None:
+        recoverable = self._recoverable_connections(creator_id, google_account_identifier=google_account_identifier)
+        return recoverable[0] if recoverable else None
 
     def _assert_creator_isolation(self, connection: YouTubeConnection, creator_id: str) -> None:
         if connection.creator_id != creator_id:
@@ -283,24 +355,18 @@ class YouTubeIntegrationService:
         google_account_identifier: str | None = None,
         interactive: bool = False,
         open_browser: bool = True,
+        explicit_reconnect: bool = False,
     ) -> YouTubeConnectionResult:
         self._ensure_read_only_scopes(scopes)
         resolved_client_id = self._resolve_oauth_client_id(client_id, required=True)
-        connection = self.repository.upsert_connection(
-            YouTubeConnection(
-                id=str(uuid4()),
-                creator_id=creator_id,
+        if authorization_code is None and not explicit_reconnect:
+            recoverable_connection = self.find_recoverable_connection(
+                creator_id,
                 google_account_identifier=google_account_identifier,
-                status=YouTubeConnectionStatus.PENDING if authorization_code is None else YouTubeConnectionStatus.CONNECTED,
-                granted_scopes_json=_json_dumps(scopes),
-                credential_reference=f"youtube_{creator_id}_{uuid4().hex}",
-                connected_at=_now(),
-                last_verified_at=None,
-                disconnected_at=None,
-                created_at=_now(),
-                updated_at=_now(),
             )
-        )
+            if recoverable_connection is not None:
+                verified = self.verify_connection(recoverable_connection.id)
+                return YouTubeConnectionResult(connection=verified, authorization_url=None, warnings=("recovered_from_stored_credential",))
         if authorization_code is None:
             if interactive:
                 auth, authorization_code = self.oauth_client.authorize_interactively(
@@ -322,10 +388,27 @@ class YouTubeIntegrationService:
             code_verifier = None
         token = self.oauth_client.exchange_code(
             client_id=resolved_client_id,
-            client_secret=client_secret,
+            client_secret=self._resolve_oauth_client_secret(client_secret),
             code=authorization_code,
-            redirect_uri=redirect_uri or (auth.redirect_uri if auth is not None else "http://localhost/callback"),
+            redirect_uri=redirect_uri or (auth.redirect_uri if auth is not None else "http://127.0.0.1/callback"),
             code_verifier=code_verifier,
+        )
+        resolved_google_account_identifier = google_account_identifier or token.google_account_identifier
+        existing_connection = self._existing_connection_for_account(creator_id, resolved_google_account_identifier)
+        connection = self.repository.upsert_connection(
+            YouTubeConnection(
+                id=existing_connection.id if existing_connection is not None else str(uuid4()),
+                creator_id=creator_id,
+                google_account_identifier=resolved_google_account_identifier,
+                status=YouTubeConnectionStatus.CONNECTED if authorization_code is not None else YouTubeConnectionStatus.PENDING,
+                granted_scopes_json=_json_dumps(scopes),
+                credential_reference=existing_connection.credential_reference if existing_connection is not None else self._credential_reference_for(creator_id, resolved_google_account_identifier),
+                connected_at=_now(),
+                last_verified_at=None,
+                disconnected_at=None,
+                created_at=existing_connection.created_at if existing_connection is not None else _now(),
+                updated_at=_now(),
+            )
         )
         self.credential_store.save(
             connection.credential_reference,
@@ -335,7 +418,7 @@ class YouTubeIntegrationService:
                 token_type=token.token_type,
                 expires_at=None,
                 granted_scopes=token.granted_scopes,
-                google_account_identifier=google_account_identifier,
+                google_account_identifier=resolved_google_account_identifier,
             ),
         )
         verified = self.verify_connection(connection.id)
@@ -352,7 +435,7 @@ class YouTubeIntegrationService:
             try:
                 refreshed = self.oauth_client.refresh_token(
                     client_id=self._resolve_oauth_client_id(required=False),
-                    client_secret=None,
+                    client_secret=self._resolve_oauth_client_secret(),
                     refresh_token=bundle.refresh_token,
                 )
                 bundle = CredentialBundle(

@@ -51,6 +51,10 @@ No write scope is requested or stored.
 - creator isolation is preserved;
 - disconnect and revoke are local actions with no write operation against YouTube content.
 
+## Testing-mode refresh tokens
+
+When the Google OAuth consent screen is in `External` + `Testing`, refresh tokens for YouTube scopes may expire after the testing window defined by Google. CIS must treat that as expected external platform behavior unless a live credential refresh or scope check proves otherwise.
+
 ## Downstream consumers
 
 - Analytics Lab consumes imported metrics and snapshots.
@@ -61,6 +65,21 @@ No write scope is requested or stored.
 The next phase is Audience Model Foundation.
 
 Audience Model Foundation consumes the read-only channels, videos, thumbnails and metrics from this integration as local evidence only. It does not add any YouTube write operation, does not scrape, and does not infer demographic profiles.
+
+## v35-B Certification
+
+The v35-B read-first connector is now real-account certified on the read path:
+
+- real OAuth completed successfully with the read-only scopes above
+- account profile read succeeded with the minimum YouTube Data API channel lookup
+- bounded video listing succeeded
+- bounded video metadata lookup succeeded
+- non-monetary analytics succeeded
+- restart/recovery reused the stored credential without reopening a browser
+- the canonical credential reference is stable and reused instead of creating random credential entries
+- `ClientGoogle.json` is not required at runtime
+
+The Google OAuth consent screen remains `External` + `Testing`, so short-lived refresh-token behavior still applies during development and certification work.
 ## Instagram bridge note
 
 Instagram Read-Only Integration is documented separately in [`docs/INSTAGRAM_READ_ONLY_INTEGRATION.md`](INSTAGRAM_READ_ONLY_INTEGRATION.md). It uses the same local-evidence principle but a separate connector, separate storage, and no YouTube write operations.

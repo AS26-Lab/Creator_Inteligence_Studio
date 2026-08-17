@@ -4,7 +4,7 @@ import json
 import logging
 import tempfile
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -88,17 +88,19 @@ class MemoryCredentialStore(CredentialStore):
 class FakeOAuthClient(YouTubeOAuthClient):
     def __init__(self) -> None:
         self.begin_calls: list[tuple[str, tuple[str, ...], str | None]] = []
+        self.interactive_calls: list[tuple[str, tuple[str, ...], bool]] = []
         self.exchange_calls: list[tuple[str, str | None, str, str]] = []
         self.refresh_calls: list[tuple[str, str | None, str]] = []
         self.revoke_calls: list[str] = []
         self.verify_calls: list[tuple[str, tuple[str, ...]]] = []
+        self.open_browser_calls: list[bool] = []
 
     def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None, code_verifier: str | None = None) -> OAuthAuthorizationResult:
         self.begin_calls.append((client_id, scopes, redirect_uri))
         return OAuthAuthorizationResult(
             authorization_url="https://accounts.google.com/o/oauth2/v2/auth?stub=1",
             state=state or "state",
-            redirect_uri=redirect_uri or "http://localhost/callback",
+            redirect_uri=redirect_uri or "http://127.0.0.1/callback",
             code_verifier=code_verifier or "verifier",
         )
 
@@ -137,8 +139,25 @@ class FakeOAuthClient(YouTubeOAuthClient):
         }
 
     def authorize_interactively(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True) -> tuple[OAuthAuthorizationResult, str]:  # noqa: ARG002
+        self.interactive_calls.append((client_id, scopes, open_browser))
         result = self.begin_authorization(client_id=client_id, scopes=scopes)
         return result, "interactive-auth-code"
+
+    def start_loopback_authorization(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True):  # noqa: ANN201, ARG002
+        self.open_browser_calls.append(open_browser)
+        result = self.begin_authorization(client_id=client_id, scopes=scopes)
+
+        class _Session:
+            def __init__(self, authorization: OAuthAuthorizationResult) -> None:
+                self.authorization = authorization
+
+            def wait_for_code(self, timeout: float = 120.0) -> str:  # noqa: ARG002
+                return "loopback-auth-code"
+
+            def close(self) -> None:
+                return
+
+        return _Session(result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +278,32 @@ def build_service_bundle(root: Path):
     return settings, paths, database, catalog, analytics_repository, creative_packaging_repository, youtube_repository, service
 
 
+def build_service_bundle_with_settings(root: Path, settings: AppSettings):
+    paths = ProjectPaths.from_settings(root, settings)
+    paths.ensure_runtime_directories()
+    database = build_database(settings, paths)
+    with database.connect() as connection:
+        run_migrations(connection)
+    catalog = build_catalog_service(settings, paths, logger=logging.getLogger("test"), database=database)
+    analytics_repository = SQLiteAnalyticsRepository(database)
+    creative_packaging_repository = SQLiteCreativePackagingRepository(database)
+    youtube_repository = SQLiteYouTubeRepository(database)
+    service = build_youtube_integration_service(
+        settings=settings,
+        paths=paths,
+        repository=youtube_repository,
+        database=database,
+        analytics_repository=analytics_repository,
+        creative_packaging_repository=creative_packaging_repository,
+        oauth_client=FakeOAuthClient(),
+        credential_store=MemoryCredentialStore(),
+        data_api_client=FakeYouTubeDataApiClient(channel_pages={}, video_pages={}),
+        analytics_api_client=FakeYouTubeAnalyticsApiClient({}),
+        logger=logging.getLogger("test"),
+    )
+    return settings, paths, database, catalog, analytics_repository, creative_packaging_repository, youtube_repository, service
+
+
 class YouTubeIntegrationTests(unittest.TestCase):
     def test_migration_v21_and_read_only_scopes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -268,7 +313,7 @@ class YouTubeIntegrationTests(unittest.TestCase):
                 versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
                 tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
                 youtube_columns = {row[1] for row in connection.execute("PRAGMA table_info(youtube_connections)").fetchall()}
-            self.assertEqual(versions[-1], 31)
+            self.assertEqual(versions[-1], 37)
             self.assertTrue({"youtube_connections", "youtube_channels", "youtube_remote_videos", "youtube_sync_runs", "youtube_metric_imports", "youtube_content_links"}.issubset(tables))
             self.assertFalse({"access_token", "refresh_token"}.intersection(youtube_columns))
             self.assertEqual(READ_ONLY_SCOPES, (
@@ -518,6 +563,216 @@ class YouTubeIntegrationTests(unittest.TestCase):
             self.assertEqual(revoked.status, YouTubeConnectionStatus.REVOKED)
             self.assertTrue(oauth.revoke_calls)
             self.assertIsNone(store.load(connection_result.connection.credential_reference))
+
+    def test_connect_account_reuses_stored_credential_without_browser_when_profile_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings, paths, database, catalog, analytics_repository, creative_packaging_repository, youtube_repository, _ = build_service_bundle(root)
+            oauth = FakeOAuthClient()
+            store = MemoryCredentialStore()
+            service = build_youtube_integration_service(
+                settings=settings,
+                paths=paths,
+                repository=youtube_repository,
+                database=database,
+                analytics_repository=analytics_repository,
+                creative_packaging_repository=creative_packaging_repository,
+                oauth_client=oauth,
+                credential_store=store,
+                data_api_client=FakeYouTubeDataApiClient(channel_pages={}, video_pages={}),
+                analytics_api_client=FakeYouTubeAnalyticsApiClient({}),
+                logger=logging.getLogger("test"),
+            )
+
+            creator = catalog.create_creator(display_name="Creator Recovery")
+            credential_reference = f"youtube_{creator.id}_recovery"
+            store.save(
+                credential_reference,
+                CredentialBundle(
+                    access_token="stored-access-token",
+                    refresh_token="stored-refresh-token",
+                    token_type="Bearer",
+                    expires_at="2026-01-01T00:00:00+00:00",
+                    granted_scopes=READ_ONLY_SCOPES,
+                    google_account_identifier="creator@example.com",
+                ),
+            )
+            original = service.repository.upsert_connection(
+                YouTubeConnection(
+                    id=str(uuid4()),
+                    creator_id=creator.id,
+                    google_account_identifier="creator@example.com",
+                    status=YouTubeConnectionStatus.ERROR,
+                    granted_scopes_json=json.dumps(READ_ONLY_SCOPES, ensure_ascii=False),
+                    credential_reference=credential_reference,
+                    connected_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                    last_verified_at=None,
+                    disconnected_at=None,
+                    created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                    updated_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+                )
+            )
+
+            result = service.connect_account(
+                creator_id=creator.id,
+                client_id="client-recovery",
+                google_account_identifier="creator@example.com",
+                interactive=True,
+            )
+
+            self.assertEqual(result.connection.id, original.id)
+            self.assertEqual(result.connection.status, YouTubeConnectionStatus.VERIFIED)
+            self.assertEqual(result.warnings, ("recovered_from_stored_credential",))
+            self.assertEqual(oauth.begin_calls, [])
+            self.assertEqual(oauth.interactive_calls, [])
+            self.assertEqual(oauth.exchange_calls, [])
+            self.assertIsNotNone(store.load(credential_reference))
+
+    def test_connect_account_prefers_matching_credential_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings, paths, database, catalog, analytics_repository, creative_packaging_repository, youtube_repository, _ = build_service_bundle(root)
+            oauth = FakeOAuthClient()
+            store = MemoryCredentialStore()
+            service = build_youtube_integration_service(
+                settings=settings,
+                paths=paths,
+                repository=youtube_repository,
+                database=database,
+                analytics_repository=analytics_repository,
+                creative_packaging_repository=creative_packaging_repository,
+                oauth_client=oauth,
+                credential_store=store,
+                data_api_client=FakeYouTubeDataApiClient(channel_pages={}, video_pages={}),
+                analytics_api_client=FakeYouTubeAnalyticsApiClient({}),
+                logger=logging.getLogger("test"),
+            )
+
+            creator = catalog.create_creator(display_name="Creator Selection")
+            credential_reference_old = f"youtube_{creator.id}_old"
+            credential_reference_new = f"youtube_{creator.id}_new"
+            store.save(
+                credential_reference_old,
+                CredentialBundle(
+                    access_token="old-access-token",
+                    refresh_token="old-refresh-token",
+                    token_type="Bearer",
+                    expires_at="2026-01-01T00:00:00+00:00",
+                    granted_scopes=READ_ONLY_SCOPES,
+                    google_account_identifier="old@example.com",
+                ),
+            )
+            store.save(
+                credential_reference_new,
+                CredentialBundle(
+                    access_token="new-access-token",
+                    refresh_token="new-refresh-token",
+                    token_type="Bearer",
+                    expires_at="2026-01-01T00:00:00+00:00",
+                    granted_scopes=READ_ONLY_SCOPES,
+                    google_account_identifier="selected@example.com",
+                ),
+            )
+            service.repository.upsert_connection(
+                YouTubeConnection(
+                    id=str(uuid4()),
+                    creator_id=creator.id,
+                    google_account_identifier="old@example.com",
+                    status=YouTubeConnectionStatus.ERROR,
+                    granted_scopes_json=json.dumps(READ_ONLY_SCOPES, ensure_ascii=False),
+                    credential_reference=credential_reference_old,
+                    connected_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                    last_verified_at=None,
+                    disconnected_at=None,
+                    created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                    updated_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+                )
+            )
+            selected = service.repository.upsert_connection(
+                YouTubeConnection(
+                    id=str(uuid4()),
+                    creator_id=creator.id,
+                    google_account_identifier="selected@example.com",
+                    status=YouTubeConnectionStatus.PENDING,
+                    granted_scopes_json=json.dumps(READ_ONLY_SCOPES, ensure_ascii=False),
+                    credential_reference=credential_reference_new,
+                    connected_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
+                    last_verified_at=None,
+                    disconnected_at=None,
+                    created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
+                    updated_at=datetime(2026, 8, 4, tzinfo=timezone.utc),
+                )
+            )
+
+            result = service.connect_account(
+                creator_id=creator.id,
+                client_id="client-selection",
+                google_account_identifier="selected@example.com",
+                interactive=True,
+            )
+
+            self.assertEqual(result.connection.id, selected.id)
+            self.assertEqual(oauth.refresh_calls[0][2], "new-refresh-token")
+            self.assertEqual(oauth.verify_calls[0][0], "refreshed-token")
+            self.assertEqual(oauth.begin_calls, [])
+            self.assertEqual(oauth.interactive_calls, [])
+
+    def test_connect_account_uses_bundled_oauth_config_for_exchange_and_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            config_payload = {
+                "application_name": "Creator Intelligence Studio",
+                "environment": "test",
+                "log_level": "INFO",
+                "data_directory": "data",
+                "logs_directory": "logs",
+                "models_directory": "models",
+                "artifacts_directory": "artifacts",
+                "preferred_compute_backend": "cuda",
+                "allow_cpu_basic_mode": True,
+                "external_ai_enabled": False,
+                "database_filename": "creator_intelligence_studio.db",
+                "database_timeout_seconds": 5.0,
+                "audio_normalization_sample_rate_hz": 16000,
+                "audio_extraction_timeout_seconds": 60.0,
+                "audio_cache_version": "v1",
+                "preferred_audio_language": None,
+                "youtube_oauth_client_id": "bundled-client-id",
+                "youtube_oauth_client_secret": "bundled-client-secret",
+            }
+            (config_dir / "default.json").write_text(json.dumps(config_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            settings = replace(make_settings(), youtube_oauth_client_id=None, youtube_oauth_client_secret=None)
+            _, paths, database, catalog, analytics_repository, creative_packaging_repository, youtube_repository, service = build_service_bundle_with_settings(root, settings)
+            oauth = FakeOAuthClient()
+            service = build_youtube_integration_service(
+                settings=settings,
+                paths=paths,
+                repository=youtube_repository,
+                database=database,
+                analytics_repository=analytics_repository,
+                creative_packaging_repository=creative_packaging_repository,
+                oauth_client=oauth,
+                credential_store=MemoryCredentialStore(),
+                data_api_client=FakeYouTubeDataApiClient(channel_pages={}, video_pages={}),
+                analytics_api_client=FakeYouTubeAnalyticsApiClient({}),
+                logger=logging.getLogger("test"),
+            )
+
+            creator = catalog.create_creator(display_name="Creator Bundled")
+            result = service.connect_account(creator_id=creator.id, authorization_code="auth-code")
+            self.assertEqual(oauth.exchange_calls[0][0], "bundled-client-id")
+            self.assertEqual(oauth.exchange_calls[0][1], "bundled-client-secret")
+            self.assertEqual(oauth.refresh_calls[0][0], "bundled-client-id")
+            self.assertEqual(oauth.refresh_calls[0][1], "bundled-client-secret")
+            self.assertEqual(result.connection.google_account_identifier, "creator@example.com")
+            self.assertEqual(len(service.list_connections(creator.id)), 1)
+
+            result_again = service.connect_account(creator_id=creator.id, authorization_code="auth-code-2")
+            self.assertEqual(result_again.connection.id, result.connection.id)
+            self.assertEqual(result_again.connection.credential_reference, result.connection.credential_reference)
+            self.assertEqual(len(service.list_connections(creator.id)), 1)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ class AppSettings:
     audio_cache_version: str = "v1"
     preferred_audio_language: str | None = None
     youtube_oauth_client_id: str | None = None
+    youtube_oauth_client_secret: str | None = None
 
     @classmethod
     def from_file(cls, config_path: Path) -> "AppSettings":
@@ -135,6 +136,7 @@ class AppSettings:
             audio_cache_version=optional_str("audio_cache_version", "v1"),
             preferred_audio_language=optional_path("preferred_audio_language"),
             youtube_oauth_client_id=optional_text("youtube_oauth_client_id"),
+            youtube_oauth_client_secret=optional_text("youtube_oauth_client_secret"),
         )
         settings.validate()
         return settings

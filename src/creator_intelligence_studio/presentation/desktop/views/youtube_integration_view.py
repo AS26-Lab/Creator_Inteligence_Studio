@@ -116,7 +116,10 @@ class YouTubeIntegrationView(QWidget):
         self.connection_table.setColumnHidden(5, True)
         self.connection_table.itemSelectionChanged.connect(self._selection_changed)
         self.connection_empty = EmptyStateWidget("Sin conexiones", "Conecta una cuenta de Google/YouTube con scopes de lectura.")
-        oauth_configured = bool(getattr(self.workspace.settings, "youtube_oauth_client_id", None))
+        oauth_configured = bool(
+            getattr(self.workspace.settings, "youtube_oauth_client_id", None)
+            and getattr(self.workspace.settings, "youtube_oauth_client_secret", None)
+        )
         self.oauth_identity_label = QLabel(
             "Identidad OAuth de la aplicacion: configurada"
             if oauth_configured
@@ -321,12 +324,16 @@ class YouTubeIntegrationView(QWidget):
             return
         scopes_text = self.scopes.toPlainText().strip()
         scopes = tuple(line.strip() for line in scopes_text.splitlines() if line.strip()) or READ_ONLY_SCOPES
-        result = self.service.connect_account(
-            creator_id=creator_id,
-            google_account_identifier=self.google_account_identifier.text().strip() or None,
-            scopes=scopes,
-            interactive=True,
-        )
+        try:
+            result = self.service.connect_account(
+                creator_id=creator_id,
+                google_account_identifier=self.google_account_identifier.text().strip() or None,
+                scopes=scopes,
+                interactive=True,
+            )
+        except Exception as exc:  # pragma: no cover - UI defensive
+            QMessageBox.warning(self, "YouTube", str(exc))
+            return
         if result.authorization_url:
             QMessageBox.information(self, "YouTube", "Conexion iniciada. Revisa la URL de autorizacion si se mostro.")
         else:

@@ -17,6 +17,8 @@ This document records what is actually implemented in the repository through the
 - Creator Voice now spans v34-A through v34-D: the evidence foundation, deterministic profile synthesis, preview guidance, and controlled workflow application boundary are implemented with explicit shadow-first and gated-application behavior.
 - v35-A adds the integration foundation: provider-neutral connector contracts, a registry, a fake connector, creator-scoped accounts, opaque credential references, and frozen-runtime diagnostics. No real provider integration is enabled yet.
 - v35-B adds the first real connector: `youtube.connector` is registered behind the integration foundation as a read-first adapter for account profile, content list, content metadata, and analytics reads. Write capabilities remain disabled and no automatic corpus ingestion is introduced. Offline and frozen validation are implemented; the distributed bundle now materializes the public YouTube OAuth client identity into `config/default.json` during build, while `H:\ALEJANDRO_2\ClientGoogle.json` remains a build-only developer bootstrap input. Real-account certification remains pending because no live Google login smoke was run in this closure.
+- v35-B now has a live real-account certification on the read path: the canonical stored credential was reused across restart, `channels.list` profile read succeeded, bounded video listing and metadata reads succeeded, non-monetary analytics succeeded, and the browser was not reopened during recovery. The isolated certification database required one creator seed row before the first YouTube persistence write, which is a test-environment artifact of an empty local database rather than a Google/OAuth issue.
+- The Google OAuth consent screen for the bundled YouTube client is currently `External` + `Testing`, so refresh tokens issued for YouTube scopes may expire according to Google policy after a short testing window. That behavior is external to CIS and must not be interpreted as a product regression by itself.
 
 ## What Is Implemented
 
@@ -154,6 +156,7 @@ Status: `implemented`
 - account profile, uploaded video inventory, video metadata, and analytics reads
 - offline/frozen validation passes with the connector registered
 - real-account certification remains pending because no live Google credential smoke was run in this closure
+- Testing-mode refresh-token expiry is a Google-side policy behavior, not a CIS storage bug
 - quota and rate-limit UX is surfaced through derived user statuses such as `quota_exhausted`, `auth_expired`, `needs_attention`, and `provider_unavailable`
 - last-updated and retry/reset information is shown only when the provider or connector can supply it; no invented reset time is displayed
 - quota exhaustion keeps previously retrieved data visible and suppresses aggressive retries instead of crashing or clearing state

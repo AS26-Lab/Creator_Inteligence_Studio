@@ -6,6 +6,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import timedelta
+from urllib.error import HTTPError
+from unittest.mock import patch
 
 from creator_intelligence_studio.application.services.integration_service import IntegrationService
 from creator_intelligence_studio.domain.integrations import (
@@ -14,16 +17,21 @@ from creator_intelligence_studio.domain.integrations import (
     IntegrationRateLimitState,
     IntegrationReadRequest,
 )
+from creator_intelligence_studio.domain.youtube_integration.errors import YouTubeAuthorizationError
 from creator_intelligence_studio.domain.youtube_integration.services import READ_ONLY_SCOPES
 from creator_intelligence_studio.infrastructure.integrations import IntegrationRegistry, YouTubeIntegrationConnector
 from creator_intelligence_studio.infrastructure.youtube.analytics_api_client import YouTubeAnalyticsPage
+from creator_intelligence_studio.infrastructure.youtube.credential_store import WindowsSecureCredentialStore
 from creator_intelligence_studio.infrastructure.youtube.data_api_client import YouTubeApiPage
-from creator_intelligence_studio.infrastructure.youtube.oauth_client import OAuthAuthorizationResult, OAuthTokenResult
+from creator_intelligence_studio.infrastructure.youtube.oauth_client import OAuthAuthorizationResult, OAuthTokenResult, OAuthFlowError, OAuthFlowStageOutcome
 from creator_intelligence_studio.presentation.cli.integrations_cli import build_integrations_parser, handle_integrations_command
 from creator_intelligence_studio.shared.dates import utc_now
 
 
 class _FakeOAuthClient:
+    def __init__(self) -> None:
+        self.open_browser_calls: list[bool] = []
+
     def begin_authorization(self, *, client_id: str, scopes: tuple[str, ...], redirect_uri: str | None = None, state: str | None = None, code_verifier: str | None = None) -> OAuthAuthorizationResult:
         return OAuthAuthorizationResult(
             authorization_url=f"https://auth.local/start?client_id={client_id}&scope={' '.join(scopes)}",
@@ -61,6 +69,124 @@ class _FakeOAuthClient:
     def authorize_interactively(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True) -> tuple[OAuthAuthorizationResult, str]:  # noqa: ARG002
         result = self.begin_authorization(client_id=client_id, scopes=scopes)
         return result, "interactive-auth-code"
+
+    def start_loopback_authorization(self, *, client_id: str, scopes: tuple[str, ...], open_browser: bool = True):  # noqa: ANN201, ARG002
+        self.open_browser_calls.append(open_browser)
+        result = self.begin_authorization(client_id=client_id, scopes=scopes)
+
+        class _Session:
+            def __init__(self, authorization: OAuthAuthorizationResult) -> None:
+                self.authorization = authorization
+
+            def wait_for_code(self, timeout: float = 120.0) -> str:  # noqa: ARG002
+                return "interactive-auth-code"
+
+            def close(self) -> None:
+                return
+
+        return _Session(result)
+
+
+class _FailingExchangeOAuthClient(_FakeOAuthClient):
+    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str, code_verifier: str | None = None) -> OAuthTokenResult:  # noqa: ARG002
+        raise OAuthFlowError(
+            "OAuth token exchange failed.",
+            stage="token_exchange_started",
+            error_type="invalid_grant",
+            http_status=400,
+            error_description="invalid grant",
+        )
+
+
+class _MissingScopeOAuthClient(_FakeOAuthClient):
+    def exchange_code(self, *, client_id: str, client_secret: str | None, code: str, redirect_uri: str, code_verifier: str | None = None) -> OAuthTokenResult:  # noqa: ARG002
+        return OAuthTokenResult(
+            access_token="access-token-secret",
+            refresh_token="refresh-token-secret",
+            token_type="Bearer",
+            expires_in=3600,
+            granted_scopes=("https://www.googleapis.com/auth/youtube.readonly",),
+            google_account_identifier="google-account-1",
+        )
+
+
+class _FailingCredentialStore:
+    def save(self, reference: str, bundle) -> None:  # noqa: ANN001, ARG002
+        raise OSError("credential store unavailable")
+
+    def load(self, reference: str):  # noqa: ANN001, ARG002
+        return None
+
+    def delete(self, reference: str) -> None:  # noqa: ARG002
+        return None
+
+
+class _MemoryCredentialStore:
+    def __init__(self) -> None:
+        self._values: dict[str, object] = {}
+
+    def save(self, reference: str, bundle) -> None:  # noqa: ANN001
+        self._values[reference] = bundle
+
+    def load(self, reference: str):  # noqa: ANN001
+        return self._values.get(reference)
+
+    def delete(self, reference: str) -> None:  # noqa: ARG002
+        self._values.pop(reference, None)
+
+
+class _FailingDataApiClient:
+    def list_channels(self, *, mine: bool = True, page_token: str | None = None, max_results: int = 50, part: str = "snippet,statistics,brandingSettings") -> YouTubeApiPage:  # noqa: ARG002
+        raise HTTPError(
+            "https://www.googleapis.com/youtube/v3/channels",
+            403,
+            "Forbidden",
+            hdrs=None,
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": {
+                            "code": 403,
+                            "message": "Forbidden",
+                            "errors": [{"reason": "insufficientPermissions"}],
+                        }
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ),
+        )
+
+
+class _RecoverableProfileDataApiClient:
+    def __init__(self) -> None:
+        self._delegate = None
+        self.profile_attempts = 0
+
+    def list_channels(self, *, mine: bool = True, page_token: str | None = None, max_results: int = 50, part: str = "snippet,statistics,brandingSettings") -> YouTubeApiPage:  # noqa: ARG002
+        if part == "snippet,contentDetails":
+            self.profile_attempts += 1
+            if self.profile_attempts == 1:
+                raise HTTPError(
+                    "https://www.googleapis.com/youtube/v3/channels",
+                    403,
+                    "Forbidden",
+                    hdrs=None,
+                    fp=io.BytesIO(
+                        json.dumps(
+                            {
+                                "error": {
+                                    "code": 403,
+                                    "message": "Forbidden",
+                                    "errors": [{"reason": "insufficientPermissions"}],
+                                }
+                            },
+                            ensure_ascii=False,
+                                ).encode("utf-8")
+                    ),
+                )
+        if self._delegate is None:
+            self._delegate = _FakeDataApiClient()
+        return self._delegate.list_channels(mine=mine, page_token=page_token, max_results=max_results, part=part)
 
 
 class _FakeDataApiClient:
@@ -162,6 +288,30 @@ class _FakeDataApiClient:
         return YouTubeApiPage(tuple(items), None, None, json.dumps(payload, ensure_ascii=False))
 
 
+class _OptionalDataFailingClient(_FakeDataApiClient):
+    def list_channels(self, *, mine: bool = True, page_token: str | None = None, max_results: int = 50, part: str = "snippet,statistics,brandingSettings") -> YouTubeApiPage:  # noqa: ARG002
+        if part == "statistics,brandingSettings":
+            raise HTTPError(
+                "https://www.googleapis.com/youtube/v3/channels",
+                403,
+                "Forbidden",
+                hdrs=None,
+                fp=io.BytesIO(
+                    json.dumps(
+                        {
+                            "error": {
+                                "code": 403,
+                                "message": "Forbidden",
+                                "errors": [{"reason": "insufficientPermissions"}],
+                            }
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                ),
+            )
+        return super().list_channels(mine=mine, page_token=page_token, max_results=max_results, part=part)
+
+
 class _FakeAnalyticsClient:
     def __init__(self, *, access_token: str | None = None) -> None:
         self.access_token = access_token
@@ -178,16 +328,26 @@ class _FakeAnalyticsClient:
         return YouTubeAnalyticsPage(rows=({"row": row} for row in payload["rows"]), raw_json=json.dumps(payload, ensure_ascii=False))
 
 
-def _build_connector(tmpdir: Path) -> YouTubeIntegrationConnector:
-    return YouTubeIntegrationConnector(
+def _build_connector(
+    tmpdir: Path,
+    *,
+    oauth_client: _FakeOAuthClient | None = None,
+    data_api_client: _FakeDataApiClient | None = None,
+    analytics_client: _FakeAnalyticsClient | None = None,
+    credential_store=None,
+) -> YouTubeIntegrationConnector:
+    connector = YouTubeIntegrationConnector(
         data_root=tmpdir / "youtube",
         credential_root=tmpdir / "credentials",
         environment="test",
         client_id="client-1",
-        oauth_client=_FakeOAuthClient(),
-        data_api_client=_FakeDataApiClient(),
-        analytics_api_client=_FakeAnalyticsClient(),
+        oauth_client=oauth_client or _FakeOAuthClient(),
+        data_api_client=data_api_client or _FakeDataApiClient(),
+        analytics_api_client=analytics_client or _FakeAnalyticsClient(),
     )
+    if credential_store is not None:
+        connector._credential_store = credential_store
+    return connector
 
 
 def _link_account(connector: YouTubeIntegrationConnector, creator_id: str = "creator-a"):
@@ -196,7 +356,7 @@ def _link_account(connector: YouTubeIntegrationConnector, creator_id: str = "cre
         authorization_code="authorization-code",
         client_id="client-1",
         client_secret="secret-1",
-        redirect_uri="http://localhost/callback",
+        redirect_uri="http://127.0.0.1/callback",
         display_name="Creator Uno",
     )
     return result.account
@@ -227,6 +387,179 @@ class YouTubeConnectorFoundationTests(unittest.TestCase):
         self.assertTrue(account_result.success)
         self.assertEqual(account_result.resources[0].title, "Creator Uno")
         self.assertIn("emoji 🚀", account_result.resources[0].description or "")
+
+    def test_complete_authorization_records_successful_stage_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            connector = _build_connector(Path(temp_dir))
+            result = connector.complete_authorization(
+                creator_id="creator-a",
+                authorization_code="authorization-code",
+                client_id="client-1",
+                client_secret="secret-1",
+                redirect_uri="http://127.0.0.1/callback",
+                display_name="Creator Uno",
+            )
+
+        diagnostics = result.diagnostics.to_dict()
+        self.assertEqual(diagnostics["final_stage"], "auth_complete")
+        self.assertEqual(diagnostics["failure_stage"], None)
+        self.assertIn("credential_store_succeeded", [stage["stage"] for stage in diagnostics["stages"]])
+        self.assertNotIn("access-token-secret", json.dumps(diagnostics, ensure_ascii=False))
+
+    def test_complete_authorization_reports_token_exchange_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            connector = _build_connector(Path(temp_dir), oauth_client=_FailingExchangeOAuthClient())
+            with self.assertRaises(YouTubeAuthorizationError) as ctx:
+                connector.complete_authorization(
+                    creator_id="creator-a",
+                    authorization_code="authorization-code",
+                    client_id="client-1",
+                    client_secret="secret-1",
+                    redirect_uri="http://127.0.0.1/callback",
+                    display_name="Creator Uno",
+                )
+
+        diagnostics = ctx.exception.diagnostics or {}
+        self.assertEqual(diagnostics.get("failure_stage"), "token_exchange_started")
+        self.assertEqual(diagnostics.get("error_type"), "invalid_grant")
+        self.assertNotIn("access-token-secret", json.dumps(diagnostics, ensure_ascii=False))
+
+    def test_complete_authorization_reports_missing_scope_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            connector = _build_connector(Path(temp_dir), oauth_client=_MissingScopeOAuthClient())
+            with self.assertRaises(YouTubeAuthorizationError) as ctx:
+                connector.complete_authorization(
+                    creator_id="creator-a",
+                    authorization_code="authorization-code",
+                    client_id="client-1",
+                    client_secret="secret-1",
+                    redirect_uri="http://127.0.0.1/callback",
+                    display_name="Creator Uno",
+                )
+
+        diagnostics = ctx.exception.diagnostics or {}
+        self.assertEqual(diagnostics.get("failure_stage"), "scope_validation_succeeded")
+        self.assertIn("Missing scopes", diagnostics.get("error_description", ""))
+
+    def test_complete_authorization_reports_credential_store_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = WindowsSecureCredentialStore()
+            connector = _build_connector(Path(temp_dir), credential_store=store)
+            with patch.object(store, "save", side_effect=OSError("credential store unavailable")):
+                with self.assertRaises(YouTubeAuthorizationError) as ctx:
+                    connector.complete_authorization(
+                        creator_id="creator-a",
+                        authorization_code="authorization-code",
+                        client_id="client-1",
+                        client_secret="secret-1",
+                        redirect_uri="http://127.0.0.1/callback",
+                        display_name="Creator Uno",
+                    )
+
+        diagnostics = ctx.exception.diagnostics or {}
+        self.assertEqual(diagnostics.get("failure_stage"), "credential_store_started")
+        self.assertEqual(diagnostics.get("backend"), "Windows Credential Manager")
+        self.assertNotIn("access-token-secret", json.dumps(diagnostics, ensure_ascii=False))
+
+    def test_complete_authorization_reports_profile_verification_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = _MemoryCredentialStore()
+            connector = _build_connector(Path(temp_dir), data_api_client=_FailingDataApiClient(), credential_store=store)
+            with self.assertRaises(YouTubeAuthorizationError) as ctx:
+                connector.complete_authorization(
+                    creator_id="creator-a",
+                    authorization_code="authorization-code",
+                    client_id="client-1",
+                    client_secret="secret-1",
+                    redirect_uri="http://127.0.0.1/callback",
+                    display_name="Creator Uno",
+                )
+
+        diagnostics = ctx.exception.diagnostics or {}
+        self.assertEqual(diagnostics.get("failure_stage"), "account_profile_verification_started")
+        self.assertTrue(store._values)
+        pending_accounts = connector.list_accounts("creator-a")
+        self.assertEqual(len(pending_accounts), 1)
+        self.assertIn(pending_accounts[0].status, {IntegrationAccountStatus.LINKING, IntegrationAccountStatus.ERROR})
+        self.assertEqual(pending_accounts[0].metadata_summary.get("auth_state"), "authorized_pending_profile")
+        self.assertIn("Forbidden", diagnostics.get("error_description", ""))
+        self.assertEqual(diagnostics.get("error_type"), "insufficientPermissions")
+
+    def test_recovery_reuses_stored_credential_after_profile_failure_without_browser(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = _MemoryCredentialStore()
+            data_api = _RecoverableProfileDataApiClient()
+            connector = _build_connector(Path(temp_dir), data_api_client=data_api, credential_store=store)
+            with self.assertRaises(YouTubeAuthorizationError):
+                connector.complete_authorization(
+                    creator_id="creator-a",
+                    authorization_code="authorization-code",
+                    client_id="client-1",
+                    client_secret="secret-1",
+                    redirect_uri="http://127.0.0.1/callback",
+                    display_name="Creator Uno",
+                )
+
+            pending_accounts = connector.list_accounts("creator-a")
+            self.assertEqual(len(pending_accounts), 1)
+            pending_account = pending_accounts[0]
+            self.assertIn(pending_account.status, {IntegrationAccountStatus.LINKING, IntegrationAccountStatus.ERROR})
+
+            service = IntegrationService(registry=IntegrationRegistry((connector,)))
+            parser = argparse.ArgumentParser()
+            subparsers = parser.add_subparsers(dest="entity", required=True)
+            build_integrations_parser(subparsers)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            auth_start_args = parser.parse_args(["integrations", "youtube", "auth-start", "--creator-id", "creator-a", "--client-id", "client-app-test", "--json"])
+            auth_start_code = handle_integrations_command(auth_start_args, service=service, stdout=stdout, stderr=stderr)
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(auth_start_code, 0)
+        self.assertTrue(payload["recovered_from_stored_credential"])
+        self.assertTrue(payload["result"]["success"])
+        self.assertFalse(connector._oauth_client.open_browser_calls)
+        self.assertEqual(data_api.profile_attempts, 2)
+        recovered_accounts = connector.list_accounts("creator-a")
+        self.assertEqual(len(recovered_accounts), 1)
+        self.assertEqual(recovered_accounts[0].status, IntegrationAccountStatus.CONNECTED)
+        self.assertIsNotNone(store.load(recovered_accounts[0].credential_ref))
+
+    def test_complete_authorization_ignores_optional_profile_enrichment_forbidden(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = _MemoryCredentialStore()
+            connector = _build_connector(Path(temp_dir), data_api_client=_OptionalDataFailingClient(), credential_store=store)
+            result = connector.complete_authorization(
+                creator_id="creator-a",
+                authorization_code="authorization-code",
+                client_id="client-1",
+                client_secret="secret-1",
+                redirect_uri="http://127.0.0.1/callback",
+                display_name="Creator Uno",
+            )
+
+        self.assertEqual(result.diagnostics.final_stage, "auth_complete")
+        self.assertTrue(store._values)
+
+    def test_complete_authorization_reports_account_persistence_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = _MemoryCredentialStore()
+            connector = _build_connector(Path(temp_dir), credential_store=store)
+            with patch.object(connector._account_index, "upsert", side_effect=OSError("db write failed")):
+                with self.assertRaises(YouTubeAuthorizationError) as ctx:
+                    connector.complete_authorization(
+                        creator_id="creator-a",
+                        authorization_code="authorization-code",
+                        client_id="client-1",
+                        client_secret="secret-1",
+                        redirect_uri="http://127.0.0.1/callback",
+                        display_name="Creator Uno",
+                    )
+
+        diagnostics = ctx.exception.diagnostics or {}
+        self.assertEqual(diagnostics.get("failure_stage"), "account_row_persisted")
+        self.assertTrue(store._values)
 
     def test_content_and_analytics_normalization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -351,7 +684,7 @@ class YouTubeConnectorFoundationTests(unittest.TestCase):
             stdout = io.StringIO()
             stderr = io.StringIO()
 
-            auth_start_args = parser.parse_args(["integrations", "youtube", "auth-start", "--creator-id", account.creator_id, "--json"])
+            auth_start_args = parser.parse_args(["integrations", "youtube", "auth-start", "--creator-id", account.creator_id, "--client-id", "client-app-test", "--json"])
             auth_start_code = handle_integrations_command(auth_start_args, service=service, stdout=stdout, stderr=stderr)
             stdout_value = stdout.getvalue()
 
@@ -365,13 +698,65 @@ class YouTubeConnectorFoundationTests(unittest.TestCase):
             account_code = handle_integrations_command(account_args, service=service, stdout=stdout, stderr=stderr)
             account_payload = json.loads(stdout.getvalue())
 
-        self.assertEqual(auth_start_code, 0)
-        self.assertIn("authorization_url", stdout_value)
+        self.assertEqual(auth_start_code, 1)
+        self.assertFalse(connector._oauth_client.open_browser_calls)
+        self.assertEqual(stdout_value.strip(), "")
+        self.assertIn("conexion activa o pendiente", stderr.getvalue())
         self.assertEqual(auth_status_code, 0)
         self.assertEqual(auth_status_payload["health"]["user_status"], "connected")
         self.assertEqual(account_code, 0)
         self.assertTrue(account_payload["success"])
         self.assertEqual(account_payload["capability"], IntegrationCapability.ACCOUNT_PROFILE_READ.value)
+
+    def test_cli_youtube_auth_start_refuses_when_connection_already_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            connector = _build_connector(Path(temp_dir))
+            account = _link_account(connector)
+            service = IntegrationService(registry=IntegrationRegistry((connector,)))
+            parser = argparse.ArgumentParser()
+            subparsers = parser.add_subparsers(dest="entity", required=True)
+            build_integrations_parser(subparsers)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            auth_start_args = parser.parse_args(["integrations", "youtube", "auth-start", "--creator-id", account.creator_id, "--client-id", "client-app-test", "--json"])
+            auth_start_code = handle_integrations_command(auth_start_args, service=service, stdout=stdout, stderr=stderr)
+
+        self.assertEqual(auth_start_code, 1)
+        self.assertFalse(connector._oauth_client.open_browser_calls)
+        self.assertIn("conexion activa o pendiente", stderr.getvalue())
+
+    def test_cli_youtube_auth_start_refuses_when_session_lock_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            connector = _build_connector(Path(temp_dir))
+            service = IntegrationService(registry=IntegrationRegistry((connector,)))
+            session_dir = Path(temp_dir) / "youtube" / "auth_sessions"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / "creator-a.json").write_text(
+                json.dumps(
+                    {
+                        "creator_id": "creator-a",
+                        "connector_id": "youtube.connector",
+                        "status": "active",
+                        "started_at": "2026-08-17T00:00:00+00:00",
+                        "expires_at": (utc_now() + timedelta(minutes=10)).isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            parser = argparse.ArgumentParser()
+            subparsers = parser.add_subparsers(dest="entity", required=True)
+            build_integrations_parser(subparsers)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            auth_start_args = parser.parse_args(["integrations", "youtube", "auth-start", "--creator-id", "creator-a", "--client-id", "client-app-test", "--json"])
+            auth_start_code = handle_integrations_command(auth_start_args, service=service, stdout=stdout, stderr=stderr)
+
+        self.assertEqual(auth_start_code, 1)
+        self.assertFalse(connector._oauth_client.open_browser_calls)
+        self.assertIn("sesion OAuth activa", stderr.getvalue())
 
 
 if __name__ == "__main__":

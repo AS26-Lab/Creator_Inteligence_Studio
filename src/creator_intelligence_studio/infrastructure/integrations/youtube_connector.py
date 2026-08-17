@@ -33,17 +33,24 @@ from creator_intelligence_studio.domain.integrations import (
     IntegrationWriteResult,
 )
 from creator_intelligence_studio.domain.youtube_integration.services import READ_ONLY_SCOPES
+from creator_intelligence_studio.domain.youtube_integration.errors import YouTubeAuthorizationError
 from creator_intelligence_studio.infrastructure.youtube.analytics_api_client import YouTubeAnalyticsApiClient
 from creator_intelligence_studio.infrastructure.youtube.credential_store import (
     CredentialBundle,
     CredentialStore,
     DevelopmentCredentialStore,
-    EncryptedLocalCredentialStore,
+    build_default_youtube_credential_store,
 )
 from creator_intelligence_studio.infrastructure.youtube.data_api_client import YouTubeApiPage, YouTubeDataApiClient
-from creator_intelligence_studio.infrastructure.youtube.oauth_config import resolve_youtube_oauth_client_id
+from creator_intelligence_studio.infrastructure.youtube.oauth_config import (
+    build_youtube_credential_reference,
+    resolve_youtube_oauth_client_id,
+)
 from creator_intelligence_studio.infrastructure.youtube.oauth_client import (
     DesktopYouTubeOAuthClient,
+    OAuthFlowDiagnostics,
+    OAuthFlowError,
+    OAuthFlowStageOutcome,
     OAuthAuthorizationResult,
     OAuthTokenResult,
     YouTubeOAuthClient,
@@ -100,6 +107,64 @@ def _safe_float(value: object | None) -> float | None:
         return None
 
 
+def _oauth_backend_name(store: object) -> str:
+    name = type(store).__name__
+    if name == "WindowsSecureCredentialStore":
+        return "Windows Credential Manager"
+    if name == "EncryptedLocalCredentialStore":
+        return "Encrypted local store"
+    if name == "DevelopmentCredentialStore":
+        return "Development store"
+    if name == "_DisabledCredentialStore":
+        return "Disabled store"
+    return name
+
+
+def _append_flow_stage(
+    stages: list[OAuthFlowStageOutcome],
+    logger: logging.Logger,
+    stage: str,
+    status: str,
+    *,
+    error_type: str | None = None,
+    http_status: int | None = None,
+    error_description: str | None = None,
+    granted_scopes: tuple[str, ...] = (),
+    backend: str | None = None,
+    account_id: str | None = None,
+) -> None:
+    outcome = OAuthFlowStageOutcome(
+        stage=stage,
+        status=status,
+        error_type=error_type,
+        http_status=http_status,
+        error_description=error_description,
+        granted_scopes=granted_scopes,
+        backend=backend,
+        account_id=account_id,
+    )
+    stages.append(outcome)
+    if status == "succeeded":
+        logger.info(
+            "youtube.oauth stage=%s status=%s backend=%s account_id=%s granted_scopes=%s",
+            stage,
+            status,
+            backend,
+            account_id,
+            ",".join(granted_scopes) if granted_scopes else "",
+        )
+    else:
+        logger.warning(
+            "youtube.oauth stage=%s status=%s error_type=%s http_status=%s backend=%s account_id=%s",
+            stage,
+            status,
+            error_type,
+            http_status,
+            backend,
+            account_id,
+        )
+
+
 class _DisabledCredentialStore:
     def save(self, reference: str, bundle: CredentialBundle) -> None:  # noqa: ARG002
         return
@@ -131,6 +196,7 @@ class YouTubeAuthCompleteResult:
     google_account_identifier: str | None
     granted_scopes: tuple[str, ...]
     channel_profile: dict[str, object]
+    diagnostics: OAuthFlowDiagnostics
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -138,6 +204,7 @@ class YouTubeAuthCompleteResult:
             "google_account_identifier": self.google_account_identifier,
             "granted_scopes": list(self.granted_scopes),
             "channel_profile": dict(self.channel_profile),
+            "diagnostics": self.diagnostics.to_dict(),
         }
 
 
@@ -215,7 +282,7 @@ class _AccountIndexStore:
 
 def _credential_store(root: Path, *, environment: str | None = None) -> CredentialStore:
     try:
-        return EncryptedLocalCredentialStore(root)
+        return build_default_youtube_credential_store(root, environment=environment)
     except Exception:
         if environment in {"development", "test"}:
             return DevelopmentCredentialStore(root / "development")
@@ -355,6 +422,84 @@ class YouTubeIntegrationConnector:
             return None
         return self._credential_store.load(account.credential_ref)
 
+    def _pending_account_id(self, creator_id: str, credential_ref: str) -> str:
+        return _stable_id(creator_id, self.definition.connector_id, credential_ref)
+
+    def _credential_reference_for(self, creator_id: str, google_account_identifier: str | None) -> str:
+        return build_youtube_credential_reference(creator_id=creator_id, google_account_identifier=google_account_identifier)
+
+    def _existing_account_for_identity(self, creator_id: str, google_account_identifier: str | None) -> IntegrationAccount | None:
+        normalized_identifier = (google_account_identifier or "").strip().casefold()
+        if not normalized_identifier:
+            return None
+        candidates = [
+            account
+            for account in self.list_accounts(creator_id)
+            if (account.google_account_identifier or "").strip().casefold() == normalized_identifier
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: (
+                item.status == IntegrationAccountStatus.CONNECTED,
+                item.status == IntegrationAccountStatus.LINKING,
+                item.last_verified_at or item.linked_at,
+            ),
+            reverse=True,
+        )
+        return candidates[0]
+
+    def _build_pending_authorization_account(
+        self,
+        *,
+        creator_id: str,
+        credential_ref: str,
+        google_account_identifier: str | None,
+        granted_scopes: tuple[str, ...],
+        display_name: str | None = None,
+    ) -> IntegrationAccount:
+        pending_display_name = display_name or google_account_identifier or "Cuenta de YouTube pendiente"
+        return IntegrationAccount(
+            id=self._pending_account_id(creator_id, credential_ref),
+            creator_id=creator_id,
+            connector_id=self.definition.connector_id,
+            external_account_id=f"pending:{credential_ref}",
+            display_name=pending_display_name,
+            status=IntegrationAccountStatus.LINKING,
+            linked_at=utc_now(),
+            last_verified_at=None,
+            granted_scopes=granted_scopes,
+            granted_capabilities=(),
+            credential_ref=credential_ref,
+            metadata_summary={
+                "auth_state": "authorized_pending_profile",
+                "google_account_identifier": google_account_identifier,
+                "granted_scopes": list(granted_scopes),
+                "pending_profile": True,
+            },
+            auth_type=IntegrationAuthType.OAUTH2,
+        )
+
+    def _recoverable_accounts(self, creator_id: str) -> tuple[IntegrationAccount, ...]:
+        candidates = [
+            account
+            for account in self.list_accounts(creator_id)
+            if account.credential_ref
+            and account.status
+            in {
+                IntegrationAccountStatus.LINKING,
+                IntegrationAccountStatus.ERROR,
+                IntegrationAccountStatus.EXPIRED,
+                IntegrationAccountStatus.PERMISSION_MISSING,
+            }
+            and self._credential_bundle(account) is not None
+        ]
+        return tuple(sorted(candidates, key=lambda item: item.linked_at, reverse=True))
+
+    def find_recoverable_account(self, creator_id: str) -> IntegrationAccount | None:
+        recoverable = self._recoverable_accounts(creator_id)
+        return recoverable[0] if recoverable else None
+
     def _resolved_client_id(self, explicit_client_id: str | None = None) -> str:
         resolved = resolve_youtube_oauth_client_id(configured_client_id=explicit_client_id or self._client_id)
         if not resolved:
@@ -437,7 +582,13 @@ class YouTubeIntegrationConnector:
             )
         bundle = self._credential_bundle(account)
         rate_limit = self._rate_limits.get(account.id)
-        if account.status in {IntegrationAccountStatus.EXPIRED, IntegrationAccountStatus.REVOKED, IntegrationAccountStatus.PERMISSION_MISSING}:
+        if account.status in {
+            IntegrationAccountStatus.EXPIRED,
+            IntegrationAccountStatus.REVOKED,
+            IntegrationAccountStatus.PERMISSION_MISSING,
+            IntegrationAccountStatus.LINKING,
+            IntegrationAccountStatus.ERROR,
+        }:
             status = IntegrationHealthStatus.DEGRADED
         elif rate_limit is not None and rate_limit.limited:
             status = IntegrationHealthStatus.DEGRADED
@@ -456,11 +607,14 @@ class YouTubeIntegrationConnector:
         elif account.status == IntegrationAccountStatus.PERMISSION_MISSING:
             last_error_category = IntegrationErrorCategory.PERMISSION_DENIED
             last_error_message = "permissions missing"
+        elif account.status == IntegrationAccountStatus.ERROR:
+            last_error_category = IntegrationErrorCategory.PROVIDER_ERROR
+            last_error_message = "account profile verification failed"
         return IntegrationHealth(
             connector_id=self.definition.connector_id,
             connector_available=True,
             account_authenticated=bundle is not None and account.status == IntegrationAccountStatus.CONNECTED,
-            permissions_valid=bundle is not None and set(bundle.granted_scopes).issuperset(self._required_scopes),
+            permissions_valid=bundle is not None and account.status == IntegrationAccountStatus.CONNECTED and set(bundle.granted_scopes).issuperset(self._required_scopes),
             rate_limit_state=rate_limit,
             last_success_at=account.last_verified_at,
             last_error_category=last_error_category,
@@ -498,41 +652,256 @@ class YouTubeIntegrationConnector:
         redirect_uri: str | None = None,
         code_verifier: str | None = None,
         display_name: str | None = None,
+        callback_diagnostics: tuple[OAuthFlowStageOutcome, ...] | None = None,
     ) -> YouTubeAuthCompleteResult:
-        token_result = self._oauth_client.exchange_code(
-            client_id=self._resolved_client_id(client_id),
-            client_secret=client_secret or self._client_secret,
-            code=authorization_code,
-            redirect_uri=redirect_uri or "http://localhost/callback",
-            code_verifier=code_verifier,
-        )
-        if not set(token_result.granted_scopes).issubset(set(self._required_scopes)):
-            raise ValueError("YouTube read-first connector only accepts read-only scopes.")
-        verified = self._oauth_client.verify_token(token_result.access_token, self._required_scopes)
+        stages: list[OAuthFlowStageOutcome] = list(callback_diagnostics or ())
+
+        def record(stage: str, status: str, *, error_type: str | None = None, http_status: int | None = None, error_description: str | None = None, granted_scopes: tuple[str, ...] = (), backend: str | None = None, account_id: str | None = None) -> None:
+            _append_flow_stage(
+                stages,
+                self._logger,
+                stage,
+                status,
+                error_type=error_type,
+                http_status=http_status,
+                error_description=error_description,
+                granted_scopes=granted_scopes,
+                backend=backend,
+                account_id=account_id,
+            )
+
+        def fail(
+            message: str,
+            *,
+            stage: str,
+            error_type: str | None = None,
+            http_status: int | None = None,
+            error_description: str | None = None,
+            granted_scopes: tuple[str, ...] = (),
+            backend: str | None = None,
+            account_id: str | None = None,
+            exc: Exception | None = None,
+        ) -> YouTubeAuthorizationError:
+            record(
+                stage,
+                "failed",
+                error_type=error_type or (type(exc).__name__ if exc is not None else None),
+                http_status=http_status,
+                error_description=error_description or (str(exc) if exc is not None else None),
+                granted_scopes=granted_scopes,
+                backend=backend,
+                account_id=account_id,
+            )
+            diagnostics = OAuthFlowDiagnostics(tuple(stages))
+            return YouTubeAuthorizationError(message, diagnostics=diagnostics.to_dict())
+
+        resolved_client_id = self._resolved_client_id(client_id)
+        token_result: OAuthTokenResult
+        try:
+            record("token_exchange_started", "succeeded", backend="YouTube OAuth token endpoint")
+            token_result = self._oauth_client.exchange_code(
+                client_id=resolved_client_id,
+                client_secret=client_secret or self._client_secret,
+                code=authorization_code,
+                redirect_uri=redirect_uri or "http://127.0.0.1/callback",
+                code_verifier=code_verifier,
+            )
+            record("token_exchange_succeeded", "succeeded", backend="YouTube OAuth token endpoint")
+        except OAuthFlowError as exc:
+            raise fail(
+                "No se pudo intercambiar el codigo de autorizacion.",
+                error_type=exc.error_type,
+                http_status=exc.http_status,
+                error_description=exc.error_description,
+                backend=exc.backend or "YouTube OAuth token endpoint",
+                exc=exc,
+                stage="token_exchange_started",
+            ) from exc
+        except Exception as exc:
+            raise fail(
+                "No se pudo intercambiar el codigo de autorizacion.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                backend="YouTube OAuth token endpoint",
+                exc=exc,
+                stage="token_exchange_started",
+            ) from exc
+
+        record("granted_scopes_received", "succeeded", granted_scopes=token_result.granted_scopes, backend="YouTube OAuth token endpoint")
+        missing_from_token = tuple(sorted(set(self._required_scopes) - set(token_result.granted_scopes)))
+        if missing_from_token:
+            raise fail(
+                "YouTube read-first connector only accepts read-only scopes.",
+                error_type="missing_scope",
+                error_description=f"Missing scopes: {list(missing_from_token)}",
+                granted_scopes=token_result.granted_scopes,
+                backend="YouTube OAuth token endpoint",
+                stage="scope_validation_succeeded",
+            )
+
+        try:
+            verified = self._oauth_client.verify_token(token_result.access_token, self._required_scopes)
+            record("scope_validation_succeeded", "succeeded", granted_scopes=token_result.granted_scopes, backend="YouTube OAuth token endpoint")
+        except (OAuthFlowError, HTTPError) as exc:
+            http_status = getattr(exc, "http_status", None) or getattr(exc, "code", None)
+            error_description = getattr(exc, "error_description", None) or str(exc)
+            error_type = getattr(exc, "error_type", None) or getattr(exc, "reason", None) or type(exc).__name__
+            raise fail(
+                "No se pudo verificar el token de YouTube.",
+                error_type=str(error_type),
+                http_status=http_status,
+                error_description=error_description,
+                granted_scopes=token_result.granted_scopes,
+                backend="YouTube OAuth token verification",
+                exc=exc,
+                stage="scope_validation_succeeded",
+            ) from exc
+        except Exception as exc:
+            raise fail(
+                "No se pudo verificar el token de YouTube.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                granted_scopes=token_result.granted_scopes,
+                backend="YouTube OAuth token verification",
+                exc=exc,
+                stage="scope_validation_succeeded",
+            ) from exc
+
+        missing_scopes = tuple(str(scope) for scope in (verified.get("missing_scopes") or ()))
+        if missing_scopes:
+            raise fail(
+                "YouTube no concedio todos los scopes requeridos.",
+                error_type="missing_scope",
+                error_description=f"Missing scopes: {list(missing_scopes)}",
+                granted_scopes=token_result.granted_scopes,
+                backend="YouTube OAuth token verification",
+                account_id=token_result.google_account_identifier,
+                stage="scope_validation_succeeded",
+            )
+
         google_account_identifier = str(verified.get("google_account_identifier") or token_result.google_account_identifier or "")
-        credential_ref = f"youtube_{creator_id}_{uuid4().hex}"
+        existing_account = self._existing_account_for_identity(creator_id, google_account_identifier)
+        credential_ref = existing_account.credential_ref if existing_account and existing_account.credential_ref else self._credential_reference_for(creator_id, google_account_identifier)
+        account_id = existing_account.id if existing_account is not None else self._pending_account_id(creator_id, credential_ref)
+        pending_account = self._build_pending_authorization_account(
+            creator_id=creator_id,
+            credential_ref=credential_ref,
+            google_account_identifier=google_account_identifier or None,
+            granted_scopes=token_result.granted_scopes,
+            display_name=display_name,
+        )
+        pending_account = replace(pending_account, id=account_id)
         expires_at = None
         if token_result.expires_in is not None:
             expires_at = (utc_now() + timedelta(seconds=token_result.expires_in)).isoformat()
-        self._credential_store.save(
-            credential_ref,
-            CredentialBundle(
-                access_token=token_result.access_token,
-                refresh_token=token_result.refresh_token,
-                token_type=token_result.token_type,
-                expires_at=expires_at,
+        backend_name = _oauth_backend_name(self._credential_store)
+        try:
+            record("credential_store_started", "succeeded", backend=backend_name, account_id=google_account_identifier or None)
+            self._credential_store.save(
+                credential_ref,
+                CredentialBundle(
+                    access_token=token_result.access_token,
+                    refresh_token=token_result.refresh_token,
+                    token_type=token_result.token_type,
+                    expires_at=expires_at,
+                    granted_scopes=token_result.granted_scopes,
+                    google_account_identifier=google_account_identifier,
+                ),
+            )
+            record("credential_store_succeeded", "succeeded", backend=backend_name, account_id=google_account_identifier or None)
+        except Exception as exc:
+            raise fail(
+                "No se pudo guardar la credencial de YouTube.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                backend=backend_name,
+                account_id=google_account_identifier or None,
+                exc=exc,
+                stage="credential_store_started",
+            ) from exc
+
+        try:
+            record("account_row_persisted_started", "succeeded", backend="account-index", account_id=pending_account.id)
+            self._account_index.upsert(pending_account)
+            record(
+                "authorized_pending_profile",
+                "succeeded",
+                backend="account-index",
+                account_id=pending_account.id,
                 granted_scopes=token_result.granted_scopes,
-                google_account_identifier=google_account_identifier,
-            ),
-        )
-        profile = self._fetch_account_profile(
-            access_token=token_result.access_token,
-            creator_id=creator_id,
-            credential_ref=credential_ref,
-            display_name=display_name,
-        )
+            )
+        except Exception as exc:
+            raise fail(
+                "No se pudo persistir la cuenta pendiente de YouTube.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                backend="account-index",
+                account_id=pending_account.id,
+                exc=exc,
+                stage="account_row_persisted",
+            ) from exc
+
+        try:
+            record("account_profile_verification_started", "succeeded", backend="YouTube Data API", account_id=google_account_identifier or None)
+            profile = self._fetch_account_profile(
+                access_token=token_result.access_token,
+                creator_id=creator_id,
+                credential_ref=credential_ref,
+                display_name=display_name,
+            )
+            record(
+                "account_profile_verification_succeeded",
+                "succeeded",
+                backend="YouTube Data API",
+                account_id=str(profile.get("account_id") or None),
+            )
+        except (OAuthFlowError, HTTPError, URLError, ValueError) as exc:
+            profile_error_type = getattr(exc, "error_type", None) or getattr(exc, "reason", None) or type(exc).__name__
+            profile_error_status = getattr(exc, "http_status", None) or getattr(exc, "code", None)
+            profile_error_description = getattr(exc, "error_description", None)
+            if isinstance(exc, HTTPError):
+                _, profile_message, _, profile_reason = _parse_http_error(exc)
+                profile_error_description = profile_error_description or profile_message
+                if profile_reason:
+                    profile_error_type = profile_reason
+            if pending_account.credential_ref:
+                self._account_index.upsert(
+                    replace(
+                        pending_account,
+                        status=IntegrationAccountStatus.ERROR,
+                        metadata_summary={
+                            **pending_account.metadata_summary,
+                            "auth_state": "authorized_pending_profile",
+                            "profile_verification_failed": True,
+                            "profile_error_type": str(profile_error_type),
+                            "profile_http_status": profile_error_status,
+                            "profile_error_description": (profile_error_description or str(exc))[:240] or None,
+                        },
+                    )
+                )
+            raise fail(
+                "No se pudo verificar el perfil de la cuenta de YouTube.",
+                error_type=str(profile_error_type),
+                http_status=profile_error_status,
+                error_description=profile_error_description or str(exc),
+                backend="YouTube Data API",
+                account_id=google_account_identifier or None,
+                exc=exc,
+                stage="account_profile_verification_started",
+            ) from exc
+        except Exception as exc:
+            raise fail(
+                "No se pudo verificar el perfil de la cuenta de YouTube.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                backend="YouTube Data API",
+                account_id=google_account_identifier or None,
+                exc=exc,
+                stage="account_profile_verification_started",
+            ) from exc
+
         account = IntegrationAccount(
-            id=profile["account_id"],
+            id=pending_account.id,
             creator_id=creator_id,
             connector_id=self.definition.connector_id,
             external_account_id=profile["channel_id"],
@@ -546,12 +915,27 @@ class YouTubeIntegrationConnector:
             metadata_summary=profile,
             auth_type=IntegrationAuthType.OAUTH2,
         )
-        self._account_index.upsert(account)
+        try:
+            self._account_index.upsert(account)
+            record("account_row_persisted", "succeeded", backend="account-index", account_id=account.id)
+            record("auth_complete", "succeeded", backend="account-index", account_id=account.id, granted_scopes=token_result.granted_scopes)
+        except Exception as exc:
+            raise fail(
+                "No se pudo persistir la cuenta de YouTube.",
+                error_type=type(exc).__name__,
+                error_description=str(exc),
+                backend="account-index",
+                account_id=account.id,
+                exc=exc,
+                stage="account_row_persisted",
+            ) from exc
+        diagnostics = OAuthFlowDiagnostics(tuple(stages))
         return YouTubeAuthCompleteResult(
             account=account,
             google_account_identifier=google_account_identifier or None,
             granted_scopes=token_result.granted_scopes,
             channel_profile=profile,
+            diagnostics=diagnostics,
         )
 
     def disconnect_account(self, *, creator_id: str, account_id: str) -> bool:
@@ -580,25 +964,33 @@ class YouTubeIntegrationConnector:
 
     def _fetch_account_profile(self, *, access_token: str, creator_id: str, credential_ref: str, display_name: str | None = None) -> dict[str, object]:
         data_client = self._load_data_client(access_token)
-        page = data_client.list_channels(mine=True, part="snippet,contentDetails,statistics,brandingSettings")
+        page = data_client.list_channels(mine=True, part="snippet,contentDetails")
         if not page.items:
             raise ValueError("YouTube did not return a channel profile for the authenticated user.")
         channel = page.items[0]
         snippet = channel.get("snippet") if isinstance(channel.get("snippet"), dict) else {}
         content_details = channel.get("contentDetails") if isinstance(channel.get("contentDetails"), dict) else {}
         related = content_details.get("relatedPlaylists") if isinstance(content_details.get("relatedPlaylists"), dict) else {}
-        statistics = channel.get("statistics") if isinstance(channel.get("statistics"), dict) else {}
         thumbnails = snippet.get("thumbnails") if isinstance(snippet.get("thumbnails"), dict) else {}
         default_thumb = thumbnails.get("default") if isinstance(thumbnails.get("default"), dict) else {}
         channel_id = str(channel.get("id") or "")
         title = str(display_name or snippet.get("title") or channel_id or "YouTube Channel")
         uploads_playlist_id = str(related.get("uploads") or "")
         custom_url = None
-        branding = channel.get("brandingSettings") if isinstance(channel.get("brandingSettings"), dict) else {}
-        if isinstance(branding.get("channel"), dict):
-            custom_url = branding.get("channel", {}).get("customUrl")
+        statistics: dict[str, object] = {}
+        try:
+            enriched = data_client.list_channels(mine=True, part="statistics,brandingSettings")
+            if enriched.items:
+                enriched_channel = enriched.items[0]
+                if isinstance(enriched_channel.get("statistics"), dict):
+                    statistics = enriched_channel.get("statistics")  # type: ignore[assignment]
+                branding = enriched_channel.get("brandingSettings") if isinstance(enriched_channel.get("brandingSettings"), dict) else {}
+                if isinstance(branding.get("channel"), dict):
+                    custom_url = branding.get("channel", {}).get("customUrl")
+        except Exception:
+            pass
         return {
-            "account_id": _stable_id(creator_id, self.definition.connector_id, channel_id or credential_ref),
+            "account_id": _stable_id(creator_id, self.definition.connector_id, credential_ref),
             "channel_id": channel_id,
             "display_name": title,
             "public_reference": f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,

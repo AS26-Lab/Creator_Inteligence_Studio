@@ -9,6 +9,10 @@ from typing import Iterable
 from creator_intelligence_studio.domain.integrations import INTEGRATION_CONTRACT_VERSION, IntegrationConnectorDefinition, IntegrationConnectorSummary
 from creator_intelligence_studio.infrastructure.configuration.settings import AppSettings
 from creator_intelligence_studio.infrastructure.persistence.database import SQLiteDatabase
+from creator_intelligence_studio.infrastructure.youtube.oauth_config import (
+    resolve_youtube_oauth_client_id,
+    resolve_youtube_oauth_app_config,
+)
 from creator_intelligence_studio.shared.dates import utc_now
 
 from .fake_connector import FakeIntegrationConnector
@@ -81,6 +85,15 @@ def build_default_integration_registry(
                 data_root = ProjectPaths.from_settings(project_root, settings).data_directory
         except Exception:
             data_root = None
+    project_root = getattr(paths, "project_root", None) if paths is not None else None
+    config_path = (project_root / "config" / "default.json") if project_root is not None else None
+    resolved_client_id = resolve_youtube_oauth_client_id(configured_client_id=getattr(settings, "youtube_oauth_client_id", None))
+    if not resolved_client_id:
+        resolved_client_id, _ = resolve_youtube_oauth_app_config(config_path)
+    _, resolved_client_secret = resolve_youtube_oauth_app_config(config_path)
+    if not resolved_client_secret:
+        configured_secret = getattr(settings, "youtube_oauth_client_secret", None)
+        resolved_client_secret = configured_secret.strip() if isinstance(configured_secret, str) and configured_secret.strip() else None
     return IntegrationRegistry(
         connectors=(
             FakeIntegrationConnector(),
@@ -88,7 +101,8 @@ def build_default_integration_registry(
             build_default_youtube_connector(
                 data_root=(data_root / "integrations" / "youtube") if data_root is not None else None,
                 environment=environment,
-                client_id=getattr(settings, "youtube_oauth_client_id", None),
+                client_id=resolved_client_id,
+                client_secret=resolved_client_secret,
             ),
         )
     )

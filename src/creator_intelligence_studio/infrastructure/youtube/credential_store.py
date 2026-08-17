@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from creator_intelligence_studio.infrastructure.ai_runtime.credentials import (
+    CredentialStore as _SecretCredentialStore,
+    WindowsCredentialManagerBackend,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class CredentialBundle:
@@ -128,3 +133,50 @@ class EncryptedLocalCredentialStore:
         if path.exists():
             path.unlink()
 
+
+class WindowsSecureCredentialStore:
+    """Wrapper de Windows Credential Manager para credenciales de YouTube."""
+
+    def __init__(self, *, target_prefix: str = "CreatorIntelligenceStudio.YouTube") -> None:
+        self._backend = WindowsCredentialManagerBackend(target_prefix=target_prefix)
+        self._store = _SecretCredentialStore(self._backend)
+
+    def is_available(self) -> bool:
+        return self._backend.is_available()
+
+    def save(self, reference: str, bundle: CredentialBundle) -> None:
+        self._store.save(reference, json.dumps(bundle.to_dict(), ensure_ascii=False, separators=(",", ":"), sort_keys=True))
+
+    def load(self, reference: str) -> CredentialBundle | None:
+        payload = self._store.load(reference)
+        if payload is None:
+            return None
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        return CredentialBundle(
+            access_token=data.get("access_token"),
+            refresh_token=data.get("refresh_token"),
+            token_type=data.get("token_type"),
+            expires_at=data.get("expires_at"),
+            granted_scopes=tuple(data.get("granted_scopes") or ()),
+            google_account_identifier=data.get("google_account_identifier"),
+        )
+
+    def delete(self, reference: str) -> None:
+        self._store.delete(reference)
+
+
+def build_default_youtube_credential_store(root: Path, *, environment: str | None = None) -> CredentialStore:
+    windows_store = WindowsSecureCredentialStore()
+    if windows_store.is_available():
+        return windows_store
+    secret = os.environ.get("CIS_YOUTUBE_CREDENTIAL_SECRET")
+    if secret:
+        return EncryptedLocalCredentialStore(root, secret=secret)
+    if environment in {"development", "test"}:
+        return DevelopmentCredentialStore(root / "development")
+    raise ValueError("No secure credential store is available for YouTube.")
